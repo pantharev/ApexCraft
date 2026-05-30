@@ -54,7 +54,7 @@ export function generateChunk(chunk) {
           id = surfaceName === 'sand' ? SAND : DIRT;
         } else if (y === height) {
           // surface block
-          if (biome === Biome.MOUNTAINS && y > 120) id = SNOW;
+          if (biome === Biome.MOUNTAINS && y > 90) id = SNOW;
           else if (biome === Biome.OCEAN) id = SAND;
           else id = surfaceId;
         }

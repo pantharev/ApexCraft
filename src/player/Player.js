@@ -10,6 +10,8 @@ const GRAVITY = 28;
 const JUMP_SPEED = 9;
 const WALK_SPEED = 5.5;
 const FLY_SPEED = 12;
+const SENSITIVITY = 0.0014; // radians per pixel of mouse movement
+const LOOK_SMOOTH = 18; // higher = snappier; lower = floatier
 
 export class Player {
   constructor(world, camera, domElement) {
@@ -21,6 +23,8 @@ export class Player {
     this.vel = new THREE.Vector3();
     this.yaw = 0;
     this.pitch = 0;
+    this.targetYaw = 0; // raw input target; rendered yaw eases toward this
+    this.targetPitch = 0;
     this.onGround = false;
     this.flying = false;
 
@@ -39,10 +43,13 @@ export class Player {
     });
     document.addEventListener('mousemove', (e) => {
       if (!this.locked) return;
-      this.yaw -= e.movementX * 0.0022;
-      this.pitch -= e.movementY * 0.0022;
+      // Ignore spurious large jumps some browsers emit on pointer-lock entry.
+      const mx = Math.abs(e.movementX) > 200 ? 0 : e.movementX;
+      const my = Math.abs(e.movementY) > 200 ? 0 : e.movementY;
+      this.targetYaw -= mx * SENSITIVITY;
+      this.targetPitch -= my * SENSITIVITY;
       const lim = Math.PI / 2 - 0.01;
-      this.pitch = Math.max(-lim, Math.min(lim, this.pitch));
+      this.targetPitch = Math.max(-lim, Math.min(lim, this.targetPitch));
     });
     window.addEventListener('keydown', (e) => {
       this.keys[e.code] = true;
@@ -84,6 +91,12 @@ export class Player {
 
   update(dt) {
     dt = Math.min(dt, 0.05); // clamp big frame gaps
+
+    // Ease the rendered look angle toward the raw input target. Exponential
+    // smoothing keeps it frame-rate independent and removes the snappy jitter.
+    const t = 1 - Math.exp(-LOOK_SMOOTH * dt);
+    this.yaw += (this.targetYaw - this.yaw) * t;
+    this.pitch += (this.targetPitch - this.pitch) * t;
 
     // Movement input relative to yaw.
     const forward = new THREE.Vector3(-Math.sin(this.yaw), 0, -Math.cos(this.yaw));

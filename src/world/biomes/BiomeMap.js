@@ -17,7 +17,7 @@ export const BiomeParams = {
   [Biome.OCEAN]:     { base: SEA_LEVEL - 8, amp: 4,  surface: 'sand',  exponent: 1.0 },
   [Biome.PLAINS]:    { base: SEA_LEVEL + 4, amp: 8,  surface: 'grass', exponent: 1.0 },
   [Biome.DESERT]:    { base: SEA_LEVEL + 4, amp: 7,  surface: 'sand',  exponent: 1.0 },
-  [Biome.MOUNTAINS]: { base: SEA_LEVEL + 10, amp: 55, surface: 'grass', exponent: 1.8 },
+  [Biome.MOUNTAINS]: { base: SEA_LEVEL + 8, amp: 30, surface: 'grass', exponent: 1.35 },
   [Biome.SNOWY]:     { base: SEA_LEVEL + 5, amp: 12, surface: 'snow',  exponent: 1.1 },
   [Biome.JUNGLE]:    { base: SEA_LEVEL + 6, amp: 10, surface: 'grass', exponent: 1.0 },
   [Biome.SWAMP]:     { base: SEA_LEVEL + 1, amp: 4,  surface: 'grass', exponent: 1.0 },

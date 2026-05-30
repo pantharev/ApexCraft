@@ -1,0 +1,23 @@
+[
+  { "id": 0,  "name": "air",        "solid": false, "color": "#000000", "transparent": true },
+  { "id": 1,  "name": "stone",      "solid": true,  "color": "#7d7d7d", "hardness": 1.5 },
+  { "id": 2,  "name": "dirt",       "solid": true,  "color": "#7a5c3e", "hardness": 0.5 },
+  { "id": 3,  "name": "grass",      "solid": true,  "color": "#5d9c3c", "sideColor": "#6b5235", "bottomColor": "#7a5c3e", "hardness": 0.6 },
+  { "id": 4,  "name": "sand",       "solid": true,  "color": "#dbcd9c", "hardness": 0.5 },
+  { "id": 5,  "name": "gravel",     "solid": true,  "color": "#86807c", "hardness": 0.6 },
+  { "id": 6,  "name": "water",      "solid": false, "color": "#3a6dd1", "transparent": true, "liquid": true },
+  { "id": 7,  "name": "bedrock",    "solid": true,  "color": "#383838", "hardness": -1 },
+  { "id": 8,  "name": "snow",       "solid": true,  "color": "#f2f7fb", "hardness": 0.2 },
+  { "id": 9,  "name": "andesite",   "solid": true,  "color": "#888a88", "hardness": 1.5 },
+  { "id": 10, "name": "oak_log",    "solid": true,  "color": "#5a4327", "sideColor": "#6b5235", "hardness": 2.0 },
+  { "id": 11, "name": "oak_leaves", "solid": true,  "color": "#3f7a2c", "transparent": true, "hardness": 0.2 },
+  { "id": 12, "name": "cactus",     "solid": true,  "color": "#3c7a3c", "hardness": 0.4 },
+  { "id": 13, "name": "clay",       "solid": true,  "color": "#9aa0ac", "hardness": 0.6 },
+  { "id": 14, "name": "coal_ore",   "solid": true,  "color": "#403f3f", "hardness": 3.0 },
+  { "id": 15, "name": "iron_ore",   "solid": true,  "color": "#c79c82", "hardness": 3.0 },
+  { "id": 16, "name": "gold_ore",   "solid": true,  "color": "#d4c14a", "hardness": 3.0 },
+  { "id": 17, "name": "redstone_ore","solid": true, "color": "#a11616", "hardness": 3.0 },
+  { "id": 18, "name": "lapis_ore",  "solid": true,  "color": "#27479e", "hardness": 3.0 },
+  { "id": 19, "name": "diamond_ore","solid": true,  "color": "#4fd3c8", "hardness": 3.0 },
+  { "id": 20, "name": "emerald_ore","solid": true,  "color": "#2fbf5e", "hardness": 3.0 }
+]

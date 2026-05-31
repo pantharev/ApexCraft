@@ -1,0 +1,15 @@
+{
+  "defaultTime": 6,
+  "recipes": [
+    { "input": "raw_iron", "output": "iron_ingot", "count": 1 },
+    { "input": "raw_gold", "output": "gold_ingot", "count": 1 },
+    { "input": "sand", "output": "glass", "count": 1 }
+  ],
+  "fuels": {
+    "coal": 48,
+    "oak_log": 9,
+    "oak_planks": 9,
+    "stick": 3,
+    "crafting_table": 9
+  }
+}

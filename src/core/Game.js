@@ -3,17 +3,23 @@ import { World } from './World.js';
 import { Player } from '../player/Player.js';
 import { Interaction } from '../player/Interaction.js';
 import { ItemDrops } from '../player/ItemDrops.js';
-import { buildToolModel } from '../player/HeldItem.js';
-import { getBlockId, getBlock } from '../blocks/BlockRegistry.js';
+import { buildHeldModel } from '../player/HeldItem.js';
+import { Inventory } from '../player/Inventory.js';
+import { Furnaces } from '../player/Furnaces.js';
+import { getBlockId } from '../blocks/BlockRegistry.js';
 import { getItem } from '../items/ItemRegistry.js';
 import { SEA_LEVEL } from '../config.js';
 
-// Blocks the player can place, shown in the hotbar.
-const HOTBAR = ['grass', 'dirt', 'stone', 'sand', 'gravel', 'oak_log', 'oak_leaves', 'snow', 'clay'];
-
-// Tool cycle for the temporary T-key (until inventory/crafting exists). Bare
-// hand first, then the pickaxe tiers.
-const TOOL_CYCLE = [null, 'wooden_pickaxe', 'stone_pickaxe', 'iron_pickaxe', 'gold_pickaxe', 'diamond_pickaxe'];
+// A small starter kit so placement and tools are usable before crafting exists
+// (Phase 4). [item, count] pairs added to the inventory at spawn.
+const STARTER_KIT = [
+  ['stone_pickaxe', 1],
+  ['iron_pickaxe', 1],
+  ['diamond_pickaxe', 1],
+  ['dirt', 64],
+  ['cobblestone', 64],
+  ['oak_log', 32],
+];
 
 // Owns the Three.js renderer/scene/camera, the World, and the Player, plus the
 // requestAnimationFrame loop. Mounted by the React <App/> into a container div.
@@ -52,20 +58,41 @@ export class Game {
       this.world, this.player, this.camera, this.scene, this.renderer.domElement, this.itemDrops
     );
 
-    // Collected items (temporary store; replaced by the inventory in Phase 3).
-    this.collected = new Map();
-    this.itemDrops.onCollect = (name, count) => {
-      this.collected.set(name, (this.collected.get(name) || 0) + count);
+    // Inventory: mined drops flow in here; leftover (full) stays in the world.
+    this.inventory = new Inventory();
+    for (const [name, count] of STARTER_KIT) this.inventory.addItem(name, count);
+    this.itemDrops.onCollect = (name, count) => this.inventory.addItem(name, count);
+
+    // Placing a block consumes one of the selected stack.
+    this.interaction.onPlaced = () => this.inventory.consumeSelected(1);
+
+    // Per-position furnace state, smelting in the background.
+    this.furnaces = new Furnaces();
+    this.activeFurnace = null;
+
+    // Right-clicking an interactive block opens its screen.
+    this.interaction.onUseBlock = (name, pos) => {
+      if (name === 'crafting_table') this.setScreen('crafting');
+      else if (name === 'furnace') {
+        this.activeFurnace = this.furnaces.get(pos.x, pos.y, pos.z);
+        this.setScreen('furnace');
+      }
     };
 
-    // Hotbar selection.
-    this.hotbar = HOTBAR.map((name) => ({ name, id: getBlockId(name), color: getBlock(getBlockId(name)).color }));
-    this.selectedIndex = 0;
-    this._applySelection();
-    this._bindHotbar();
+    // When a furnace is mined, drop its contents and discard its state.
+    this.interaction.onBlockBroken = (name, pos) => {
+      if (name !== 'furnace') return;
+      const f = this.furnaces.peek(pos.x, pos.y, pos.z);
+      if (f) {
+        for (const s of [f.input, f.fuel, f.output]) {
+          if (s) this.itemDrops.spawn(s.item, s.count, pos.x, pos.y, pos.z);
+        }
+        this.furnaces.remove(pos.x, pos.y, pos.z);
+      }
+    };
 
-    // First-person held tool view-model, parented to the camera so it tracks
-    // the view. The camera must be in the scene graph to be lit/rendered.
+    // First-person held view-model, parented to the camera so it tracks the
+    // view. The camera must be in the scene graph to be lit/rendered.
     this.scene.add(this.camera);
     this.heldAnchor = new THREE.Group();
     this.heldAnchor.position.set(0.42, -0.38, -0.7);
@@ -73,11 +100,14 @@ export class Game {
     this.camera.add(this.heldAnchor);
     this.heldModel = null;
     this.heldTime = 0;
+    this._heldName = undefined; // forces first build
 
-    // Tool cycling (temporary).
-    this.toolIndex = 0;
-    this._updateHeldModel();
-    this._bindTool();
+    // Open UI screen: null | 'inventory' | 'crafting'. Drives pointer lock,
+    // player input freeze, and which React panel renders.
+    this.openScreen = null;
+    this.onScreenChange = null; // React setter
+    this._bindHotbar();
+    this._bindScreens();
 
     // Pre-generate spawn area so the player doesn't fall through ungenerated
     // chunks, then place the player on the surface.
@@ -100,45 +130,57 @@ export class Game {
     this.renderer.setSize(w, h);
   }
 
-  _applySelection() {
-    this.interaction.selectedBlock = this.hotbar[this.selectedIndex].id;
-  }
-
   _bindHotbar() {
     window.addEventListener('keydown', (e) => {
       const n = parseInt(e.key, 10);
-      if (n >= 1 && n <= this.hotbar.length) {
-        this.selectedIndex = n - 1;
-        this._applySelection();
-      }
+      if (n >= 1 && n <= 9) this.inventory.setSelected(n - 1);
     });
     this.renderer.domElement.addEventListener('wheel', (e) => {
       if (document.pointerLockElement !== this.renderer.domElement) return;
-      const dir = Math.sign(e.deltaY);
-      this.selectedIndex = (this.selectedIndex + dir + this.hotbar.length) % this.hotbar.length;
-      this._applySelection();
+      this.inventory.cycleSelected(e.deltaY);
     });
   }
 
-  _bindTool() {
+  _bindScreens() {
     window.addEventListener('keydown', (e) => {
-      if (e.code !== 'KeyT') return;
-      this.toolIndex = (this.toolIndex + 1) % TOOL_CYCLE.length;
-      const name = TOOL_CYCLE[this.toolIndex];
-      this.interaction.currentTool = name ? getItem(name) : null;
-      this._updateHeldModel();
+      if (e.code === 'KeyE') this.setScreen(this.openScreen ? null : 'inventory');
+      else if (e.code === 'Escape' && this.openScreen) this.setScreen(null);
     });
   }
 
-  _updateHeldModel() {
-    if (this.heldModel) {
-      this.heldAnchor.remove(this.heldModel);
-      this.heldModel.traverse((o) => o.geometry && o.geometry.dispose());
+  setScreen(screen) {
+    this.openScreen = screen;
+    this.player.enabled = screen === null;
+    if (screen) {
+      document.exitPointerLock();
+    } else {
+      // Re-grab the mouse; ignore rejection (browser may decline right after exit).
+      try {
+        const r = this.renderer.domElement.requestPointerLock?.();
+        if (r && r.catch) r.catch(() => {});
+      } catch (_) { /* user can click to re-lock */ }
     }
-    const name = TOOL_CYCLE[this.toolIndex];
-    const item = name ? getItem(name) : null;
-    this.heldModel = buildToolModel(name, item ? item.color : null);
-    this.heldAnchor.add(this.heldModel);
+    if (this.onScreenChange) this.onScreenChange(screen);
+  }
+
+  // Sync the held view-model + interaction targets to the selected hotbar slot.
+  _syncHeld() {
+    const stack = this.inventory.selectedStack();
+    const item = stack ? getItem(stack.item) : null;
+    const name = item ? item.name : null;
+
+    this.interaction.currentTool = item && item.toolType ? item : null;
+    this.interaction.selectedBlock = item && item.placeBlock ? getBlockId(item.placeBlock) : 0;
+
+    if (name !== this._heldName) {
+      this._heldName = name;
+      if (this.heldModel) {
+        this.heldAnchor.remove(this.heldModel);
+        this.heldModel.traverse((o) => o.geometry && o.geometry.dispose());
+      }
+      this.heldModel = buildHeldModel(item);
+      this.heldAnchor.add(this.heldModel);
+    }
   }
 
   start() {
@@ -151,16 +193,19 @@ export class Game {
     if (!this._running) return;
     const dt = this.clock.getDelta();
 
+    this._syncHeld();
     this.player.update(dt);
     this.interaction.update(dt);
     this.itemDrops.update(dt, this.player.pos);
+    this.furnaces.update(dt);
     this.world.update(this.player.pos.x, this.player.pos.z, 2);
     this._animateHeld(dt);
     this.renderer.render(this.scene, this.camera);
 
     if (this.onStats) {
       const p = this.player.pos;
-      const tool = this.interaction.currentTool;
+      const stack = this.inventory.selectedStack();
+      const item = stack ? getItem(stack.item) : null;
       this.onStats({
         x: p.x.toFixed(1),
         y: p.y.toFixed(1),
@@ -168,13 +213,7 @@ export class Game {
         underwater: p.y + 1.6 < SEA_LEVEL,
         chunks: this.world.chunks.size,
         flying: this.player.flying,
-        hotbar: this.hotbar,
-        selectedIndex: this.selectedIndex,
-        tool: tool ? tool.display : 'Hand',
-        collected: Array.from(this.collected.entries()).map(([name, count]) => {
-          const it = getItem(name);
-          return { name, display: it ? it.display : name, color: it ? it.color : '#fff', count };
-        }),
+        held: item ? item.display : 'Empty hand',
       });
     }
 

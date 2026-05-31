@@ -17,8 +17,11 @@ export class Interaction {
     this.dom = domElement;
     this.itemDrops = itemDrops;
 
-    this.selectedBlock = getBlockId('stone');
+    this.selectedBlock = 0; // block id to place (0 = nothing placeable held)
     this.currentTool = null; // null = bare hand (tier 0, speed 1)
+    this.onPlaced = null; // called after a successful placement
+    this.onUseBlock = null; // called when right-clicking an interactive block
+    this.onBlockBroken = null; // called after a block is removed (name, coords)
     this.target = null; // last raycast result
     this.breaking = false;
     this.breakProgress = 0;
@@ -48,7 +51,7 @@ export class Interaction {
     this.dom.addEventListener('mousedown', (e) => {
       if (document.pointerLockElement !== this.dom) return;
       if (e.button === 0) this.breaking = true;
-      else if (e.button === 2) this._place();
+      else if (e.button === 2) this._rightClick();
     });
     window.addEventListener('mouseup', (e) => {
       if (e.button === 0) {
@@ -61,18 +64,34 @@ export class Interaction {
     this.dom.addEventListener('contextmenu', (e) => e.preventDefault());
   }
 
+  // Right-click: use an interactive block (e.g. crafting table) if targeted,
+  // otherwise place the held block.
+  _rightClick() {
+    if (this.target) {
+      const b = this.target.block;
+      const block = getBlock(this.world.getBlock(b.x, b.y, b.z));
+      if (block.interactive && this.onUseBlock) {
+        this.onUseBlock(block.name, b);
+        return;
+      }
+    }
+    this._place();
+  }
+
   _place() {
-    if (!this.target) return;
+    if (!this.target || !this.selectedBlock) return; // nothing placeable held
     const p = this.target.place;
     if (isSolid(this.world.getBlock(p.x, p.y, p.z))) return;
     if (this._overlapsPlayer(p.x, p.y, p.z)) return;
     this.world.setBlock(p.x, p.y, p.z, this.selectedBlock);
+    if (this.onPlaced) this.onPlaced();
   }
 
   // Remove a block and spawn its drops. If the block requires a tool the
   // player lacks (wrong type or too low a tier), it breaks with no drop.
   _breakBlock(block, b) {
     this.world.setBlock(b.x, b.y, b.z, 0);
+    if (this.onBlockBroken) this.onBlockBroken(block.name, b);
 
     const drops = block.drops || [];
     if (drops.length === 0) return;

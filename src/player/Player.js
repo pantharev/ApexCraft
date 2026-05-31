@@ -30,12 +30,14 @@ export class Player {
 
     this.keys = {};
     this.locked = false;
+    this.enabled = true; // false while a UI (inventory) is open
 
     this._bindEvents();
   }
 
   _bindEvents() {
     this.dom.addEventListener('click', () => {
+      if (!this.enabled) return; // don't grab the mouse while a UI is open
       if (!this.locked) this.dom.requestPointerLock();
     });
     document.addEventListener('pointerlockchange', () => {
@@ -53,7 +55,7 @@ export class Player {
     });
     window.addEventListener('keydown', (e) => {
       this.keys[e.code] = true;
-      if (e.code === 'KeyF') this.flying = !this.flying;
+      if (e.code === 'KeyF' && this.enabled) this.flying = !this.flying;
     });
     window.addEventListener('keyup', (e) => {
       this.keys[e.code] = false;
@@ -98,29 +100,31 @@ export class Player {
     this.yaw += (this.targetYaw - this.yaw) * t;
     this.pitch += (this.targetPitch - this.pitch) * t;
 
-    // Movement input relative to yaw.
+    // Movement input relative to yaw (ignored while a UI is open).
     const forward = new THREE.Vector3(-Math.sin(this.yaw), 0, -Math.cos(this.yaw));
     const right = new THREE.Vector3(Math.cos(this.yaw), 0, -Math.sin(this.yaw));
     const dir = new THREE.Vector3();
-    if (this.keys['KeyW']) dir.add(forward);
-    if (this.keys['KeyS']) dir.sub(forward);
-    if (this.keys['KeyD']) dir.add(right);
-    if (this.keys['KeyA']) dir.sub(right);
-    if (dir.lengthSq() > 0) dir.normalize();
+    if (this.enabled) {
+      if (this.keys['KeyW']) dir.add(forward);
+      if (this.keys['KeyS']) dir.sub(forward);
+      if (this.keys['KeyD']) dir.add(right);
+      if (this.keys['KeyA']) dir.sub(right);
+      if (dir.lengthSq() > 0) dir.normalize();
+    }
 
     if (this.flying) {
       const speed = FLY_SPEED;
       this.pos.x += dir.x * speed * dt;
       this.pos.z += dir.z * speed * dt;
-      if (this.keys['Space']) this.pos.y += speed * dt;
-      if (this.keys['ShiftLeft']) this.pos.y -= speed * dt;
+      if (this.enabled && this.keys['Space']) this.pos.y += speed * dt;
+      if (this.enabled && this.keys['ShiftLeft']) this.pos.y -= speed * dt;
       this.vel.set(0, 0, 0);
     } else {
       const speed = WALK_SPEED;
       this.vel.x = dir.x * speed;
       this.vel.z = dir.z * speed;
       this.vel.y -= GRAVITY * dt;
-      if (this.keys['Space'] && this.onGround) {
+      if (this.enabled && this.keys['Space'] && this.onGround) {
         this.vel.y = JUMP_SPEED;
         this.onGround = false;
       }

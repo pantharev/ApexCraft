@@ -1,12 +1,12 @@
 import * as THREE from 'three';
 
 // Procedural placeholder view-models for held items. Built from simple boxes so
-// they can be swapped for real geometry/textures later. `name` is the item id
-// (null = bare hand); `color` tints the tool head per tier.
-export function buildToolModel(name, color) {
+// they can be swapped for real geometry/textures later. `item` is an item def
+// from the registry (null = bare hand).
+export function buildHeldModel(item) {
   const group = new THREE.Group();
 
-  if (!name) {
+  if (!item) {
     // Bare hand: a single skin-toned box (a stubby arm/fist).
     const hand = new THREE.Mesh(
       new THREE.BoxGeometry(0.14, 0.14, 0.42),
@@ -17,8 +17,18 @@ export function buildToolModel(name, color) {
     return group;
   }
 
+  // Non-tool items (blocks, materials) are held as a small cube.
+  if (!item.toolType) {
+    const cube = new THREE.Mesh(
+      new THREE.BoxGeometry(0.28, 0.28, 0.28),
+      new THREE.MeshLambertMaterial({ color: item.color || '#cccccc' })
+    );
+    group.add(cube);
+    return group;
+  }
+
   const stickMat = new THREE.MeshLambertMaterial({ color: '#7a5a2c' });
-  const headMat = new THREE.MeshLambertMaterial({ color: color || '#cccccc' });
+  const headMat = new THREE.MeshLambertMaterial({ color: item.color || '#cccccc' });
 
   // Handle (the stick).
   const handle = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.55, 0.05), stickMat);

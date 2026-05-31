@@ -1,0 +1,64 @@
+[
+  {
+    "id": "oak_planks",
+    "type": "shapeless",
+    "ingredients": ["oak_log"],
+    "result": { "item": "oak_planks", "count": 4 }
+  },
+  {
+    "id": "stick",
+    "type": "shaped",
+    "pattern": ["P", "P"],
+    "key": { "P": "oak_planks" },
+    "result": { "item": "stick", "count": 4 }
+  },
+  {
+    "id": "crafting_table",
+    "type": "shaped",
+    "pattern": ["PP", "PP"],
+    "key": { "P": "oak_planks" },
+    "result": { "item": "crafting_table", "count": 1 }
+  },
+  {
+    "id": "furnace",
+    "type": "shaped",
+    "pattern": ["CCC", "C C", "CCC"],
+    "key": { "C": "cobblestone" },
+    "result": { "item": "furnace", "count": 1 }
+  },
+  {
+    "id": "wooden_pickaxe",
+    "type": "shaped",
+    "pattern": ["PPP", " S ", " S "],
+    "key": { "P": "oak_planks", "S": "stick" },
+    "result": { "item": "wooden_pickaxe", "count": 1 }
+  },
+  {
+    "id": "stone_pickaxe",
+    "type": "shaped",
+    "pattern": ["CCC", " S ", " S "],
+    "key": { "C": "cobblestone", "S": "stick" },
+    "result": { "item": "stone_pickaxe", "count": 1 }
+  },
+  {
+    "id": "iron_pickaxe",
+    "type": "shaped",
+    "pattern": ["III", " S ", " S "],
+    "key": { "I": "iron_ingot", "S": "stick" },
+    "result": { "item": "iron_pickaxe", "count": 1 }
+  },
+  {
+    "id": "gold_pickaxe",
+    "type": "shaped",
+    "pattern": ["GGG", " S ", " S "],
+    "key": { "G": "gold_ingot", "S": "stick" },
+    "result": { "item": "gold_pickaxe", "count": 1 }
+  },
+  {
+    "id": "diamond_pickaxe",
+    "type": "shaped",
+    "pattern": ["DDD", " S ", " S "],
+    "key": { "D": "diamond", "S": "stick" },
+    "result": { "item": "diamond_pickaxe", "count": 1 }
+  }
+]

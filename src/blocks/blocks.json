@@ -19,5 +19,9 @@
   { "id": 17, "name": "redstone_ore","solid": true, "color": "#a11616", "hardness": 3.0, "requiresTool": "pickaxe", "minToolTier": 3, "drops": [{ "item": "redstone", "count": [4, 5] }] },
   { "id": 18, "name": "lapis_ore",  "solid": true,  "color": "#27479e", "hardness": 3.0, "requiresTool": "pickaxe", "minToolTier": 2, "drops": [{ "item": "lapis", "count": [4, 8] }] },
   { "id": 19, "name": "diamond_ore","solid": true,  "color": "#4fd3c8", "hardness": 3.0, "requiresTool": "pickaxe", "minToolTier": 3, "drops": [{ "item": "diamond", "count": [1, 1] }] },
-  { "id": 20, "name": "emerald_ore","solid": true,  "color": "#2fbf5e", "hardness": 3.0, "requiresTool": "pickaxe", "minToolTier": 3, "drops": [{ "item": "emerald", "count": [1, 1] }] }
+  { "id": 20, "name": "emerald_ore","solid": true,  "color": "#2fbf5e", "hardness": 3.0, "requiresTool": "pickaxe", "minToolTier": 3, "drops": [{ "item": "emerald", "count": [1, 1] }] },
+  { "id": 21, "name": "oak_planks",   "solid": true,  "color": "#b3884f", "hardness": 2.0, "drops": [{ "item": "oak_planks", "count": [1, 1] }] },
+  { "id": 22, "name": "crafting_table","solid": true, "color": "#9c6b3f", "sideColor": "#7a5230", "hardness": 2.5, "interactive": true, "drops": [{ "item": "crafting_table", "count": [1, 1] }] },
+  { "id": 23, "name": "furnace",      "solid": true,  "color": "#5a5a5a", "hardness": 3.5, "requiresTool": "pickaxe", "minToolTier": 1, "interactive": true, "drops": [{ "item": "furnace", "count": [1, 1] }] },
+  { "id": 24, "name": "glass",        "solid": true,  "color": "#bfe6ee", "transparent": true, "hardness": 0.3, "drops": [{ "item": "glass", "count": [1, 1] }] }
 ]

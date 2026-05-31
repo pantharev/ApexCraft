@@ -83,8 +83,13 @@ export class ItemDrops {
       const dy = d.mesh.position.y - (playerPos.y + 0.9);
       const dz = d.mesh.position.z - playerPos.z;
       if (dx * dx + dy * dy + dz * dz < COLLECT_RANGE_SQ) {
-        if (this.onCollect) this.onCollect(d.item, d.count);
-        this._remove(i);
+        if (this.onCollect) {
+          const leftover = this.onCollect(d.item, d.count);
+          if (leftover > 0) d.count = leftover; // inventory full: keep in world
+          else this._remove(i);
+        } else {
+          this._remove(i);
+        }
       }
     }
   }

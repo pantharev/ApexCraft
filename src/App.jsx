@@ -66,7 +66,7 @@ export default function App() {
           font: '13px monospace', textShadow: '1px 1px 2px #000',
           pointerEvents: 'none', lineHeight: 1.5,
         }}>
-          <div>ApexCraft — Phase 5</div>
+          <div>ApexCraft — Phase 6</div>
           <div>XYZ: {stats.x} / {stats.y} / {stats.z}</div>
           <div>Chunks loaded: {stats.chunks}</div>
           <div>Mode: {stats.flying ? 'Flying' : 'Walking'}{stats.underwater ? ' (underwater)' : ''}</div>

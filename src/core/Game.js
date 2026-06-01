@@ -37,7 +37,7 @@ export class Game {
     this.scene = new THREE.Scene();
     const skyColor = new THREE.Color('#87b6e8');
     this.scene.background = skyColor;
-    this.scene.fog = new THREE.Fog(skyColor, 60, 140);
+    this.scene.fog = new THREE.Fog(skyColor, 90, 200);
 
     this.camera = new THREE.PerspectiveCamera(
       75,
@@ -134,13 +134,20 @@ export class Game {
     this._running = false;
     this._onResize = this._onResize.bind(this);
     window.addEventListener('resize', this._onResize);
+    // Track the container so the canvas sizes correctly even if it's laid out
+    // (or resized) after construction.
+    this._resizeObserver = new ResizeObserver(() => this._onResize());
+    this._resizeObserver.observe(this.container);
+    this._onResize();
 
     this.onStats = null; // optional callback for HUD
   }
 
   _onResize() {
-    const w = this.container.clientWidth;
-    const h = this.container.clientHeight;
+    // Fall back to the window if the container hasn't been laid out yet, and
+    // guard against a zero height (which would make the aspect NaN).
+    const w = this.container.clientWidth || window.innerWidth;
+    const h = this.container.clientHeight || window.innerHeight || 1;
     this.camera.aspect = w / h;
     this.camera.updateProjectionMatrix();
     this.renderer.setSize(w, h);
@@ -245,7 +252,7 @@ export class Game {
     this.itemDrops.update(dt, this.player.pos);
     this.furnaces.update(dt);
     this.vitals.update(dt);
-    this.world.update(this.player.pos.x, this.player.pos.z, 2);
+    this.world.update(this.player.pos.x, this.player.pos.z, 3);
     this._animateHeld(dt);
     this.renderer.render(this.scene, this.camera);
 
@@ -290,6 +297,7 @@ export class Game {
   dispose() {
     this._running = false;
     window.removeEventListener('resize', this._onResize);
+    if (this._resizeObserver) this._resizeObserver.disconnect();
     this.renderer.dispose();
     if (this.renderer.domElement.parentNode) {
       this.renderer.domElement.parentNode.removeChild(this.renderer.domElement);

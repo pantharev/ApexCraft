@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { CHUNK_SIZE, WORLD_HEIGHT, LOAD_RADIUS, UNLOAD_RADIUS } from '../config.js';
+import { CHUNK_SIZE, WORLD_HEIGHT, LOAD_RADIUS, UNLOAD_RADIUS, CHUNK_CACHE_MAX } from '../config.js';
 import { Chunk } from './Chunk.js';
 import { generateChunk } from '../world/generators/TerrainGen.js';
 import { buildChunkGeometry } from './ChunkMesher.js';
@@ -10,6 +10,7 @@ export class World {
   constructor(scene) {
     this.scene = scene;
     this.chunks = new Map();
+    this.cache = new Map(); // LRU of unloaded chunks (insertion order = age)
 
     this.opaqueMaterial = new THREE.MeshLambertMaterial({ vertexColors: true });
     this.transparentMaterial = new THREE.MeshLambertMaterial({
@@ -26,10 +27,19 @@ export class World {
   }
 
   ensureChunk(cx, cz) {
-    let chunk = this.getChunk(cx, cz);
+    const k = key(cx, cz);
+    let chunk = this.chunks.get(k);
     if (!chunk) {
-      chunk = new Chunk(cx, cz);
-      this.chunks.set(key(cx, cz), chunk);
+      // Restore from the LRU cache (keeps edits, skips regeneration) if present.
+      chunk = this.cache.get(k);
+      if (chunk) {
+        this.cache.delete(k);
+        chunk.dirty = true;
+        chunk.mesh = null;
+      } else {
+        chunk = new Chunk(cx, cz);
+      }
+      this.chunks.set(k, chunk);
     }
     if (!chunk.generated) generateChunk(chunk);
     return chunk;
@@ -126,7 +136,8 @@ export class World {
       }
     }
 
-    // Unload far chunks.
+    // Unload far chunks: drop their meshes (free GPU memory) and move the block
+    // data into the LRU cache so a revisit skips regeneration and keeps edits.
     for (const [k, chunk] of this.chunks) {
       const dx = chunk.cx - pcx;
       const dz = chunk.cz - pcz;
@@ -134,9 +145,18 @@ export class World {
         if (chunk.mesh) {
           this.scene.remove(chunk.mesh);
           chunk.mesh.traverse((o) => o.geometry && o.geometry.dispose());
+          chunk.mesh = null;
         }
         this.chunks.delete(k);
+        this.cache.delete(k); // refresh recency
+        this.cache.set(k, chunk);
       }
+    }
+
+    // Evict oldest cached chunks past the budget.
+    while (this.cache.size > CHUNK_CACHE_MAX) {
+      const oldest = this.cache.keys().next().value;
+      this.cache.delete(oldest);
     }
   }
 

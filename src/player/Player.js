@@ -27,6 +27,8 @@ export class Player {
     this.targetPitch = 0;
     this.onGround = false;
     this.flying = false;
+    this._peakY = this.pos.y; // highest point since last on ground (fall damage)
+    this.onLand = null; // (fallDistance) => void
 
     this.keys = {};
     this.locked = false;
@@ -133,12 +135,23 @@ export class Player {
       this._moveAxis('z', this.vel.z * dt);
       const blockedY = this._moveAxis('y', this.vel.y * dt);
       if (blockedY) {
-        if (this.vel.y < 0) this.onGround = true;
+        if (this.vel.y < 0) {
+          // Just landed: report the fall distance from the tracked apex.
+          if (!this.onGround) {
+            const fall = this._peakY - this.pos.y;
+            if (fall > 0 && this.onLand) this.onLand(fall);
+          }
+          this.onGround = true;
+        }
         this.vel.y = 0;
       } else {
         this.onGround = false;
       }
     }
+
+    // Track the apex of a fall/jump so we can measure landing distance.
+    if (this.flying || this.onGround) this._peakY = this.pos.y;
+    else this._peakY = Math.max(this._peakY, this.pos.y);
 
     // Sync camera.
     this.camera.position.set(this.pos.x, this.pos.y + EYE, this.pos.z);
@@ -153,5 +166,8 @@ export class Player {
   spawnAtSurface() {
     const h = this.world.surfaceHeight(0, 0);
     this.pos.set(0.5, h + 2, 0.5);
+    this.vel.set(0, 0, 0);
+    this._peakY = this.pos.y;
+    this.onGround = false;
   }
 }

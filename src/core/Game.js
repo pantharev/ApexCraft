@@ -6,6 +6,7 @@ import { ItemDrops } from '../player/ItemDrops.js';
 import { buildHeldModel } from '../player/HeldItem.js';
 import { Inventory } from '../player/Inventory.js';
 import { Furnaces } from '../player/Furnaces.js';
+import { Vitals } from '../player/Vitals.js';
 import { getBlockId } from '../blocks/BlockRegistry.js';
 import { getItem } from '../items/ItemRegistry.js';
 import { SEA_LEVEL } from '../config.js';
@@ -19,6 +20,7 @@ const STARTER_KIT = [
   ['dirt', 64],
   ['cobblestone', 64],
   ['oak_log', 32],
+  ['apple', 8],
 ];
 
 // Owns the Three.js renderer/scene/camera, the World, and the Player, plus the
@@ -65,6 +67,20 @@ export class Game {
 
     // Placing a block consumes one of the selected stack.
     this.interaction.onPlaced = () => this.inventory.consumeSelected(1);
+
+    // Survival stats + the damage/eat/death hooks.
+    this.vitals = new Vitals(this.player, this.world);
+    this.onDead = null; // React setter for the death overlay
+    this.player.onLand = (fall) => this.vitals.applyFall(fall);
+    this.interaction.onEat = () => {
+      const stack = this.inventory.selectedStack();
+      const item = stack && getItem(stack.item);
+      if (item && item.food) {
+        this.vitals.eat(item.food);
+        this.inventory.consumeSelected(1);
+      }
+    };
+    this.vitals.onDeath = () => this._handleDeath();
 
     // Per-position furnace state, smelting in the background.
     this.furnaces = new Furnaces();
@@ -163,6 +179,35 @@ export class Game {
     if (this.onScreenChange) this.onScreenChange(screen);
   }
 
+  // On death: scatter the whole inventory as drops, freeze the player, and
+  // raise the death overlay.
+  _handleDeath() {
+    const p = this.player.pos;
+    for (let i = 0; i < this.inventory.slots.length; i++) {
+      const s = this.inventory.slots[i];
+      if (s) this.itemDrops.spawn(s.item, s.count, Math.floor(p.x), Math.floor(p.y), Math.floor(p.z));
+      this.inventory.slots[i] = null;
+    }
+    this.inventory.notify();
+    this.player.enabled = false;
+    this.openScreen = null;
+    this.activeFurnace = null;
+    if (this.onScreenChange) this.onScreenChange(null);
+    document.exitPointerLock();
+    if (this.onDead) this.onDead(true);
+  }
+
+  respawn() {
+    this.vitals.reset();
+    this.player.spawnAtSurface();
+    this.player.enabled = true;
+    if (this.onDead) this.onDead(false);
+    try {
+      const r = this.renderer.domElement.requestPointerLock?.();
+      if (r && r.catch) r.catch(() => {});
+    } catch (_) { /* user can click to re-lock */ }
+  }
+
   // Sync the held view-model + interaction targets to the selected hotbar slot.
   _syncHeld() {
     const stack = this.inventory.selectedStack();
@@ -171,6 +216,7 @@ export class Game {
 
     this.interaction.currentTool = item && item.toolType ? item : null;
     this.interaction.selectedBlock = item && item.placeBlock ? getBlockId(item.placeBlock) : 0;
+    this.interaction.heldFood = item && item.food ? item.food : 0;
 
     if (name !== this._heldName) {
       this._heldName = name;
@@ -198,6 +244,7 @@ export class Game {
     this.interaction.update(dt);
     this.itemDrops.update(dt, this.player.pos);
     this.furnaces.update(dt);
+    this.vitals.update(dt);
     this.world.update(this.player.pos.x, this.player.pos.z, 2);
     this._animateHeld(dt);
     this.renderer.render(this.scene, this.camera);
@@ -214,6 +261,10 @@ export class Game {
         chunks: this.world.chunks.size,
         flying: this.player.flying,
         held: item ? item.display : 'Empty hand',
+        health: this.vitals.health,
+        hunger: this.vitals.hunger,
+        air: this.vitals.air,
+        submerged: this.vitals.submerged,
       });
     }
 

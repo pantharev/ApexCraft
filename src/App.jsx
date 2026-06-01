@@ -9,12 +9,14 @@ export default function App() {
   const [locked, setLocked] = useState(false);
   const [openScreen, setOpenScreen] = useState(null);
   const [ready, setReady] = useState(false);
+  const [dead, setDead] = useState(false);
 
   useEffect(() => {
     const game = new Game(containerRef.current);
     gameRef.current = game;
     game.onStats = setStats;
     game.onScreenChange = setOpenScreen;
+    game.onDead = setDead;
     game.start();
     setReady(true);
 
@@ -44,8 +46,11 @@ export default function App() {
         </div>
       )}
 
-      {/* Hotbar (always visible while playing) */}
-      {ready && inventory && !openScreen && <Hotbar inventory={inventory} />}
+      {/* Hotbar + survival bars (while playing) */}
+      {ready && inventory && !openScreen && !dead && <Hotbar inventory={inventory} />}
+      {stats && !openScreen && !dead && (
+        <StatusBars health={stats.health} hunger={stats.hunger} air={stats.air} submerged={stats.submerged} />
+      )}
 
       {/* UI screens */}
       {ready && inventory && openScreen === 'inventory' && <InventoryPanel inventory={inventory} />}
@@ -61,7 +66,7 @@ export default function App() {
           font: '13px monospace', textShadow: '1px 1px 2px #000',
           pointerEvents: 'none', lineHeight: 1.5,
         }}>
-          <div>ApexCraft — Phase 4</div>
+          <div>ApexCraft — Phase 5</div>
           <div>XYZ: {stats.x} / {stats.y} / {stats.z}</div>
           <div>Chunks loaded: {stats.chunks}</div>
           <div>Mode: {stats.flying ? 'Flying' : 'Walking'}{stats.underwater ? ' (underwater)' : ''}</div>
@@ -69,8 +74,27 @@ export default function App() {
         </div>
       )}
 
-      {/* Click-to-play overlay (not shown while inventory is open) */}
-      {!locked && !openScreen && (
+      {/* Death overlay */}
+      {dead && (
+        <div style={{
+          position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column',
+          alignItems: 'center', justifyContent: 'center', color: '#fff',
+          background: 'rgba(60,0,0,0.55)', zIndex: 20,
+        }}>
+          <h1 style={{ fontSize: 44, marginBottom: 20, letterSpacing: 1 }}>You died!</h1>
+          <button
+            onClick={() => gameRef.current?.respawn()}
+            style={{
+              font: '18px system-ui', padding: '10px 26px', cursor: 'pointer',
+              background: '#6b6b6b', color: '#fff', border: '2px solid #2b2b2b', borderRadius: 4,
+            }}
+          >Respawn</button>
+          <p style={{ marginTop: 16, opacity: 0.8 }}>Your items were dropped where you fell.</p>
+        </div>
+      )}
+
+      {/* Click-to-play overlay (not shown while a screen or death overlay is up) */}
+      {!locked && !openScreen && !dead && (
         <div
           onClick={() => gameRef.current?.renderer.domElement.requestPointerLock()}
           style={{
@@ -83,10 +107,40 @@ export default function App() {
           <div style={{ opacity: 0.7, lineHeight: 1.8 }}>
             <div><b>WASD</b> move &nbsp; <b>Space</b> jump &nbsp; <b>Mouse</b> look</div>
             <div><b>Left-click</b> mine &nbsp; <b>Right-click</b> place &nbsp; <b>1-9 / Scroll</b> select</div>
-            <div><b>E</b> inventory &nbsp; <b>Right-click table</b> to craft 3×3 &nbsp; <b>F</b> fly</div>
+            <div><b>E</b> inventory &nbsp; <b>Right-click table</b> craft &nbsp; <b>Right-click food</b> eat &nbsp; <b>F</b> fly</div>
           </div>
         </div>
       )}
+    </div>
+  );
+}
+
+// Hearts (health), hunger, and air-bubble bars above the hotbar. Each heart /
+// hunger icon represents 2 points and supports a half state.
+function StatusBars({ health, hunger, air, submerged }) {
+  const halfRow = (value, fullColor, halfColor, char) =>
+    Array.from({ length: 10 }).map((_, i) => {
+      const v = value / 2 - i;
+      const color = v >= 1 ? fullColor : v >= 0.5 ? halfColor : '#333';
+      return <span key={i} style={{ color, fontSize: 18, textShadow: '1px 1px 1px #000' }}>{char}</span>;
+    });
+
+  return (
+    <div style={{
+      position: 'absolute', bottom: 70, left: '50%', transform: 'translateX(-50%)',
+      width: 470, display: 'flex', justifyContent: 'space-between', pointerEvents: 'none',
+    }}>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+        {submerged && air < 10 && (
+          <div style={{ display: 'flex', gap: 2 }}>
+            {Array.from({ length: 10 }).map((_, i) => (
+              <span key={i} style={{ color: i < Math.ceil(air) ? '#7ec8ff' : 'transparent', fontSize: 16, textShadow: '1px 1px 1px #000' }}>●</span>
+            ))}
+          </div>
+        )}
+        <div style={{ display: 'flex', gap: 2 }}>{halfRow(health, '#e2403a', '#b85a30', '♥')}</div>
+      </div>
+      <div style={{ display: 'flex', gap: 2, alignItems: 'flex-end' }}>{halfRow(hunger, '#c8a24a', '#7d6630', '●')}</div>
     </div>
   );
 }

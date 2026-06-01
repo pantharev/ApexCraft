@@ -13,6 +13,7 @@
   { "name": "crafting_table", "display": "Crafting Table", "color": "#9c6b3f", "maxStack": 64, "placeBlock": "crafting_table" },
   { "name": "furnace",     "display": "Furnace",     "color": "#5a5a5a", "maxStack": 64, "placeBlock": "furnace" },
   { "name": "stick",       "display": "Stick",       "color": "#8a6d3b", "maxStack": 64 },
+  { "name": "apple",       "display": "Apple",       "color": "#d4342a", "maxStack": 64, "food": 6 },
 
   { "name": "coal",        "display": "Coal",        "color": "#2b2b2b", "maxStack": 64 },
   { "name": "iron_ingot",  "display": "Iron Ingot",  "color": "#e8e8e8", "maxStack": 64 },

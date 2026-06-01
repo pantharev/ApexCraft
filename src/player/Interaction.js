@@ -22,6 +22,8 @@ export class Interaction {
     this.onPlaced = null; // called after a successful placement
     this.onUseBlock = null; // called when right-clicking an interactive block
     this.onBlockBroken = null; // called after a block is removed (name, coords)
+    this.heldFood = 0; // food value of the held item (0 if not food)
+    this.onEat = null; // called to consume held food
     this.target = null; // last raycast result
     this.breaking = false;
     this.breakProgress = 0;
@@ -75,7 +77,11 @@ export class Interaction {
         return;
       }
     }
-    this._place();
+    if (this.selectedBlock) {
+      this._place();
+    } else if (this.heldFood > 0 && this.onEat) {
+      this.onEat();
+    }
   }
 
   _place() {

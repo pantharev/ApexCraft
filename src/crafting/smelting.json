@@ -3,7 +3,11 @@
   "recipes": [
     { "input": "raw_iron", "output": "iron_ingot", "count": 1 },
     { "input": "raw_gold", "output": "gold_ingot", "count": 1 },
-    { "input": "sand", "output": "glass", "count": 1 }
+    { "input": "sand", "output": "glass", "count": 1 },
+    { "input": "raw_porkchop", "output": "cooked_porkchop", "count": 1 },
+    { "input": "raw_beef", "output": "cooked_beef", "count": 1 },
+    { "input": "raw_mutton", "output": "cooked_mutton", "count": 1 },
+    { "input": "raw_chicken", "output": "cooked_chicken", "count": 1 }
   ],
   "fuels": {
     "coal": 48,

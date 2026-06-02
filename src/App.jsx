@@ -14,6 +14,7 @@ export default function App() {
   useEffect(() => {
     const game = new Game(containerRef.current);
     gameRef.current = game;
+    window.__apex = game; // debug handle
     game.onStats = setStats;
     game.onScreenChange = setOpenScreen;
     game.onDead = setDead;
@@ -30,6 +31,20 @@ export default function App() {
   }, []);
 
   const inventory = gameRef.current?.inventory;
+
+  // Pointer lock can reject (e.g. inside a permission-less iframe, or during the
+  // brief post-unlock cooldown). Catch it so the failure is visible instead of
+  // silently leaving you on the "Click to play" screen.
+  const requestLock = () => {
+    const el = gameRef.current?.renderer.domElement;
+    if (!el || !el.requestPointerLock) return;
+    try {
+      const r = el.requestPointerLock();
+      if (r && r.catch) r.catch((err) => console.warn('Pointer lock failed:', err.message || err));
+    } catch (err) {
+      console.warn('Pointer lock failed:', err);
+    }
+  };
 
   return (
     <div style={{ position: 'relative', width: '100%', height: '100%' }}>
@@ -70,6 +85,7 @@ export default function App() {
           <div>XYZ: {stats.x} / {stats.y} / {stats.z}</div>
           <div>Chunks loaded: {stats.chunks}</div>
           <div>Mode: {stats.flying ? 'Flying' : 'Walking'}{stats.underwater ? ' (underwater)' : ''}</div>
+          <div>Time: {stats.clock} ({stats.night ? 'Night' : 'Day'}) &nbsp; Mobs: {stats.mobs}</div>
           <div>Holding: {stats.held}</div>
         </div>
       )}
@@ -96,7 +112,7 @@ export default function App() {
       {/* Click-to-play overlay (not shown while a screen or death overlay is up) */}
       {!locked && !openScreen && !dead && (
         <div
-          onClick={() => gameRef.current?.renderer.domElement.requestPointerLock()}
+          onClick={requestLock}
           style={{
             position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column',
             alignItems: 'center', justifyContent: 'center', color: '#fff', cursor: 'pointer',

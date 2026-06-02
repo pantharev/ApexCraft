@@ -14,6 +14,21 @@
   { "name": "furnace",     "display": "Furnace",     "color": "#5a5a5a", "maxStack": 64, "placeBlock": "furnace" },
   { "name": "stick",       "display": "Stick",       "color": "#8a6d3b", "maxStack": 64 },
   { "name": "apple",       "display": "Apple",       "color": "#d4342a", "maxStack": 64, "food": 6 },
+  { "name": "raw_porkchop","display": "Raw Porkchop","color": "#e89aa0", "maxStack": 64, "food": 3 },
+  { "name": "cooked_porkchop","display": "Cooked Porkchop","color": "#a5603a", "maxStack": 64, "food": 8 },
+  { "name": "raw_beef",    "display": "Raw Beef",    "color": "#c45a52", "maxStack": 64, "food": 3 },
+  { "name": "cooked_beef", "display": "Steak",       "color": "#7a4528", "maxStack": 64, "food": 8 },
+  { "name": "raw_mutton",  "display": "Raw Mutton",  "color": "#d96f6a", "maxStack": 64, "food": 2 },
+  { "name": "cooked_mutton","display": "Cooked Mutton","color": "#9a5530", "maxStack": 64, "food": 6 },
+  { "name": "raw_chicken", "display": "Raw Chicken", "color": "#e8c0a0", "maxStack": 64, "food": 2 },
+  { "name": "cooked_chicken","display": "Cooked Chicken","color": "#b8824a", "maxStack": 64, "food": 6 },
+  { "name": "rotten_flesh","display": "Rotten Flesh","color": "#6b5535", "maxStack": 64, "food": 4 },
+  { "name": "leather",     "display": "Leather",     "color": "#8a5a32", "maxStack": 64 },
+  { "name": "feather",     "display": "Feather",     "color": "#eeeeee", "maxStack": 64 },
+  { "name": "bone",        "display": "Bone",        "color": "#e8e4d0", "maxStack": 64 },
+  { "name": "string",      "display": "String",      "color": "#dcdcdc", "maxStack": 64 },
+  { "name": "arrow",       "display": "Arrow",       "color": "#9a8a6a", "maxStack": 64 },
+  { "name": "wool",        "display": "Wool",        "color": "#eeeeee", "maxStack": 64 },
 
   { "name": "coal",        "display": "Coal",        "color": "#2b2b2b", "maxStack": 64 },
   { "name": "iron_ingot",  "display": "Iron Ingot",  "color": "#e8e8e8", "maxStack": 64 },
@@ -25,9 +40,9 @@
   { "name": "diamond",     "display": "Diamond",     "color": "#4fd3c8", "maxStack": 64 },
   { "name": "emerald",     "display": "Emerald",     "color": "#2fbf5e", "maxStack": 64 },
 
-  { "name": "wooden_pickaxe",  "display": "Wooden Pickaxe",  "color": "#8a6d3b", "maxStack": 1, "toolType": "pickaxe", "tier": 1, "miningSpeed": 2 },
-  { "name": "stone_pickaxe",   "display": "Stone Pickaxe",   "color": "#9a9a9a", "maxStack": 1, "toolType": "pickaxe", "tier": 2, "miningSpeed": 4 },
-  { "name": "iron_pickaxe",    "display": "Iron Pickaxe",    "color": "#d8d8d8", "maxStack": 1, "toolType": "pickaxe", "tier": 3, "miningSpeed": 6 },
-  { "name": "gold_pickaxe",    "display": "Gold Pickaxe",    "color": "#f5e25a", "maxStack": 1, "toolType": "pickaxe", "tier": 4, "miningSpeed": 12 },
-  { "name": "diamond_pickaxe", "display": "Diamond Pickaxe", "color": "#4fd3c8", "maxStack": 1, "toolType": "pickaxe", "tier": 5, "miningSpeed": 8 }
+  { "name": "wooden_pickaxe",  "display": "Wooden Pickaxe",  "color": "#8a6d3b", "maxStack": 1, "toolType": "pickaxe", "tier": 1, "miningSpeed": 2, "attackDamage": 2 },
+  { "name": "stone_pickaxe",   "display": "Stone Pickaxe",   "color": "#9a9a9a", "maxStack": 1, "toolType": "pickaxe", "tier": 2, "miningSpeed": 4, "attackDamage": 3 },
+  { "name": "iron_pickaxe",    "display": "Iron Pickaxe",    "color": "#d8d8d8", "maxStack": 1, "toolType": "pickaxe", "tier": 3, "miningSpeed": 6, "attackDamage": 4 },
+  { "name": "gold_pickaxe",    "display": "Gold Pickaxe",    "color": "#f5e25a", "maxStack": 1, "toolType": "pickaxe", "tier": 4, "miningSpeed": 12, "attackDamage": 3 },
+  { "name": "diamond_pickaxe", "display": "Diamond Pickaxe", "color": "#4fd3c8", "maxStack": 1, "toolType": "pickaxe", "tier": 5, "miningSpeed": 8, "attackDamage": 5 }
 ]

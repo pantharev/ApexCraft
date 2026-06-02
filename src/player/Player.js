@@ -1,5 +1,7 @@
 import * as THREE from 'three';
-import { isSolid } from '../blocks/BlockRegistry.js';
+import { isSolid, getBlockId } from '../blocks/BlockRegistry.js';
+
+const WATER = getBlockId('water');
 
 // Player physics + first-person controls. Uses an AABB swept against the voxel
 // grid for collision. Pointer lock drives camera look; WASD drives movement.
@@ -10,6 +12,11 @@ const GRAVITY = 28;
 const JUMP_SPEED = 9;
 const WALK_SPEED = 5.5;
 const FLY_SPEED = 12;
+// Swimming.
+const SWIM_SPEED = 4;
+const WATER_GRAVITY = 20; // still weaker than air, but enough to plunge in
+const WATER_DRAG = 0.91;  // gradual drag (closer to 1 = momentum carries on entry)
+const SWIM_UP = 6;        // velocity when holding Space underwater
 const SENSITIVITY = 0.0014; // radians per pixel of mouse movement
 const LOOK_SMOOTH = 18; // higher = snappier; lower = floatier
 
@@ -29,6 +36,7 @@ export class Player {
     this.flying = false;
     this._peakY = this.pos.y; // highest point since last on ground (fall damage)
     this.onLand = null; // (fallDistance) => void
+    this.inWater = false;
 
     this.keys = {};
     this.locked = false;
@@ -122,13 +130,30 @@ export class Player {
       if (this.enabled && this.keys['ShiftLeft']) this.pos.y -= speed * dt;
       this.vel.set(0, 0, 0);
     } else {
-      const speed = WALK_SPEED;
+      // In water if the lower body is in a water block (enables swimming).
+      this.inWater = this.world.getBlock(
+        Math.floor(this.pos.x), Math.floor(this.pos.y + 0.5), Math.floor(this.pos.z)
+      ) === WATER;
+
+      const speed = this.inWater ? SWIM_SPEED : WALK_SPEED;
       this.vel.x = dir.x * speed;
       this.vel.z = dir.z * speed;
-      this.vel.y -= GRAVITY * dt;
-      if (this.enabled && this.keys['Space'] && this.onGround) {
-        this.vel.y = JUMP_SPEED;
-        this.onGround = false;
+
+      if (this.inWater) {
+        // Sink under gravity with gradual drag, so an incoming fall carries you
+        // down a bit before settling to a slow sink. Space swims up.
+        if (this.enabled && this.keys['Space']) {
+          this.vel.y = SWIM_UP;
+        } else {
+          this.vel.y -= WATER_GRAVITY * dt;
+          this.vel.y *= WATER_DRAG;
+        }
+      } else {
+        this.vel.y -= GRAVITY * dt;
+        if (this.enabled && this.keys['Space'] && this.onGround) {
+          this.vel.y = JUMP_SPEED;
+          this.onGround = false;
+        }
       }
 
       this._moveAxis('x', this.vel.x * dt);
@@ -137,7 +162,7 @@ export class Player {
       if (blockedY) {
         if (this.vel.y < 0) {
           // Just landed: report the fall distance from the tracked apex.
-          if (!this.onGround) {
+          if (!this.onGround && !this.inWater) {
             const fall = this._peakY - this.pos.y;
             if (fall > 0 && this.onLand) this.onLand(fall);
           }
@@ -149,8 +174,9 @@ export class Player {
       }
     }
 
-    // Track the apex of a fall/jump so we can measure landing distance.
-    if (this.flying || this.onGround) this._peakY = this.pos.y;
+    // Track the apex of a fall/jump so we can measure landing distance. Water
+    // cancels fall damage, so keep the apex pinned while swimming.
+    if (this.flying || this.onGround || this.inWater) this._peakY = this.pos.y;
     else this._peakY = Math.max(this._peakY, this.pos.y);
 
     // Sync camera.
@@ -164,8 +190,9 @@ export class Player {
   }
 
   spawnAtSurface() {
-    const h = this.world.surfaceHeight(0, 0);
-    this.pos.set(0.5, h + 2, 0.5);
+    const spot = this.world.findSpawn();
+    const h = this.world.surfaceHeight(spot.x, spot.z);
+    this.pos.set(spot.x + 0.5, h + 2, spot.z + 0.5);
     this.vel.set(0, 0, 0);
     this._peakY = this.pos.y;
     this.onGround = false;

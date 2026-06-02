@@ -27,6 +27,9 @@ const humidNoise = makeNoise2D(202);
 const detailNoise = makeNoise2D(303);
 const caveNoise = makeNoise3D(404);
 const oreNoise = makeNoise3D(505);
+const forestNoise = makeNoise2D(606);
+const continentNoise = makeNoise2D(707);
+const riverNoise = makeNoise2D(808);
 
 // Fractal Brownian motion: sums octaves of 2D noise for natural-looking terrain.
 export function fbm2D(noise, x, z, octaves, freq, persistence = 0.5, lacunarity = 2) {
@@ -50,6 +53,12 @@ export const Noise = {
   detail: (x, z, freq = 0.05) => detailNoise(x * freq, z * freq),
   cave: (x, y, z) => caveNoise(x, y, z),
   ore: (x, y, z) => oreNoise(x, y, z),
+  // Low-frequency field for forest clumping: high = dense woods, low = open plains.
+  forest: (x, z) => fbm2D(forestNoise, x, z, 2, 0.011),
+  // Very low frequency continental shaping: negative = ocean basin, positive = highland.
+  continent: (x, z) => fbm2D(continentNoise, x, z, 3, 0.0009),
+  // River field; |value| near 0 traces winding river channels.
+  river: (x, z) => fbm2D(riverNoise, x, z, 2, 0.0035),
 };
 
 export { mulberry32 as seededRandom };

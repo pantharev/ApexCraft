@@ -7,6 +7,8 @@ import { buildHeldModel } from '../player/HeldItem.js';
 import { Inventory } from '../player/Inventory.js';
 import { Furnaces } from '../player/Furnaces.js';
 import { Vitals } from '../player/Vitals.js';
+import { DayNight } from '../systems/DayNight.js';
+import { MobManager } from '../systems/MobManager.js';
 import { getBlockId } from '../blocks/BlockRegistry.js';
 import { getItem } from '../items/ItemRegistry.js';
 import { SEA_LEVEL } from '../config.js';
@@ -46,12 +48,12 @@ export class Game {
       1000
     );
 
-    // Lighting: sky hemisphere + a directional "sun".
-    const hemi = new THREE.HemisphereLight(0xffffff, 0x556677, 0.9);
-    this.scene.add(hemi);
-    const sun = new THREE.DirectionalLight(0xffffff, 0.8);
-    sun.position.set(50, 100, 30);
-    this.scene.add(sun);
+    // Lighting: sky hemisphere + a directional "sun" (driven by DayNight).
+    this.hemi = new THREE.HemisphereLight(0xffffff, 0x556677, 0.9);
+    this.scene.add(this.hemi);
+    this.sun = new THREE.DirectionalLight(0xffffff, 0.8);
+    this.sun.position.set(50, 100, 30);
+    this.scene.add(this.sun);
 
     this.world = new World(this.scene);
     this.player = new Player(this.world, this.camera, this.renderer.domElement);
@@ -81,6 +83,19 @@ export class Game {
       }
     };
     this.vitals.onDeath = () => this._handleDeath();
+
+    // Day/night cycle + mobs.
+    this.dayNight = new DayNight(this.scene, this.sun, this.hemi, this.camera);
+    this.mobs = new MobManager(this.world, this.scene, this.itemDrops);
+    this.interaction.onAttack = () => {
+      const dir = new THREE.Vector3();
+      this.camera.getWorldDirection(dir);
+      const mob = this.mobs.raycast(this.camera.position, dir, 4);
+      if (!mob) return false;
+      const tool = this.interaction.currentTool;
+      mob.takeDamage(tool && tool.attackDamage ? tool.attackDamage : 1, this.player.pos);
+      return true;
+    };
 
     // Per-position furnace state, smelting in the background.
     this.furnaces = new Furnaces();
@@ -252,6 +267,12 @@ export class Game {
     this.itemDrops.update(dt, this.player.pos);
     this.furnaces.update(dt);
     this.vitals.update(dt);
+    this.dayNight.update(dt);
+    this.mobs.update(dt, {
+      playerPos: this.player.pos,
+      isNight: this.dayNight.isNight,
+      attackPlayer: (dmg) => this.vitals.damage(dmg),
+    });
     this.world.update(this.player.pos.x, this.player.pos.z, 3);
     this._animateHeld(dt);
     this.renderer.render(this.scene, this.camera);
@@ -272,6 +293,9 @@ export class Game {
         hunger: this.vitals.hunger,
         air: this.vitals.air,
         submerged: this.vitals.submerged,
+        clock: this.dayNight.clock(),
+        night: this.dayNight.isNight,
+        mobs: this.mobs.mobs.length,
       });
     }
 

@@ -24,6 +24,7 @@ export class Interaction {
     this.onBlockBroken = null; // called after a block is removed (name, coords)
     this.heldFood = 0; // food value of the held item (0 if not food)
     this.onEat = null; // called to consume held food
+    this.onAttack = null; // returns true if a mob was hit (suppresses mining)
     this.target = null; // last raycast result
     this.breaking = false;
     this.breakProgress = 0;
@@ -52,8 +53,11 @@ export class Interaction {
   _bind() {
     this.dom.addEventListener('mousedown', (e) => {
       if (document.pointerLockElement !== this.dom) return;
-      if (e.button === 0) this.breaking = true;
-      else if (e.button === 2) this._rightClick();
+      if (e.button === 0) {
+        // A mob in front takes priority over mining.
+        if (this.onAttack && this.onAttack()) return;
+        this.breaking = true;
+      } else if (e.button === 2) this._rightClick();
     });
     window.addEventListener('mouseup', (e) => {
       if (e.button === 0) {

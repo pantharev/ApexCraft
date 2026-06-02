@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { CHUNK_SIZE, WORLD_HEIGHT, LOAD_RADIUS, UNLOAD_RADIUS, CHUNK_CACHE_MAX } from '../config.js';
+import { CHUNK_SIZE, WORLD_HEIGHT, SEA_LEVEL, LOAD_RADIUS, UNLOAD_RADIUS, CHUNK_CACHE_MAX } from '../config.js';
 import { Chunk } from './Chunk.js';
 import { generateChunk } from '../world/generators/TerrainGen.js';
 import { buildChunkGeometry } from './ChunkMesher.js';
@@ -168,5 +168,19 @@ export class World {
       if (id !== 0 && id !== 6 /* water */) return y;
     }
     return 64;
+  }
+
+  // Find a dry land column (surface above sea level) near the origin so the
+  // player doesn't spawn underwater. Spirals outward until one is found.
+  findSpawn() {
+    for (let r = 0; r <= 96; r += 3) {
+      for (let dx = -r; dx <= r; dx += 3) {
+        for (let dz = -r; dz <= r; dz += 3) {
+          if (Math.max(Math.abs(dx), Math.abs(dz)) !== r) continue; // ring only
+          if (this.surfaceHeight(dx, dz) >= SEA_LEVEL + 1) return { x: dx, z: dz };
+        }
+      }
+    }
+    return { x: 0, z: 0 };
   }
 }

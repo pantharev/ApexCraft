@@ -1,58 +1,102 @@
 import * as THREE from 'three';
 import { CHUNK_SIZE, WORLD_HEIGHT } from '../config.js';
-import { getBlock, isOpaque } from '../blocks/BlockRegistry.js';
+import { getBlock, isOpaque, getBlockId } from '../blocks/BlockRegistry.js';
+import { faceMaterialIndex, WATER_MATERIAL_INDEX } from '../textures/atlas.js';
 
-// Per-face shading so cubes read as 3D without textures.
 const SHADE = { top: 1.0, bottom: 0.5, side: 0.8 };
 const DIMS = [CHUNK_SIZE, WORLD_HEIGHT, CHUNK_SIZE];
+const WATER = getBlockId('water');
 
-function emptyBuffers() {
-  return { positions: [], normals: [], colors: [], indices: [] };
+function emptyBuf() { return { positions: [], normals: [], uvs: [], colors: [], indices: [] }; }
+
+// Push one quad (4 verts) into a buffer. uvLocal tiles 0..w / 0..h so the tile
+// repeats across a greedy-merged quad (textures use RepeatWrapping).
+function pushQuad(buf, q) {
+  const shade = SHADE[q.faceType];
+  const corner = (uu, vv) => {
+    const a = [0, 0, 0];
+    a[q.axis] = q.faceCoord; a[q.u] = uu; a[q.v] = vv;
+    return [q.baseX + a[0], a[1], q.baseZ + a[2]];
+  };
+  const verts = [
+    [corner(q.i, q.j), 0, 0],
+    [corner(q.i + q.w, q.j), q.w, 0],
+    [corner(q.i + q.w, q.j + q.h), q.w, q.h],
+    [corner(q.i, q.j + q.h), 0, q.h],
+  ];
+  const vi = buf.positions.length / 3;
+  for (const [c, u, v] of verts) {
+    buf.positions.push(c[0], c[1], c[2]);
+    buf.normals.push(q.normal[0], q.normal[1], q.normal[2]);
+    buf.uvs.push(u, v);
+    buf.colors.push(shade, shade, shade);
+  }
+  if (q.dir > 0) buf.indices.push(vi, vi + 1, vi + 2, vi, vi + 2, vi + 3);
+  else buf.indices.push(vi, vi + 2, vi + 1, vi, vi + 3, vi + 2);
 }
 
-function toGeometry(buf) {
+// Assemble one BufferGeometry from a set of per-material buffers, adding a draw
+// group per material so a single mesh can use the shared material array.
+function assembleGrouped(byMat) {
+  const positions = [], normals = [], uvs = [], colors = [], indices = [];
+  const groups = [];
+  let vBase = 0;
+  for (const [matIndex, b] of byMat) {
+    if (b.positions.length === 0) continue;
+    const start = indices.length;
+    positions.push(...b.positions);
+    normals.push(...b.normals);
+    uvs.push(...b.uvs);
+    colors.push(...b.colors);
+    for (const idx of b.indices) indices.push(idx + vBase);
+    vBase += b.positions.length / 3;
+    groups.push({ start, count: b.indices.length, materialIndex: matIndex });
+  }
+  if (positions.length === 0) return null;
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+  g.setAttribute('normal', new THREE.Float32BufferAttribute(normals, 3));
+  g.setAttribute('uv', new THREE.Float32BufferAttribute(uvs, 2));
+  g.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3));
+  g.setIndex(indices);
+  for (const gr of groups) g.addGroup(gr.start, gr.count, gr.materialIndex);
+  g.computeBoundingSphere();
+  return g;
+}
+
+function assembleSingle(buf) {
   if (buf.positions.length === 0) return null;
-  const geometry = new THREE.BufferGeometry();
-  geometry.setAttribute('position', new THREE.Float32BufferAttribute(buf.positions, 3));
-  geometry.setAttribute('normal', new THREE.Float32BufferAttribute(buf.normals, 3));
-  geometry.setAttribute('color', new THREE.Float32BufferAttribute(buf.colors, 3));
-  geometry.setIndex(buf.indices);
-  geometry.computeBoundingSphere(); // used by Three.js frustum culling
-  return geometry;
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.Float32BufferAttribute(buf.positions, 3));
+  g.setAttribute('normal', new THREE.Float32BufferAttribute(buf.normals, 3));
+  g.setAttribute('uv', new THREE.Float32BufferAttribute(buf.uvs, 2));
+  g.setAttribute('color', new THREE.Float32BufferAttribute(buf.colors, 3));
+  g.setIndex(buf.indices);
+  g.computeBoundingSphere();
+  return g;
 }
 
-// Greedy mesher: for each of the 6 face directions, build a per-layer mask of
-// visible faces (keyed by block id) and merge identical neighbouring cells into
-// the largest possible rectangles, emitting one quad per rectangle. This
-// collapses big flat areas (ground, water, walls) from thousands of quads into
-// a handful. Returns { opaque, transparent } geometries.
+// Greedy mesh + texture grouping. Returns { opaque, water } geometries.
 export function buildChunkGeometry(chunk, worldGet) {
-  const opaque = emptyBuffers();
-  const transparent = emptyBuffers();
+  const byMat = new Map();   // matIndex -> buffer (opaque + cutout)
+  const water = emptyBuf();
   const baseX = chunk.cx * CHUNK_SIZE;
   const baseZ = chunk.cz * CHUNK_SIZE;
 
-  // Block id at local coords, reaching into neighbour chunks when out of range.
-  const at = (lx, ly, lz) => {
-    if (lx >= 0 && lx < CHUNK_SIZE && lz >= 0 && lz < CHUNK_SIZE && ly >= 0 && ly < WORLD_HEIGHT) {
-      return chunk.get(lx, ly, lz);
-    }
-    return worldGet(baseX + lx, ly, baseZ + lz);
-  };
+  const at = (lx, ly, lz) =>
+    (lx >= 0 && lx < CHUNK_SIZE && lz >= 0 && lz < CHUNK_SIZE && ly >= 0 && ly < WORLD_HEIGHT)
+      ? chunk.get(lx, ly, lz)
+      : worldGet(baseX + lx, ly, baseZ + lz);
 
   for (let axis = 0; axis < 3; axis++) {
-    const u = (axis + 1) % 3;
-    const v = (axis + 2) % 3;
-    const du = DIMS[u];
-    const dv = DIMS[v];
+    const u = (axis + 1) % 3, v = (axis + 2) % 3;
+    const du = DIMS[u], dv = DIMS[v];
 
     for (let dir = -1; dir <= 1; dir += 2) {
       const faceType = axis === 1 ? (dir > 0 ? 'top' : 'bottom') : 'side';
-      const normal = [0, 0, 0];
-      normal[axis] = dir;
+      const normal = [0, 0, 0]; normal[axis] = dir;
 
       for (let layer = 0; layer < DIMS[axis]; layer++) {
-        // Build the visibility mask for this slice.
         const mask = new Array(du * dv).fill(0);
         const cell = [0, 0, 0];
         for (let j = 0; j < dv; j++) {
@@ -60,19 +104,15 @@ export function buildChunkGeometry(chunk, worldGet) {
             cell[axis] = layer; cell[u] = i; cell[v] = j;
             const id = at(cell[0], cell[1], cell[2]);
             if (id === 0) continue;
-            const nb = [cell[0], cell[1], cell[2]];
-            nb[axis] += dir;
+            const nb = [cell[0], cell[1], cell[2]]; nb[axis] += dir;
             const neighbor = at(nb[0], nb[1], nb[2]);
             const block = getBlock(id);
-            // Face shows unless the neighbour is opaque, or this is a
-            // transparent block facing the same kind (water/leaves/glass).
             if (isOpaque(neighbor)) continue;
             if (block.transparent && neighbor === id) continue;
             mask[j * du + i] = id;
           }
         }
 
-        // Greedily merge the mask into rectangles.
         const faceCoord = layer + (dir > 0 ? 1 : 0);
         for (let j = 0; j < dv; j++) {
           for (let i = 0; i < du; ) {
@@ -81,24 +121,23 @@ export function buildChunkGeometry(chunk, worldGet) {
 
             let w = 1;
             while (i + w < du && mask[j * du + i + w] === id) w++;
-
-            let h = 1;
-            let grow = true;
+            let h = 1, grow = true;
             while (j + h < dv && grow) {
-              for (let k = 0; k < w; k++) {
-                if (mask[(j + h) * du + i + k] !== id) { grow = false; break; }
-              }
+              for (let k = 0; k < w; k++) if (mask[(j + h) * du + i + k] !== id) { grow = false; break; }
               if (grow) h++;
             }
 
-            emitQuad(
-              id === 0 ? opaque : (getBlock(id).transparent ? transparent : opaque),
-              { axis, u, v, faceCoord, i, j, w, h, dir, normal, faceType, id, baseX, baseZ }
-            );
-
-            for (let l = 0; l < h; l++) {
-              for (let k = 0; k < w; k++) mask[(j + l) * du + i + k] = 0;
+            const q = { axis, u, v, faceCoord, i, j, w, h, dir, normal, faceType, baseX, baseZ };
+            if (id === WATER) {
+              pushQuad(water, q);
+            } else {
+              const matIndex = faceMaterialIndex(id, faceType);
+              let buf = byMat.get(matIndex);
+              if (!buf) { buf = emptyBuf(); byMat.set(matIndex, buf); }
+              pushQuad(buf, q);
             }
+
+            for (let l = 0; l < h; l++) for (let k = 0; k < w; k++) mask[(j + l) * du + i + k] = 0;
             i += w;
           }
         }
@@ -106,34 +145,5 @@ export function buildChunkGeometry(chunk, worldGet) {
     }
   }
 
-  return { opaque: toGeometry(opaque), transparent: toGeometry(transparent) };
-}
-
-function emitQuad(buf, q) {
-  const block = getBlock(q.id);
-  const shade = SHADE[q.faceType];
-  const col = block.colors[q.faceType];
-  const r = col[0] * shade, g = col[1] * shade, b = col[2] * shade;
-
-  // Build the 4 corners in (axis,u,v) space then convert to world xyz.
-  const corner = (uu, vv) => {
-    const a = [0, 0, 0];
-    a[q.axis] = q.faceCoord; a[q.u] = uu; a[q.v] = vv;
-    return [q.baseX + a[0], a[1], q.baseZ + a[2]];
-  };
-  const c0 = corner(q.i, q.j);
-  const c1 = corner(q.i + q.w, q.j);
-  const c2 = corner(q.i + q.w, q.j + q.h);
-  const c3 = corner(q.i, q.j + q.h);
-
-  const vi = buf.positions.length / 3;
-  for (const c of [c0, c1, c2, c3]) {
-    buf.positions.push(c[0], c[1], c[2]);
-    buf.normals.push(q.normal[0], q.normal[1], q.normal[2]);
-    buf.colors.push(r, g, b);
-  }
-  // Winding: u×v points along +axis, so CCW order works for dir>0; reverse it
-  // for dir<0 so the front face points outward.
-  if (q.dir > 0) buf.indices.push(vi, vi + 1, vi + 2, vi, vi + 2, vi + 3);
-  else buf.indices.push(vi, vi + 2, vi + 1, vi, vi + 3, vi + 2);
+  return { opaque: assembleGrouped(byMat), water: assembleSingle(water) };
 }

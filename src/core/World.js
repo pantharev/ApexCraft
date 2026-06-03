@@ -3,6 +3,7 @@ import { CHUNK_SIZE, WORLD_HEIGHT, SEA_LEVEL, LOAD_RADIUS, UNLOAD_RADIUS, CHUNK_
 import { Chunk } from './Chunk.js';
 import { generateChunk } from '../world/generators/TerrainGen.js';
 import { buildChunkGeometry } from './ChunkMesher.js';
+import { BLOCK_MATERIALS, WATER_MATERIAL_INDEX } from '../textures/atlas.js';
 
 const key = (cx, cz) => `${cx},${cz}`;
 
@@ -12,14 +13,10 @@ export class World {
     this.chunks = new Map();
     this.cache = new Map(); // LRU of unloaded chunks (insertion order = age)
 
-    this.opaqueMaterial = new THREE.MeshLambertMaterial({ vertexColors: true });
-    this.transparentMaterial = new THREE.MeshLambertMaterial({
-      vertexColors: true,
-      transparent: true,
-      opacity: 0.7,
-      side: THREE.DoubleSide,
-      depthWrite: false,
-    });
+    // Opaque chunk meshes use the shared per-tile material array (geometry
+    // groups index into it); water uses its own transparent material.
+    this.materials = BLOCK_MATERIALS;
+    this.waterMaterial = BLOCK_MATERIALS[WATER_MATERIAL_INDEX];
   }
 
   getChunk(cx, cz) {
@@ -80,7 +77,7 @@ export class World {
 
   buildMesh(chunk) {
     const get = (wx, wy, wz) => this.getBlock(wx, wy, wz);
-    const { opaque, transparent } = buildChunkGeometry(chunk, get);
+    const { opaque, water } = buildChunkGeometry(chunk, get);
 
     if (chunk.mesh) {
       this.scene.remove(chunk.mesh);
@@ -89,13 +86,15 @@ export class World {
 
     const group = new THREE.Group();
     if (opaque) {
-      const m = new THREE.Mesh(opaque, this.opaqueMaterial);
+      // Material array; geometry groups select the per-tile material.
+      const m = new THREE.Mesh(opaque, this.materials);
       m.frustumCulled = true;
       group.add(m);
     }
-    if (transparent) {
-      const m = new THREE.Mesh(transparent, this.transparentMaterial);
+    if (water) {
+      const m = new THREE.Mesh(water, this.waterMaterial);
       m.frustumCulled = true;
+      m.renderOrder = 1;
       group.add(m);
     }
     chunk.mesh = group;

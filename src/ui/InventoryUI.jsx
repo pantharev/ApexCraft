@@ -3,8 +3,22 @@ import { getItem } from '../items/ItemRegistry.js';
 import { leftClick, rightClick, maxStackOf } from '../player/slotOps.js';
 import { matchRecipe } from '../crafting/CraftingEngine.js';
 import { getSmeltTime } from '../crafting/Smelting.js';
+import { itemIconURL } from '../textures/icons.js';
 
 const SLOT = 46; // px
+
+// Textured item icon (pixelated). Falls back cleanly if no icon.
+function ItemSprite({ name, inset = 5 }) {
+  const url = itemIconURL(name);
+  return (
+    <div style={{
+      position: 'absolute', inset,
+      backgroundImage: url ? `url(${url})` : 'none',
+      backgroundColor: url ? 'transparent' : itemColor(name),
+      backgroundSize: '100% 100%', imageRendering: 'pixelated',
+    }} />
+  );
+}
 
 function useInventoryVersion(inventory) {
   const [, setV] = useState(0);
@@ -32,10 +46,7 @@ function Slot({ stack, selected, onLeft, onRight, onEnter, onLeave }) {
     >
       {stack && (
         <>
-          <div style={{
-            position: 'absolute', inset: 6, borderRadius: 3,
-            background: itemColor(stack.item), boxShadow: 'inset 0 0 0 1px rgba(0,0,0,0.35)',
-          }} />
+          <ItemSprite name={stack.item} />
           {stack.count > 1 && (
             <span style={{
               position: 'absolute', right: 3, bottom: 1, color: '#fff',
@@ -85,7 +96,7 @@ function CursorLayer({ cursor, mouse, hover }) {
       )}
       {cursor && (
         <div style={{ position: 'fixed', left: mouse.x - 18, top: mouse.y - 18, width: 36, height: 36, pointerEvents: 'none' }}>
-          <div style={{ position: 'absolute', inset: 0, borderRadius: 3, background: itemColor(cursor.item) }} />
+          <ItemSprite name={cursor.item} inset={0} />
           {cursor.count > 1 && (
             <span style={{
               position: 'absolute', right: 0, bottom: -2, color: '#fff',
@@ -190,7 +201,7 @@ function CraftingScreen({ inventory, gridSize, title }) {
         >
           {result && (
             <>
-              <div style={{ position: 'absolute', inset: 6, borderRadius: 3, background: itemColor(result.item) }} />
+              <ItemSprite name={result.item} />
               {result.count > 1 && (
                 <span style={{ position: 'absolute', right: 3, bottom: 1, color: '#fff', font: 'bold 13px monospace', textShadow: '1px 1px 1px #000' }}>{result.count}</span>
               )}
@@ -272,7 +283,7 @@ function FurnaceScreen({ inventory, furnace }) {
         >
           {f.output && (
             <>
-              <div style={{ position: 'absolute', inset: 6, borderRadius: 3, background: itemColor(f.output.item) }} />
+              <ItemSprite name={f.output.item} />
               {f.output.count > 1 && (
                 <span style={{ position: 'absolute', right: 3, bottom: 1, color: '#fff', font: 'bold 13px monospace', textShadow: '1px 1px 1px #000' }}>{f.output.count}</span>
               )}

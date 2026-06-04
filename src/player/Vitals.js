@@ -29,6 +29,17 @@ export class Vitals {
     this.submerged = false;
   }
 
+  serialize() {
+    return { health: this.health, hunger: this.hunger, air: this.air };
+  }
+
+  load(data) {
+    if (!data) return;
+    this.health = data.health ?? MAX_HEALTH;
+    this.hunger = data.hunger ?? MAX_HUNGER;
+    this.air = data.air ?? MAX_AIR;
+  }
+
   damage(n) {
     if (this.dead) return;
     this.health = Math.max(0, this.health - n);

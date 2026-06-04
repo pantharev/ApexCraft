@@ -9,6 +9,8 @@ import { Furnaces } from '../player/Furnaces.js';
 import { Vitals } from '../player/Vitals.js';
 import { DayNight } from '../systems/DayNight.js';
 import { MobManager } from '../systems/MobManager.js';
+import { saveWorld } from '../systems/Storage.js';
+import { WORLD_SEED } from '../config.js';
 import { getBlockId } from '../blocks/BlockRegistry.js';
 import { getItem } from '../items/ItemRegistry.js';
 import { SEA_LEVEL } from '../config.js';
@@ -28,8 +30,12 @@ const STARTER_KIT = [
 // Owns the Three.js renderer/scene/camera, the World, and the Player, plus the
 // requestAnimationFrame loop. Mounted by the React <App/> into a container div.
 export class Game {
-  constructor(container) {
+  constructor(container, save = null) {
     this.container = container;
+    this._save = save || null;
+    this.worldId = save?.id || 'default';
+    this.worldName = save?.name || 'World';
+    this.seed = save?.seed ?? WORLD_SEED;
 
     this.renderer = new THREE.WebGLRenderer({ antialias: true });
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
@@ -56,6 +62,8 @@ export class Game {
     this.scene.add(this.sun);
 
     this.world = new World(this.scene);
+    // Replay saved block edits before any terrain is generated.
+    if (this._save) this.world.loadEdits(this._save.edits);
     this.player = new Player(this.world, this.camera, this.renderer.domElement);
     this.itemDrops = new ItemDrops(this.world, this.scene);
     this.interaction = new Interaction(
@@ -64,7 +72,8 @@ export class Game {
 
     // Inventory: mined drops flow in here; leftover (full) stays in the world.
     this.inventory = new Inventory();
-    for (const [name, count] of STARTER_KIT) this.inventory.addItem(name, count);
+    if (this._save?.inventory) this.inventory.load(this._save.inventory);
+    else for (const [name, count] of STARTER_KIT) this.inventory.addItem(name, count);
     this.itemDrops.onCollect = (name, count) => this.inventory.addItem(name, count);
 
     // Placing a block consumes one of the selected stack.
@@ -84,8 +93,12 @@ export class Game {
     };
     this.vitals.onDeath = () => this._handleDeath();
 
+    // Survival stats restore.
+    if (this._save?.vitals) this.vitals.load(this._save.vitals);
+
     // Day/night cycle + mobs.
     this.dayNight = new DayNight(this.scene, this.sun, this.hemi, this.camera);
+    if (this._save?.time != null) { this.dayNight.t = this._save.time; this.dayNight.update(0); }
     this.mobs = new MobManager(this.world, this.scene, this.itemDrops);
     this.interaction.onAttack = () => {
       const dir = new THREE.Vector3();
@@ -99,6 +112,7 @@ export class Game {
 
     // Per-position furnace state, smelting in the background.
     this.furnaces = new Furnaces();
+    if (this._save?.furnaces) this.furnaces.load(this._save.furnaces);
     this.activeFurnace = null;
 
     // Right-clicking an interactive block opens its screen.
@@ -141,11 +155,18 @@ export class Game {
     this._bindScreens();
 
     // Pre-generate spawn area so the player doesn't fall through ungenerated
-    // chunks, then place the player on the surface.
-    this.world.update(0, 0, 80);
-    this.player.spawnAtSurface();
+    // chunks, then place the player. For a loaded game, generate around the
+    // saved position so the player doesn't briefly fall through ungenerated land.
+    if (this._save?.player) {
+      this._restorePlayer(this._save.player);
+      this.world.update(this.player.pos.x, this.player.pos.z, 80);
+    } else {
+      this.world.update(0, 0, 80);
+      this.player.spawnAtSurface();
+    }
 
     this.clock = new THREE.Clock();
+    this._autosaveTimer = 0;
     this._running = false;
     this._onResize = this._onResize.bind(this);
     window.addEventListener('resize', this._onResize);
@@ -155,7 +176,12 @@ export class Game {
     this._resizeObserver.observe(this.container);
     this._onResize();
 
-    this.onStats = null; // optional callback for HUD
+    // Best-effort save when the tab closes.
+    this._onUnload = () => { if (!this.vitals.dead) saveWorld(this.worldId, this.serialize()); };
+    window.addEventListener('beforeunload', this._onUnload);
+
+    this.onStats = null;  // optional callback for HUD
+    this.onSaved = null;  // optional callback when a save completes
   }
 
   _onResize() {
@@ -219,6 +245,38 @@ export class Game {
     if (this.onDead) this.onDead(true);
   }
 
+  _restorePlayer(p) {
+    this.player.pos.set(p.x, p.y, p.z);
+    this.player.vel.set(0, 0, 0);
+    this.player.yaw = this.player.targetYaw = p.yaw || 0;
+    this.player.pitch = this.player.targetPitch = p.pitch || 0;
+    this.player._peakY = p.y;
+  }
+
+  // Bundle the whole world/player state for persistence.
+  serialize() {
+    const p = this.player.pos;
+    return {
+      id: this.worldId,
+      name: this.worldName,
+      seed: this.seed,
+      lastPlayed: Date.now(),
+      edits: this.world.serializeEdits(),
+      player: { x: p.x, y: p.y, z: p.z, yaw: this.player.yaw, pitch: this.player.pitch },
+      vitals: this.vitals.serialize(),
+      inventory: this.inventory.serialize(),
+      furnaces: this.furnaces.serialize(),
+      time: this.dayNight.t,
+    };
+  }
+
+  async save() {
+    if (this.vitals.dead) return false; // don't persist a mid-death state
+    const ok = await saveWorld(this.worldId, this.serialize());
+    if (ok && this.onSaved) this.onSaved();
+    return ok;
+  }
+
   respawn() {
     this.vitals.reset();
     this.player.spawnAtSurface();
@@ -277,6 +335,10 @@ export class Game {
     this._animateHeld(dt);
     this.renderer.render(this.scene, this.camera);
 
+    // Autosave every 15s.
+    this._autosaveTimer += dt;
+    if (this._autosaveTimer >= 15) { this._autosaveTimer = 0; this.save(); }
+
     if (this.onStats) {
       const p = this.player.pos;
       const stack = this.inventory.selectedStack();
@@ -321,6 +383,7 @@ export class Game {
   dispose() {
     this._running = false;
     window.removeEventListener('resize', this._onResize);
+    window.removeEventListener('beforeunload', this._onUnload);
     if (this._resizeObserver) this._resizeObserver.disconnect();
     this.renderer.dispose();
     if (this.renderer.domElement.parentNode) {

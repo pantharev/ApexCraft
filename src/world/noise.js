@@ -13,23 +13,23 @@ export function mulberry32(seed) {
   };
 }
 
-function makeNoise2D(seedOffset) {
-  return createNoise2D(mulberry32(WORLD_SEED + seedOffset));
-}
-function makeNoise3D(seedOffset) {
-  return createNoise3D(mulberry32(WORLD_SEED + seedOffset));
+// Separate noise fields so terrain, climate and caves are independent. They are
+// (re)built by reseed() so each world can have its own seed.
+let terrainNoise, tempNoise, humidNoise, detailNoise, caveNoise, oreNoise, forestNoise, continentNoise, riverNoise;
+
+export function reseed(seed) {
+  terrainNoise = createNoise2D(mulberry32(seed + 0));
+  tempNoise = createNoise2D(mulberry32(seed + 101));
+  humidNoise = createNoise2D(mulberry32(seed + 202));
+  detailNoise = createNoise2D(mulberry32(seed + 303));
+  caveNoise = createNoise3D(mulberry32(seed + 404));
+  oreNoise = createNoise3D(mulberry32(seed + 505));
+  forestNoise = createNoise2D(mulberry32(seed + 606));
+  continentNoise = createNoise2D(mulberry32(seed + 707));
+  riverNoise = createNoise2D(mulberry32(seed + 808));
 }
 
-// Separate noise fields so terrain, climate and caves are independent.
-const terrainNoise = makeNoise2D(0);
-const tempNoise = makeNoise2D(101);
-const humidNoise = makeNoise2D(202);
-const detailNoise = makeNoise2D(303);
-const caveNoise = makeNoise3D(404);
-const oreNoise = makeNoise3D(505);
-const forestNoise = makeNoise2D(606);
-const continentNoise = makeNoise2D(707);
-const riverNoise = makeNoise2D(808);
+reseed(WORLD_SEED); // default world until a save selects its own seed
 
 // Fractal Brownian motion: sums octaves of 2D noise for natural-looking terrain.
 export function fbm2D(noise, x, z, octaves, freq, persistence = 0.5, lacunarity = 2) {

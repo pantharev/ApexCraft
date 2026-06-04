@@ -30,6 +30,15 @@ A voxel survival game in the browser — a Minecraft-style sandbox built with **
 - **Crafting** — 2×2 pocket grid plus a 3×3 crafting table (right-click a placed table). Shaped & shapeless recipes; shift-click to craft a full stack.
 - **Smelting** — place a furnace, add fuel + input; smelt ores into ingots, sand into glass, and raw meat into cooked food.
 
+### Worlds & persistence
+- **Multiple worlds** — a title screen lists your saved worlds (create/play/
+  delete); each world has its own random seed, so terrain differs per world.
+- **Saving** to IndexedDB: auto-saves every 15s and on tab close, plus a manual
+  **Save** in the pause menu (press **Esc**). Because terrain is deterministic
+  from the seed, only your block edits, player, inventory, vitals, furnaces, and
+  the time of day are stored — saves stay small and reloads drop you right back
+  where you left off.
+
 ### Performance
 - **Greedy meshing** merges coplanar block faces into large quads.
 - **Chunk streaming** around the player with an LRU cache that preserves edits on revisit.
@@ -50,9 +59,9 @@ A voxel survival game in the browser — a Minecraft-style sandbox built with **
 | **1–9 / Scroll** | Select hotbar slot |
 | **E** | Open/close inventory |
 | **F** | Toggle fly |
-| **Esc** | Release mouse / close UI |
+| **Esc** | Close UI / open pause menu (Resume, Save, Quit) |
 
-Click the game to lock the mouse and play.
+Pick or create a world on the title screen, then click the game to lock the mouse and play.
 
 ---
 
@@ -98,8 +107,6 @@ React 18 · Three.js · Vite · simplex-noise. Rendering is raw Three.js managed
 
 ## Roadmap
 
-- Textures / texture atlas for blocks, items, and mobs
-- World persistence (IndexedDB saves)
 - More structures and biome variety; biome blending
 - Web-worker chunk generation, LOD
 - Ranged combat (skeleton arrows), more mobs

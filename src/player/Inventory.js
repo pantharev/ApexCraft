@@ -22,6 +22,22 @@ export class Inventory {
     for (const fn of this._listeners) fn();
   }
 
+  serialize() {
+    return { slots: this.slots, selected: this.selected };
+  }
+
+  load(data) {
+    if (!data) return;
+    this.slots = new Array(TOTAL_SLOTS).fill(null);
+    const src = data.slots || [];
+    for (let i = 0; i < TOTAL_SLOTS; i++) {
+      const s = src[i];
+      if (s && s.item && s.count > 0) this.slots[i] = { item: s.item, count: s.count };
+    }
+    this.selected = data.selected || 0;
+    this.notify();
+  }
+
   getSlot(i) {
     return this.slots[i];
   }

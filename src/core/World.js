@@ -12,6 +12,7 @@ export class World {
     this.scene = scene;
     this.chunks = new Map();
     this.cache = new Map(); // LRU of unloaded chunks (insertion order = age)
+    this.edits = new Map(); // chunkKey -> Map(localIndex -> blockId): player changes
 
     // Opaque chunk meshes use the shared per-tile material array (geometry
     // groups index into it); water uses its own transparent material.
@@ -38,8 +39,18 @@ export class World {
       }
       this.chunks.set(k, chunk);
     }
-    if (!chunk.generated) generateChunk(chunk);
+    if (!chunk.generated) {
+      generateChunk(chunk);
+      this._applyEdits(k, chunk); // replay saved player edits onto fresh terrain
+    }
     return chunk;
+  }
+
+  _applyEdits(k, chunk) {
+    const e = this.edits.get(k);
+    if (!e) return;
+    for (const [index, id] of e) chunk.blocks[index] = id;
+    chunk.dirty = true;
   }
 
   // Global voxel lookup across chunk boundaries.
@@ -63,6 +74,13 @@ export class World {
     const lz = wz - cz * CHUNK_SIZE;
     chunk.set(lx, wy, lz, id);
     chunk.dirty = true;
+
+    // Record the edit so it survives chunk unload/regeneration and can be saved.
+    const k = key(cx, cz);
+    let e = this.edits.get(k);
+    if (!e) { e = new Map(); this.edits.set(k, e); }
+    e.set(Chunk.index(lx, wy, lz), id);
+
     // Neighbouring chunk may need remesh if we touched a boundary block.
     if (lx === 0) this.markDirty(cx - 1, cz);
     if (lx === CHUNK_SIZE - 1) this.markDirty(cx + 1, cz);
@@ -73,6 +91,28 @@ export class World {
   markDirty(cx, cz) {
     const c = this.getChunk(cx, cz);
     if (c) c.dirty = true;
+  }
+
+  // Edits as a plain object for saving: { "cx,cz": { index: blockId } }.
+  serializeEdits() {
+    const out = {};
+    for (const [k, e] of this.edits) {
+      const o = {};
+      for (const [index, id] of e) o[index] = id;
+      out[k] = o;
+    }
+    return out;
+  }
+
+  // Load saved edits before any chunk is generated so they replay on gen.
+  loadEdits(obj) {
+    this.edits.clear();
+    if (!obj) return;
+    for (const k of Object.keys(obj)) {
+      const e = new Map();
+      for (const index of Object.keys(obj[k])) e.set(Number(index), obj[k][index]);
+      this.edits.set(k, e);
+    }
   }
 
   buildMesh(chunk) {

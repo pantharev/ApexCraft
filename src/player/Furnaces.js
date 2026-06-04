@@ -31,6 +31,26 @@ export class Furnaces {
     this.map.delete(key(x, y, z));
   }
 
+  serialize() {
+    const out = {};
+    for (const [k, f] of this.map) {
+      out[k] = { input: f.input, fuel: f.fuel, output: f.output, cook: f.cook, burnLeft: f.burnLeft, burnMax: f.burnMax };
+    }
+    return out;
+  }
+
+  load(obj) {
+    this.map.clear();
+    if (!obj) return;
+    for (const k of Object.keys(obj)) {
+      const s = obj[k];
+      this.map.set(k, {
+        input: s.input || null, fuel: s.fuel || null, output: s.output || null,
+        cook: s.cook || 0, burnLeft: s.burnLeft || 0, burnMax: s.burnMax || 0,
+      });
+    }
+  }
+
   update(dt) {
     for (const f of this.map.values()) this._tick(f, dt);
   }

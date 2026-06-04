@@ -3,6 +3,9 @@ import data from './smelting.json';
 const recipeByInput = {};
 for (const r of data.recipes) recipeByInput[r.input] = r;
 
+// Smelting recipe list for the recipe book (informational).
+export const SMELTING = data.recipes.map((r) => ({ input: r.input, output: r.output, count: r.count || 1 }));
+
 // Returns { output, count } for a smeltable input item, or null.
 export function getSmeltResult(itemName) {
   const r = itemName && recipeByInput[itemName];

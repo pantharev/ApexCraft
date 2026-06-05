@@ -38,9 +38,11 @@ const tabBtn = {
   border: '2px solid #244524', borderRadius: 4,
 };
 
-// Recipe book: browse all recipes, see ingredients, and one-click craft anything
-// you have the materials for. Shown inside the inventory/table/furnace screens.
-export function RecipeBook({ inventory }) {
+// Recipe book: browse recipes, see ingredients, and one-click craft anything you
+// have the materials for AND can make in the current station. `maxCraftSize` is
+// the grid the screen provides: 2 = inventory, 3 = crafting table, 0 = furnace
+// (smelting only). Recipes needing a bigger grid show dimmed with a note.
+export function RecipeBook({ inventory, maxCraftSize = 3 }) {
   useInv(inventory);
   const [open, setOpen] = useState(false);
   const [filter, setFilter] = useState('');
@@ -53,10 +55,12 @@ export function RecipeBook({ inventory }) {
   const crafts = useMemo(() => RECIPES, []);
   const visibleCrafts = crafts.filter((r) => matches(r.result.item));
   const visibleSmelts = SMELTING.filter((r) => matches(r.output));
+  const fits = (r) => r.size <= maxCraftSize;
 
   if (!open) return <button style={tabBtn} onClick={() => setOpen(true)}>Recipes</button>;
 
   const craft = (r, all) => {
+    if (!fits(r)) return; // needs a bigger crafting station
     do { if (!inventory.craftRecipe(r.requirements, r.result)) break; } while (all);
   };
 
@@ -82,17 +86,23 @@ export function RecipeBook({ inventory }) {
       />
 
       <div style={{ overflowY: 'auto', flex: 1 }}>
-        <div style={{ opacity: 0.6, margin: '4px 0' }}>Crafting <span style={{ fontSize: 11 }}>(click to craft · shift = all)</span></div>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(6, 1fr)', gap: 4 }}>
-          {visibleCrafts.map((r) => {
-            const can = inventory.hasAll(r.requirements);
-            return (
-              <Icon key={r.id} name={r.result.item} dim={!can}
-                onClick={(e) => can && craft(r, e.shiftKey)}
-                onEnter={() => setHover({ type: 'craft', r })} onLeave={() => setHover(null)} />
-            );
-          })}
-        </div>
+        {maxCraftSize > 0 && (
+          <>
+            <div style={{ opacity: 0.6, margin: '4px 0' }}>
+              Crafting <span style={{ fontSize: 11 }}>({maxCraftSize >= 3 ? 'click to craft · shift = all' : '2×2 here · 3×3 needs a table'})</span>
+            </div>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(6, 1fr)', gap: 4 }}>
+              {visibleCrafts.map((r) => {
+                const can = inventory.hasAll(r.requirements) && fits(r);
+                return (
+                  <Icon key={r.id} name={r.result.item} dim={!can}
+                    onClick={(e) => craft(r, e.shiftKey)}
+                    onEnter={() => setHover({ type: 'craft', r })} onLeave={() => setHover(null)} />
+                );
+              })}
+            </div>
+          </>
+        )}
 
         <div style={{ opacity: 0.6, margin: '12px 0 4px' }}>Smelting <span style={{ fontSize: 11 }}>(use a furnace)</span></div>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(6, 1fr)', gap: 4 }}>
@@ -123,6 +133,7 @@ export function RecipeBook({ inventory }) {
                   </div>
                 );
               })}
+              {!fits(hover.r) && <div style={{ color: '#e8c06a', marginTop: 4 }}>Requires crafting table</div>}
             </>
           ) : (
             <div>{display(hover.r.input)} → {display(hover.r.output)} <span style={{ opacity: 0.6 }}>(smelt)</span></div>

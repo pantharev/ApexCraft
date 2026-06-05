@@ -214,7 +214,7 @@ function CraftingScreen({ inventory, gridSize, title }) {
       <InventoryGrids inventory={inventory} onLeft={invLeft} onRight={invRight} setHover={setHover} />
       <div style={{ font: '12px system-ui', color: '#444', marginTop: 10, opacity: 0.8 }}>{HINT}</div>
       <CursorLayer cursor={cursor} mouse={mouse} hover={hover} />
-      <RecipeBook inventory={inventory} />
+      <RecipeBook inventory={inventory} maxCraftSize={gridSize} />
     </Panel>
   );
 }
@@ -299,7 +299,7 @@ function FurnaceScreen({ inventory, furnace }) {
         Input on top, fuel below · output is take-only · E / Esc to close
       </div>
       <CursorLayer cursor={cursor} mouse={mouse} hover={hover} />
-      <RecipeBook inventory={inventory} />
+      <RecipeBook inventory={inventory} maxCraftSize={0} />
     </Panel>
   );
 }

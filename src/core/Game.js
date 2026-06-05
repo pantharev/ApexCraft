@@ -9,6 +9,7 @@ import { Furnaces } from '../player/Furnaces.js';
 import { Vitals } from '../player/Vitals.js';
 import { DayNight } from '../systems/DayNight.js';
 import { MobManager } from '../systems/MobManager.js';
+import { TorchLights } from '../systems/TorchLights.js';
 import { saveWorld } from '../systems/Storage.js';
 import { WORLD_SEED } from '../config.js';
 import { getBlockId } from '../blocks/BlockRegistry.js';
@@ -25,6 +26,8 @@ const STARTER_KIT = [
   ['cobblestone', 64],
   ['oak_log', 32],
   ['apple', 8],
+  ['torch', 16],
+  ['stone_sword', 1],
 ];
 
 // Owns the Three.js renderer/scene/camera, the World, and the Player, plus the
@@ -100,6 +103,7 @@ export class Game {
     this.dayNight = new DayNight(this.scene, this.sun, this.hemi, this.camera);
     if (this._save?.time != null) { this.dayNight.t = this._save.time; this.dayNight.update(0); }
     this.mobs = new MobManager(this.world, this.scene, this.itemDrops);
+    this.torchLights = new TorchLights(this.scene, this.world);
     this.interaction.onAttack = () => {
       const dir = new THREE.Vector3();
       this.camera.getWorldDirection(dir);
@@ -326,6 +330,7 @@ export class Game {
     this.furnaces.update(dt);
     this.vitals.update(dt);
     this.dayNight.update(dt);
+    this.torchLights.update(this.player.pos);
     this.mobs.update(dt, {
       playerPos: this.player.pos,
       isNight: this.dayNight.isNight,

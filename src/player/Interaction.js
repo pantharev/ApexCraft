@@ -165,9 +165,11 @@ export class Interaction {
     }
 
     if (this.breaking && id !== BEDROCK && block.hardness >= 0) {
-      // Mining speed: a matching tool type grants its multiplier, otherwise 1x.
+      // Mining speed: the right tool (required or preferred) grants its
+      // multiplier, otherwise 1x.
       const tool = this.currentTool;
-      const speed = tool && block.requiresTool === tool.toolType ? tool.miningSpeed : 1;
+      const matches = tool && (block.requiresTool === tool.toolType || block.preferredTool === tool.toolType);
+      const speed = matches ? tool.miningSpeed : 1;
       const breakTime = Math.max(0.1, (block.hardness ?? 1) * 0.75 / speed);
       this.breakProgress += dt / breakTime;
       if (this.breakProgress >= 1) {

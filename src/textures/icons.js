@@ -31,6 +31,29 @@ function drawPickaxe(ctx, color) {
   ctx.fillRect(3, 3, 10, 1);
 }
 
+function drawSword(ctx, color) {
+  for (let i = 0; i < 4; i++) { set(ctx, 11 - i, 11 - i, '#6b4f2a'); } // handle
+  ctx.fillStyle = '#888'; ctx.fillRect(8, 9, 3, 3); // guard
+  ctx.fillStyle = color; // blade
+  for (let i = 0; i < 8; i++) ctx.fillRect(5 - i / 2 | 0, 8 - i, 2 + (i < 2 ? 0 : 1), 1);
+  ctx.fillStyle = color; ctx.fillRect(3, 2, 3, 6);
+  ctx.fillStyle = 'rgba(255,255,255,0.3)'; ctx.fillRect(3, 2, 1, 6);
+}
+
+function drawAxe(ctx, color) {
+  for (let i = 0; i < 9; i++) set(ctx, 6 + i * 0.3 | 0, 13 - i, '#6b4f2a'); // handle
+  ctx.fillStyle = color; // head
+  ctx.fillRect(6, 2, 6, 6); ctx.fillRect(4, 3, 2, 4);
+  ctx.fillStyle = 'rgba(255,255,255,0.25)'; ctx.fillRect(6, 2, 6, 1);
+}
+
+function drawShovel(ctx, color) {
+  for (let i = 0; i < 7; i++) set(ctx, 11 - i, 11 - i, '#6b4f2a'); // handle
+  ctx.fillStyle = color; // scoop
+  ctx.fillRect(2, 2, 5, 6); ctx.fillRect(3, 8, 3, 1);
+  ctx.fillStyle = 'rgba(255,255,255,0.3)'; ctx.fillRect(2, 2, 5, 1);
+}
+
 function drawFood(ctx, color) {
   ctx.fillStyle = color;
   ctx.beginPath(); ctx.arc(8, 9, 5.2, 0, Math.PI * 2); ctx.fill();
@@ -50,7 +73,10 @@ function drawItem(def) {
   const c = newCanvas();
   const ctx = c.getContext('2d');
   const color = def?.color || '#cccccc';
-  if (def?.toolType) drawPickaxe(ctx, color);
+  if (def?.toolType === 'sword') drawSword(ctx, color);
+  else if (def?.toolType === 'axe') drawAxe(ctx, color);
+  else if (def?.toolType === 'shovel') drawShovel(ctx, color);
+  else if (def?.toolType) drawPickaxe(ctx, color);
   else if (def?.food) drawFood(ctx, color);
   else drawNugget(ctx, color);
   return c.toDataURL();

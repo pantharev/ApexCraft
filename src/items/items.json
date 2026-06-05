@@ -12,6 +12,7 @@
   { "name": "glass",       "display": "Glass",       "color": "#bfe6ee", "maxStack": 64, "placeBlock": "glass" },
   { "name": "crafting_table", "display": "Crafting Table", "color": "#9c6b3f", "maxStack": 64, "placeBlock": "crafting_table" },
   { "name": "furnace",     "display": "Furnace",     "color": "#5a5a5a", "maxStack": 64, "placeBlock": "furnace" },
+  { "name": "torch",       "display": "Torch",       "color": "#f0b030", "maxStack": 64, "placeBlock": "torch" },
   { "name": "stick",       "display": "Stick",       "color": "#8a6d3b", "maxStack": 64 },
   { "name": "apple",       "display": "Apple",       "color": "#d4342a", "maxStack": 64, "food": 6 },
   { "name": "raw_porkchop","display": "Raw Porkchop","color": "#e89aa0", "maxStack": 64, "food": 3 },
@@ -31,6 +32,7 @@
   { "name": "wool",        "display": "Wool",        "color": "#eeeeee", "maxStack": 64 },
 
   { "name": "coal",        "display": "Coal",        "color": "#2b2b2b", "maxStack": 64 },
+  { "name": "charcoal",    "display": "Charcoal",    "color": "#3a3a3a", "maxStack": 64 },
   { "name": "iron_ingot",  "display": "Iron Ingot",  "color": "#e8e8e8", "maxStack": 64 },
   { "name": "gold_ingot",  "display": "Gold Ingot",  "color": "#f5d33a", "maxStack": 64 },
   { "name": "raw_iron",    "display": "Raw Iron",    "color": "#c8a98f", "maxStack": 64 },
@@ -44,5 +46,23 @@
   { "name": "stone_pickaxe",   "display": "Stone Pickaxe",   "color": "#9a9a9a", "maxStack": 1, "toolType": "pickaxe", "tier": 2, "miningSpeed": 4, "attackDamage": 3 },
   { "name": "iron_pickaxe",    "display": "Iron Pickaxe",    "color": "#d8d8d8", "maxStack": 1, "toolType": "pickaxe", "tier": 3, "miningSpeed": 6, "attackDamage": 4 },
   { "name": "gold_pickaxe",    "display": "Gold Pickaxe",    "color": "#f5e25a", "maxStack": 1, "toolType": "pickaxe", "tier": 4, "miningSpeed": 12, "attackDamage": 3 },
-  { "name": "diamond_pickaxe", "display": "Diamond Pickaxe", "color": "#4fd3c8", "maxStack": 1, "toolType": "pickaxe", "tier": 5, "miningSpeed": 8, "attackDamage": 5 }
+  { "name": "diamond_pickaxe", "display": "Diamond Pickaxe", "color": "#4fd3c8", "maxStack": 1, "toolType": "pickaxe", "tier": 5, "miningSpeed": 8, "attackDamage": 5 },
+
+  { "name": "wooden_sword",  "display": "Wooden Sword",  "color": "#8a6d3b", "maxStack": 1, "toolType": "sword", "tier": 1, "miningSpeed": 1.5, "attackDamage": 4 },
+  { "name": "stone_sword",   "display": "Stone Sword",   "color": "#9a9a9a", "maxStack": 1, "toolType": "sword", "tier": 2, "miningSpeed": 1.5, "attackDamage": 5 },
+  { "name": "iron_sword",    "display": "Iron Sword",    "color": "#d8d8d8", "maxStack": 1, "toolType": "sword", "tier": 3, "miningSpeed": 1.5, "attackDamage": 6 },
+  { "name": "gold_sword",    "display": "Gold Sword",    "color": "#f5e25a", "maxStack": 1, "toolType": "sword", "tier": 4, "miningSpeed": 1.5, "attackDamage": 4 },
+  { "name": "diamond_sword", "display": "Diamond Sword", "color": "#4fd3c8", "maxStack": 1, "toolType": "sword", "tier": 5, "miningSpeed": 1.5, "attackDamage": 7 },
+
+  { "name": "wooden_axe",  "display": "Wooden Axe",  "color": "#8a6d3b", "maxStack": 1, "toolType": "axe", "tier": 1, "miningSpeed": 2, "attackDamage": 3 },
+  { "name": "stone_axe",   "display": "Stone Axe",   "color": "#9a9a9a", "maxStack": 1, "toolType": "axe", "tier": 2, "miningSpeed": 4, "attackDamage": 4 },
+  { "name": "iron_axe",    "display": "Iron Axe",    "color": "#d8d8d8", "maxStack": 1, "toolType": "axe", "tier": 3, "miningSpeed": 6, "attackDamage": 5 },
+  { "name": "gold_axe",    "display": "Gold Axe",    "color": "#f5e25a", "maxStack": 1, "toolType": "axe", "tier": 4, "miningSpeed": 12, "attackDamage": 3 },
+  { "name": "diamond_axe", "display": "Diamond Axe", "color": "#4fd3c8", "maxStack": 1, "toolType": "axe", "tier": 5, "miningSpeed": 8, "attackDamage": 6 },
+
+  { "name": "wooden_shovel",  "display": "Wooden Shovel",  "color": "#8a6d3b", "maxStack": 1, "toolType": "shovel", "tier": 1, "miningSpeed": 2, "attackDamage": 2 },
+  { "name": "stone_shovel",   "display": "Stone Shovel",   "color": "#9a9a9a", "maxStack": 1, "toolType": "shovel", "tier": 2, "miningSpeed": 4, "attackDamage": 3 },
+  { "name": "iron_shovel",    "display": "Iron Shovel",    "color": "#d8d8d8", "maxStack": 1, "toolType": "shovel", "tier": 3, "miningSpeed": 6, "attackDamage": 4 },
+  { "name": "gold_shovel",    "display": "Gold Shovel",    "color": "#f5e25a", "maxStack": 1, "toolType": "shovel", "tier": 4, "miningSpeed": 12, "attackDamage": 2 },
+  { "name": "diamond_shovel", "display": "Diamond Shovel", "color": "#4fd3c8", "maxStack": 1, "toolType": "shovel", "tier": 5, "miningSpeed": 8, "attackDamage": 5 }
 ]

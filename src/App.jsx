@@ -3,7 +3,7 @@ import { Game } from './core/Game.js';
 import { reseed } from './world/noise.js';
 import { listWorlds, loadWorld, deleteWorld } from './systems/Storage.js';
 import { MainMenu, PauseMenu } from './ui/Menus.jsx';
-import { Hotbar, InventoryPanel, CraftingTableScreen, FurnaceScreen } from './ui/InventoryUI.jsx';
+import { Hotbar, InventoryPanel, CraftingTableScreen, FurnaceScreen, ChestScreen } from './ui/InventoryUI.jsx';
 
 export default function App() {
   const containerRef = useRef(null);
@@ -125,6 +125,9 @@ export default function App() {
           {gameRef.current?.inventory && openScreen === 'crafting' && <CraftingTableScreen inventory={gameRef.current.inventory} />}
           {gameRef.current?.inventory && openScreen === 'furnace' && (
             <FurnaceScreen inventory={gameRef.current.inventory} furnace={gameRef.current.activeFurnace} />
+          )}
+          {gameRef.current?.inventory && openScreen === 'chest' && (
+            <ChestScreen inventory={gameRef.current.inventory} chest={gameRef.current.activeChest} />
           )}
 
           {saved && (

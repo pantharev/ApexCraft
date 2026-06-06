@@ -6,6 +6,7 @@ import { ItemDrops } from '../player/ItemDrops.js';
 import { buildHeldModel } from '../player/HeldItem.js';
 import { Inventory } from '../player/Inventory.js';
 import { Furnaces } from '../player/Furnaces.js';
+import { ChestStorage } from '../player/ChestStorage.js';
 import { Vitals } from '../player/Vitals.js';
 import { DayNight } from '../systems/DayNight.js';
 import { MobManager } from '../systems/MobManager.js';
@@ -28,6 +29,7 @@ const STARTER_KIT = [
   ['apple', 8],
   ['torch', 16],
   ['stone_sword', 1],
+  ['chest', 2],
 ];
 
 // Owns the Three.js renderer/scene/camera, the World, and the Player, plus the
@@ -116,10 +118,13 @@ export class Game {
       return true;
     };
 
-    // Per-position furnace state, smelting in the background.
+    // Per-position furnace + chest state.
     this.furnaces = new Furnaces();
     if (this._save?.furnaces) this.furnaces.load(this._save.furnaces);
     this.activeFurnace = null;
+    this.chests = new ChestStorage();
+    if (this._save?.chests) this.chests.load(this._save.chests);
+    this.activeChest = null;
 
     // Right-clicking an interactive block opens its screen.
     this.interaction.onUseBlock = (name, pos) => {
@@ -127,18 +132,28 @@ export class Game {
       else if (name === 'furnace') {
         this.activeFurnace = this.furnaces.get(pos.x, pos.y, pos.z);
         this.setScreen('furnace');
+      } else if (name === 'chest') {
+        this.activeChest = this.chests.open(this.world, pos.x, pos.y, pos.z);
+        this.setScreen('chest');
       }
     };
 
-    // When a furnace is mined, drop its contents and discard its state.
+    // When a furnace/chest is mined, drop its contents and discard its state.
     this.interaction.onBlockBroken = (name, pos) => {
-      if (name !== 'furnace') return;
-      const f = this.furnaces.peek(pos.x, pos.y, pos.z);
-      if (f) {
-        for (const s of [f.input, f.fuel, f.output]) {
-          if (s) this.itemDrops.spawn(s.item, s.count, pos.x, pos.y, pos.z);
+      if (name === 'furnace') {
+        const f = this.furnaces.peek(pos.x, pos.y, pos.z);
+        if (f) {
+          for (const s of [f.input, f.fuel, f.output]) {
+            if (s) this.itemDrops.spawn(s.item, s.count, pos.x, pos.y, pos.z);
+          }
+          this.furnaces.remove(pos.x, pos.y, pos.z);
         }
-        this.furnaces.remove(pos.x, pos.y, pos.z);
+      } else if (name === 'chest') {
+        const c = this.chests.peek(pos.x, pos.y, pos.z);
+        if (c) {
+          for (const s of c.slots) if (s) this.itemDrops.spawn(s.item, s.count, pos.x, pos.y, pos.z);
+          this.chests.remove(pos.x, pos.y, pos.z);
+        }
       }
     };
 
@@ -272,6 +287,7 @@ export class Game {
       vitals: this.vitals.serialize(),
       inventory: this.inventory.serialize(),
       furnaces: this.furnaces.serialize(),
+      chests: this.chests.serialize(),
       time: this.dayNight.t,
     };
   }

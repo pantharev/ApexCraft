@@ -304,6 +304,45 @@ function FurnaceScreen({ inventory, furnace }) {
   );
 }
 
+// Chest screen: a routed get/set storage view (27 or 54 slots) + the player
+// inventory below. `chest` is { size, title, get(i), set(i, stack) }.
+export function ChestScreen({ chest, inventory }) {
+  useInventoryVersion(inventory);
+  const [, force] = useState(0);
+  const [cursor, setCursor] = useState(null);
+  const [mouse, setMouse] = useState({ x: 0, y: 0 });
+  const [hover, setHover] = useState(null);
+  const cursorRef = useRef(null); cursorRef.current = cursor;
+
+  // Drop any cursor-held stack back into the inventory on close.
+  useEffect(() => () => { const c = cursorRef.current; if (c) inventory.addItem(c.item, c.count); }, [inventory]);
+
+  const chestLeft = (i) => { const r = leftClick(chest.get(i), cursorRef.current); chest.set(i, r.slot); setCursor(r.cursor); force((v) => v + 1); };
+  const chestRight = (i) => { const r = rightClick(chest.get(i), cursorRef.current); chest.set(i, r.slot); setCursor(r.cursor); force((v) => v + 1); };
+  const invLeft = (i) => setCursor(inventory.clickSlot(i, cursorRef.current));
+  const invRight = (i) => setCursor(inventory.rightClickSlot(i, cursorRef.current));
+
+  const slots = [];
+  for (let i = 0; i < chest.size; i++) slots.push(i);
+
+  return (
+    <Panel title={chest.title} onMouseMove={(e) => setMouse({ x: e.clientX, y: e.clientY })}>
+      <div style={{ display: 'grid', gridTemplateColumns: `repeat(9, ${SLOT}px)`, gap: 2, marginBottom: 14 }}>
+        {slots.map((i) => (
+          <Slot key={i} stack={chest.get(i)}
+            onLeft={() => chestLeft(i)} onRight={() => chestRight(i)}
+            onEnter={setHover} onLeave={() => setHover(null)} />
+        ))}
+      </div>
+      <InventoryGrids inventory={inventory} onLeft={invLeft} onRight={invRight} setHover={setHover} />
+      <div style={{ font: '12px system-ui', color: '#444', marginTop: 10, opacity: 0.8 }}>
+        Left-click move/stack · Right-click split · E / Esc to close
+      </div>
+      <CursorLayer cursor={cursor} mouse={mouse} hover={hover} />
+    </Panel>
+  );
+}
+
 export function InventoryPanel({ inventory }) {
   return <CraftingScreen inventory={inventory} gridSize={2} title="Inventory" />;
 }

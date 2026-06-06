@@ -29,6 +29,7 @@ A voxel survival game in the browser — a Minecraft-style sandbox built with **
 - **Inventory** — 36 slots + hotbar, drag/stack/split with a cursor, item tooltips.
 - **Crafting** — 2×2 pocket grid plus a 3×3 crafting table (right-click a placed table). Shaped & shapeless recipes; shift-click to craft a full stack.
 - **Smelting** — place a furnace, add fuel + input; smelt ores into ingots, sand into glass, and raw meat into cooked food.
+- **Recipe book** — a "Recipes" tab in the inventory, crafting table, and furnace screens lists every recipe with its ingredients (have/need), and one-click crafts anything you have materials for (shift-click crafts all).
 
 ### Worlds & persistence
 - **Multiple worlds** — a title screen lists your saved worlds (create/play/

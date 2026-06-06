@@ -4,8 +4,10 @@ import { Chunk } from './Chunk.js';
 import { generateChunk } from '../world/generators/TerrainGen.js';
 import { buildChunkGeometry } from './ChunkMesher.js';
 import { BLOCK_MATERIALS, WATER_MATERIAL_INDEX } from '../textures/atlas.js';
+import { getBlockId } from '../blocks/BlockRegistry.js';
 
 const key = (cx, cz) => `${cx},${cz}`;
+const TORCH = getBlockId('torch');
 
 export class World {
   constructor(scene) {
@@ -13,6 +15,7 @@ export class World {
     this.chunks = new Map();
     this.cache = new Map(); // LRU of unloaded chunks (insertion order = age)
     this.edits = new Map(); // chunkKey -> Map(localIndex -> blockId): player changes
+    this.torches = new Set(); // "x,y,z" of placed torches (for dynamic lights)
 
     // Opaque chunk meshes use the shared per-tile material array (geometry
     // groups index into it); water uses its own transparent material.
@@ -81,6 +84,11 @@ export class World {
     if (!e) { e = new Map(); this.edits.set(k, e); }
     e.set(Chunk.index(lx, wy, lz), id);
 
+    // Track torches for the dynamic light pool.
+    const tkey = `${wx},${wy},${wz}`;
+    if (id === TORCH) this.torches.add(tkey);
+    else this.torches.delete(tkey);
+
     // Neighbouring chunk may need remesh if we touched a boundary block.
     if (lx === 0) this.markDirty(cx - 1, cz);
     if (lx === CHUNK_SIZE - 1) this.markDirty(cx + 1, cz);
@@ -107,10 +115,22 @@ export class World {
   // Load saved edits before any chunk is generated so they replay on gen.
   loadEdits(obj) {
     this.edits.clear();
+    this.torches.clear();
     if (!obj) return;
     for (const k of Object.keys(obj)) {
+      const [cx, cz] = k.split(',').map(Number);
       const e = new Map();
-      for (const index of Object.keys(obj[k])) e.set(Number(index), obj[k][index]);
+      for (const index of Object.keys(obj[k])) {
+        const idx = Number(index);
+        const id = obj[k][index];
+        e.set(idx, id);
+        if (id === TORCH) {
+          const lx = idx % CHUNK_SIZE;
+          const lz = Math.floor(idx / CHUNK_SIZE) % CHUNK_SIZE;
+          const wy = Math.floor(idx / (CHUNK_SIZE * CHUNK_SIZE));
+          this.torches.add(`${cx * CHUNK_SIZE + lx},${wy},${cz * CHUNK_SIZE + lz}`);
+        }
+      }
       this.edits.set(k, e);
     }
   }

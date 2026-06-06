@@ -78,3 +78,24 @@ export function matchRecipe(cells, size) {
   }
   return null;
 }
+
+// Tally the ingredient requirements of a recipe as [{ item, count }].
+function requirementsOf(r) {
+  const counts = {};
+  if (r.type === 'shapeless') {
+    for (const it of r.ingredients) counts[it] = (counts[it] || 0) + 1;
+  } else {
+    for (const line of r.pattern) for (const ch of line) {
+      if (ch !== ' ') { const it = r.key[ch]; counts[it] = (counts[it] || 0) + 1; }
+    }
+  }
+  return Object.entries(counts).map(([item, count]) => ({ item, count }));
+}
+
+// Normalized recipe list for the recipe book UI.
+export const RECIPES = recipeData.map((r) => ({
+  id: r.id,
+  result: { ...r.result },
+  requirements: requirementsOf(r),
+  size: r.type === 'shapeless' ? 1 : Math.max(r.pattern.length, ...r.pattern.map((l) => l.length)),
+}));

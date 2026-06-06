@@ -109,6 +109,12 @@ const DRAW = {
   crafting_side: (c, r) => { DRAW.planks(c, r); c.fillStyle = 'rgba(90,67,39,0.8)'; c.fillRect(2, 2, 5, 5); c.fillRect(9, 9, 4, 4); },
   furnace_side: (c, r) => DRAW.cobblestone(c, r),
   furnace_front: (c, r) => { DRAW.cobblestone(c, r); c.fillStyle = '#241c14'; c.fillRect(4, 7, 8, 6); c.fillStyle = '#c2531a'; c.fillRect(5, 11, 6, 2); },
+  torch: (c) => {
+    c.fillStyle = '#1a1208'; c.fillRect(0, 0, TILE, TILE);
+    c.fillStyle = '#6b4f2a'; c.fillRect(7, 6, 2, 9); // stick
+    c.fillStyle = '#f0b030'; c.fillRect(6, 2, 4, 5);  // flame
+    c.fillStyle = '#fff2a0'; c.fillRect(7, 3, 2, 2);  // hot core
+  },
 };
 
 // Ores: stone base + a cluster of coloured specks.
@@ -131,6 +137,7 @@ const FACE_TILES = {
   water: t('water'), oak_planks: t('planks'), glass: t('glass'),
   crafting_table: { top: 'crafting_top', side: 'crafting_side', bottom: 'planks' },
   furnace: { top: 'furnace_side', side: 'furnace_front', bottom: 'furnace_side' },
+  torch: t('torch'),
 };
 for (const name of Object.keys(ORE_COLORS)) FACE_TILES[name] = t(name);
 
@@ -158,6 +165,7 @@ tileNames.forEach((name, i) => {
   const opts = { map: tex, vertexColors: true };
   if (CUTOUT.has(name)) { opts.transparent = true; opts.alphaTest = 0.5; opts.side = THREE.DoubleSide; }
   else if (TRANSPARENT.has(name)) { opts.transparent = true; opts.opacity = 0.85; opts.depthWrite = false; opts.side = THREE.DoubleSide; }
+  else if (name === 'torch') { opts.emissive = new THREE.Color('#ffaa33'); opts.emissiveIntensity = 0.9; } // self-glow
   materials.push(new THREE.MeshLambertMaterial(opts));
 });
 

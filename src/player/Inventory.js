@@ -98,6 +98,38 @@ export class Inventory {
     return remaining;
   }
 
+  // Total quantity of an item across all slots.
+  count(name) {
+    let n = 0;
+    for (const s of this.slots) if (s && s.item === name) n += s.count;
+    return n;
+  }
+
+  hasAll(reqs) {
+    return reqs.every((r) => this.count(r.item) >= r.count);
+  }
+
+  // Remove up to `n` of an item across stacks.
+  removeItems(name, n) {
+    for (let i = 0; i < TOTAL_SLOTS && n > 0; i++) {
+      const s = this.slots[i];
+      if (s && s.item === name) {
+        const take = Math.min(s.count, n);
+        s.count -= take; n -= take;
+        if (s.count <= 0) this.slots[i] = null;
+      }
+    }
+  }
+
+  // One-click craft from the recipe book: consume requirements, add the result.
+  craftRecipe(reqs, result) {
+    if (!this.hasAll(reqs)) return false;
+    for (const r of reqs) this.removeItems(r.item, r.count);
+    this.addItem(result.item, result.count); // freed slots from consumed items make room
+    this.notify();
+    return true;
+  }
+
   // Would `count` of `name` fully fit (used to gate shift-click crafting)?
   canFit(name, count) {
     const max = maxStackOf(name);

@@ -7,10 +7,12 @@
     { "input": "raw_porkchop", "output": "cooked_porkchop", "count": 1 },
     { "input": "raw_beef", "output": "cooked_beef", "count": 1 },
     { "input": "raw_mutton", "output": "cooked_mutton", "count": 1 },
-    { "input": "raw_chicken", "output": "cooked_chicken", "count": 1 }
+    { "input": "raw_chicken", "output": "cooked_chicken", "count": 1 },
+    { "input": "oak_log", "output": "charcoal", "count": 1 }
   ],
   "fuels": {
     "coal": 48,
+    "charcoal": 48,
     "oak_log": 9,
     "oak_planks": 9,
     "stick": 3,

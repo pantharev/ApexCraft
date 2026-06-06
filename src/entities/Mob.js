@@ -105,6 +105,7 @@ export class Mob {
 
     let speed = def.speed;
     const dx = player.x - this.pos.x;
+    const dy = player.y - this.pos.y; // vertical gap (feet to feet)
     const dz = player.z - this.pos.z;
     const distSq = dx * dx + dz * dz;
 
@@ -115,7 +116,9 @@ export class Mob {
       // Chase the player.
       const d = Math.sqrt(distSq) || 1;
       this.heading = { x: dx / d, z: dz / d };
-      if (d < this.hw + 1.0) {
+      // Attack only when also within reach vertically, so a mob on the ground
+      // can't hit a player perched on a pillar above it.
+      if (d < this.hw + 1.0 && Math.abs(dy) < 1.6) {
         this.heading = null; // close enough to swing
         if (this.attackCooldown === 0 && ctx.attackPlayer) {
           ctx.attackPlayer(def.attack);

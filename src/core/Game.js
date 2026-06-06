@@ -95,6 +95,8 @@ export class Game {
       }
     };
     this.vitals.onDeath = () => this._handleDeath();
+    this.onPlayerHurt = null; // React red-flash callback
+    this.vitals.onDamage = () => { if (this.onPlayerHurt) this.onPlayerHurt(); };
 
     // Survival stats restore.
     if (this._save?.vitals) this.vitals.load(this._save.vitals);

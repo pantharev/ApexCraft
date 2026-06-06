@@ -24,5 +24,5 @@
   { "id": 22, "name": "crafting_table","solid": true, "color": "#9c6b3f", "sideColor": "#7a5230", "hardness": 2.5, "preferredTool": "axe", "interactive": true, "drops": [{ "item": "crafting_table", "count": [1, 1] }] },
   { "id": 23, "name": "furnace",      "solid": true,  "color": "#5a5a5a", "hardness": 3.5, "requiresTool": "pickaxe", "minToolTier": 1, "interactive": true, "drops": [{ "item": "furnace", "count": [1, 1] }] },
   { "id": 24, "name": "glass",        "solid": true,  "color": "#bfe6ee", "transparent": true, "hardness": 0.3, "drops": [{ "item": "glass", "count": [1, 1] }] },
-  { "id": 25, "name": "torch",        "solid": true,  "color": "#f0b030", "hardness": 0, "luminance": 14, "drops": [{ "item": "torch", "count": [1, 1] }] }
+  { "id": 25, "name": "torch",        "solid": true,  "transparent": true, "color": "#f0b030", "hardness": 0, "luminance": 14, "drops": [{ "item": "torch", "count": [1, 1] }] }
 ]

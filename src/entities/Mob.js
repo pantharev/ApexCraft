@@ -33,10 +33,20 @@ export class Mob {
     this.walkPhase = 0;
     this.dead = false;
     this.removed = false;
+    this.hurtTimer = 0;     // red flash when damaged
+    this.attackTimer = 0;   // lunge when attacking
+    this._lungeDir = null;
 
     this.group = buildMobModel(type);
     this.legs = this.group.userData.legs || [];
+    this.parts = this.group.children.slice(); // part meshes (for hurt tint)
     this.group.position.copy(this.pos);
+  }
+
+  _setEmissive(hex) {
+    for (const p of this.parts) {
+      if (p.material && p.material.emissive) p.material.emissive.setHex(hex);
+    }
   }
 
   _collides(p) {
@@ -60,6 +70,8 @@ export class Mob {
   takeDamage(n, fromPos) {
     if (this.dead) return;
     this.health -= n;
+    this.hurtTimer = 0.25;
+    this._setEmissive(0xaa1010); // flash red
     if (fromPos) {
       // Knockback away from the attacker.
       const dx = this.pos.x - fromPos.x, dz = this.pos.z - fromPos.z;
@@ -108,6 +120,9 @@ export class Mob {
         if (this.attackCooldown === 0 && ctx.attackPlayer) {
           ctx.attackPlayer(def.attack);
           this.attackCooldown = 1;
+          this.attackTimer = 0.25;          // visible lunge
+          this._lungeDir = { x: dx / d, z: dz / d };
+          this.yaw = Math.atan2(dx, dz);    // face the player
         }
       }
     } else {
@@ -153,9 +168,24 @@ export class Mob {
       }
     }
 
+    // Hurt flash: clear the red tint when it expires.
+    if (this.hurtTimer > 0) {
+      this.hurtTimer -= dt;
+      if (this.hurtTimer <= 0) this._setEmissive(0x000000);
+    }
+
     // Sync model + walk animation.
     this.group.position.copy(this.pos);
     this.group.rotation.y = this.yaw;
+
+    // Attack lunge: nudge the model toward the player and back.
+    if (this.attackTimer > 0 && this._lungeDir) {
+      this.attackTimer -= dt;
+      const t = Math.sin(Math.max(0, this.attackTimer) / 0.25 * Math.PI) * 0.35;
+      this.group.position.x += this._lungeDir.x * t;
+      this.group.position.z += this._lungeDir.z * t;
+    }
+
     const moving = Math.abs(this.vel.x) + Math.abs(this.vel.z) > 0.5;
     if (moving) {
       this.walkPhase += dt * 8;

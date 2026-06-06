@@ -16,6 +16,7 @@ export class World {
     this.cache = new Map(); // LRU of unloaded chunks (insertion order = age)
     this.edits = new Map(); // chunkKey -> Map(localIndex -> blockId): player changes
     this.torches = new Set(); // "x,y,z" of placed torches (for dynamic lights)
+    this.torchVersion = 0;    // bumped when the torch set changes
 
     // Opaque chunk meshes use the shared per-tile material array (geometry
     // groups index into it); water uses its own transparent material.
@@ -84,10 +85,12 @@ export class World {
     if (!e) { e = new Map(); this.edits.set(k, e); }
     e.set(Chunk.index(lx, wy, lz), id);
 
-    // Track torches for the dynamic light pool.
+    // Track torches for the dynamic light pool + stick meshes.
     const tkey = `${wx},${wy},${wz}`;
+    const had = this.torches.has(tkey);
     if (id === TORCH) this.torches.add(tkey);
     else this.torches.delete(tkey);
+    if (this.torches.has(tkey) !== had) this.torchVersion++;
 
     // Neighbouring chunk may need remesh if we touched a boundary block.
     if (lx === 0) this.markDirty(cx - 1, cz);
@@ -133,6 +136,7 @@ export class World {
       }
       this.edits.set(k, e);
     }
+    this.torchVersion++;
   }
 
   buildMesh(chunk) {

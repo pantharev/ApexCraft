@@ -21,14 +21,18 @@ function fmtDate(ms) {
 }
 
 // Title screen: pick an existing world or create a new one.
-export function MainMenu({ worlds, onPlay, onCreate, onDelete }) {
+export function MainMenu({ worlds, onPlay, onCreate, onDelete, onHome }) {
   const [name, setName] = useState('');
 
   return (
     <div style={overlay}>
       <div style={panel}>
         <h1 style={{ fontSize: 34, letterSpacing: 2, marginBottom: 4, textAlign: 'center' }}>ApexCraft</h1>
-        <div style={{ opacity: 0.6, textAlign: 'center', marginBottom: 18 }}>Select a world</div>
+        <div style={{ opacity: 0.6, textAlign: 'center', marginBottom: 18 }}>
+          Select a world{onHome && (
+            <> · <span onClick={onHome} style={{ cursor: 'pointer', color: '#8fb6ff' }}>Home</span></>
+          )}
+        </div>
 
         <div style={{ maxHeight: 240, overflowY: 'auto', marginBottom: 16 }}>
           {worlds.length === 0 && <div style={{ opacity: 0.6, textAlign: 'center', padding: 12 }}>No worlds yet — create one below.</div>}

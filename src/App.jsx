@@ -3,6 +3,7 @@ import { Game } from './core/Game.js';
 import { reseed } from './world/noise.js';
 import { listWorlds, loadWorld, deleteWorld } from './systems/Storage.js';
 import { MainMenu, PauseMenu } from './ui/Menus.jsx';
+import { Landing } from './ui/Landing.jsx';
 import { Hotbar, InventoryPanel, CraftingTableScreen, FurnaceScreen, ChestScreen } from './ui/InventoryUI.jsx';
 import { TouchControls } from './ui/TouchControls.jsx';
 
@@ -13,7 +14,7 @@ export default function App() {
   const containerRef = useRef(null);
   const gameRef = useRef(null);
 
-  const [phase, setPhase] = useState('menu'); // 'menu' | 'playing'
+  const [phase, setPhase] = useState('landing'); // 'landing' | 'menu' | 'playing'
   const [worlds, setWorlds] = useState([]);
   const [current, setCurrent] = useState(null); // { id, name, seed, save }
 
@@ -107,8 +108,11 @@ export default function App() {
     <div style={{ position: 'relative', width: '100%', height: '100%' }}>
       <div ref={containerRef} style={{ width: '100%', height: '100%' }} />
 
+      {phase === 'landing' && <Landing onPlay={() => setPhase('menu')} />}
+
       {phase === 'menu' && (
-        <MainMenu worlds={worlds} onPlay={playExisting} onCreate={createNew} onDelete={removeWorld} />
+        <MainMenu worlds={worlds} onPlay={playExisting} onCreate={createNew} onDelete={removeWorld}
+          onHome={() => setPhase('landing')} />
       )}
 
       {phase === 'playing' && (

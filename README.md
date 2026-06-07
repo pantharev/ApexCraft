@@ -40,6 +40,12 @@ A voxel survival game in the browser — a Minecraft-style sandbox built with **
   the time of day are stored — saves stay small and reloads drop you right back
   where you left off.
 
+### Sound
+- **Fully synthesized audio** (Web Audio API, no sound files): material-aware
+  digging/footstep/place sounds (stone/wood/dirt/sand/gravel/glass/...), item
+  pickup, eating, crafting, container open, combat swings, mob hurt/death (with
+  distance falloff), player hurt/death, jump/land. Press **M** to mute.
+
 ### Performance
 - **Greedy meshing** merges coplanar block faces into large quads.
 - **Chunk streaming** around the player with an LRU cache that preserves edits on revisit.
@@ -60,6 +66,7 @@ A voxel survival game in the browser — a Minecraft-style sandbox built with **
 | **1–9 / Scroll** | Select hotbar slot |
 | **E** | Open/close inventory |
 | **F** | Toggle fly |
+| **M** | Mute / unmute sound |
 | **Esc** | Close UI / open pause menu (Resume, Save, Quit) |
 
 Pick or create a world on the title screen, then click the game to lock the mouse and play.

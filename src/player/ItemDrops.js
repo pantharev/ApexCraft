@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { isSolid } from '../blocks/BlockRegistry.js';
 import { getItem } from '../items/ItemRegistry.js';
+import { Sound } from '../systems/Sound.js';
 
 const SIZE = 0.28;
 const COLLECT_RANGE = 1.5;
@@ -86,7 +87,7 @@ export class ItemDrops {
         if (this.onCollect) {
           const leftover = this.onCollect(d.item, d.count);
           if (leftover > 0) d.count = leftover; // inventory full: keep in world
-          else this._remove(i);
+          else { Sound.pickup(); this._remove(i); }
         } else {
           this._remove(i);
         }

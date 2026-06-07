@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { Mob } from '../entities/Mob.js';
 import { MOBS, PASSIVE, HOSTILE } from '../entities/mobTypes.js';
 import { getBlockId, isSolid } from '../blocks/BlockRegistry.js';
+import { Sound } from './Sound.js';
 
 const GRASS = getBlockId('grass');
 const PASSIVE_CAP = 10;
@@ -70,6 +71,8 @@ export class MobManager {
 
       const dx = mob.pos.x - p.x, dz = mob.pos.z - p.z;
       if (mob.dead) {
+        const dist = Math.sqrt(dx * dx + dz * dz);
+        Sound.mobDeath(Math.max(0.1, 1 - dist / 30));
         for (const d of mob.def.drops) {
           const [lo, hi] = d.count;
           const c = lo + Math.floor(Math.random() * (hi - lo + 1));

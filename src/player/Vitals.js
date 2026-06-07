@@ -1,4 +1,5 @@
 import { getBlockId } from '../blocks/BlockRegistry.js';
+import { Sound } from '../systems/Sound.js';
 
 const WATER = getBlockId('water');
 
@@ -45,6 +46,7 @@ export class Vitals {
     if (this.dead || n <= 0) return;
     this.health = Math.max(0, this.health - n);
     if (this.onDamage) this.onDamage(n);
+    if (this.health > 0) Sound.hurt(); // death sound handled separately
     if (this.health === 0) {
       this.dead = true;
       if (this.onDeath) this.onDeath();

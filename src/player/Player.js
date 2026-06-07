@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { isSolid, getBlockId } from '../blocks/BlockRegistry.js';
+import { Sound, soundCategory } from '../systems/Sound.js';
 
 const WATER = getBlockId('water');
 
@@ -37,6 +38,9 @@ export class Player {
     this._peakY = this.pos.y; // highest point since last on ground (fall damage)
     this.onLand = null; // (fallDistance) => void
     this.inWater = false;
+    this._wasInWater = false;
+    this._stepT = 0; // footstep cadence accumulator
+    this._swimT = 0; // swim-stroke cadence accumulator
 
     this.keys = {};
     this.locked = false;
@@ -47,6 +51,7 @@ export class Player {
 
   _bindEvents() {
     this.dom.addEventListener('click', () => {
+      Sound.resume(); // unlock audio on a user gesture
       if (!this.enabled) return; // don't grab the mouse while a UI is open
       if (!this.locked) this.dom.requestPointerLock();
     });
@@ -134,6 +139,7 @@ export class Player {
       this.inWater = this.world.getBlock(
         Math.floor(this.pos.x), Math.floor(this.pos.y + 0.5), Math.floor(this.pos.z)
       ) === WATER;
+      if (this.inWater && !this._wasInWater) Sound.splash(); // entered water
 
       const speed = this.inWater ? SWIM_SPEED : WALK_SPEED;
       this.vel.x = dir.x * speed;
@@ -153,6 +159,7 @@ export class Player {
         if (this.enabled && this.keys['Space'] && this.onGround) {
           this.vel.y = JUMP_SPEED;
           this.onGround = false;
+          Sound.jump();
         }
       }
 
@@ -165,6 +172,7 @@ export class Player {
           if (!this.onGround && !this.inWater) {
             const fall = this._peakY - this.pos.y;
             if (fall > 0 && this.onLand) this.onLand(fall);
+            Sound.land(this._belowCategory());
           }
           this.onGround = true;
         }
@@ -173,6 +181,24 @@ export class Player {
         this.onGround = false;
       }
     }
+
+    // Footsteps while walking on the ground.
+    const movingFlat = Math.hypot(this.vel.x, this.vel.z) > 0.5;
+    if (this.onGround && !this.flying && !this.inWater && movingFlat) {
+      this._stepT += dt;
+      if (this._stepT >= 0.34) { Sound.step(this._belowCategory()); this._stepT = 0; }
+    } else {
+      this._stepT = 0.34; // so the next step plays promptly
+    }
+
+    // Gentle swim strokes while moving in water.
+    if (this.inWater && (movingFlat || (this.enabled && this.keys['Space']))) {
+      this._swimT += dt;
+      if (this._swimT >= 0.5) { Sound.swim(); this._swimT = 0; }
+    } else if (!this.inWater) {
+      this._swimT = 0.5;
+    }
+    this._wasInWater = this.inWater;
 
     // Track the apex of a fall/jump so we can measure landing distance. Water
     // cancels fall damage, so keep the apex pinned while swimming.
@@ -187,6 +213,11 @@ export class Player {
       -Math.cos(this.yaw) * Math.cos(this.pitch)
     );
     this.camera.lookAt(this.camera.position.clone().add(dirVec));
+  }
+
+  _belowCategory() {
+    const id = this.world.getBlock(Math.floor(this.pos.x), Math.floor(this.pos.y - 0.1), Math.floor(this.pos.z));
+    return soundCategory(id);
   }
 
   spawnAtSurface() {

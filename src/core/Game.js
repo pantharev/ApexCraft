@@ -11,6 +11,7 @@ import { Vitals } from '../player/Vitals.js';
 import { DayNight } from '../systems/DayNight.js';
 import { MobManager } from '../systems/MobManager.js';
 import { TorchLights } from '../systems/TorchLights.js';
+import { Sound } from '../systems/Sound.js';
 import { saveWorld } from '../systems/Storage.js';
 import { WORLD_SEED } from '../config.js';
 import { getBlockId } from '../blocks/BlockRegistry.js';
@@ -94,6 +95,7 @@ export class Game {
       if (item && item.food) {
         this.vitals.eat(item.food);
         this.inventory.consumeSelected(1);
+        Sound.eat();
       }
     };
     this.vitals.onDeath = () => this._handleDeath();
@@ -112,9 +114,11 @@ export class Game {
       const dir = new THREE.Vector3();
       this.camera.getWorldDirection(dir);
       const mob = this.mobs.raycast(this.camera.position, dir, 4);
+      Sound.swing();
       if (!mob) return false;
       const tool = this.interaction.currentTool;
       mob.takeDamage(tool && tool.attackDamage ? tool.attackDamage : 1, this.player.pos);
+      Sound.mobHurt();
       return true;
     };
 
@@ -230,6 +234,7 @@ export class Game {
     window.addEventListener('keydown', (e) => {
       if (e.code === 'KeyE') this.setScreen(this.openScreen ? null : 'inventory');
       else if (e.code === 'Escape' && this.openScreen) this.setScreen(null);
+      else if (e.code === 'KeyM') Sound.toggle();
     });
   }
 
@@ -237,6 +242,7 @@ export class Game {
     this.openScreen = screen;
     this.player.enabled = screen === null;
     if (screen) {
+      Sound.container();
       document.exitPointerLock();
     } else {
       // Re-grab the mouse; ignore rejection (browser may decline right after exit).
@@ -262,6 +268,7 @@ export class Game {
     this.openScreen = null;
     this.activeFurnace = null;
     if (this.onScreenChange) this.onScreenChange(null);
+    Sound.death();
     document.exitPointerLock();
     if (this.onDead) this.onDead(true);
   }

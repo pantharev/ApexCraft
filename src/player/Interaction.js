@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { raycastVoxel } from './Raycast.js';
 import { getBlock, isSolid } from '../blocks/BlockRegistry.js';
 import { getBlockId } from '../blocks/BlockRegistry.js';
+import { Sound, soundCategory } from '../systems/Sound.js';
 
 const REACH = 6;
 const BEDROCK = getBlockId('bedrock');
@@ -29,6 +30,7 @@ export class Interaction {
     this.breaking = false;
     this.breakProgress = 0;
     this._breakKey = null; // identity of block currently being broken
+    this._mineSfxT = 0;    // throttles the mining "hit" sound
 
     // Highlight wireframe.
     const box = new THREE.BoxGeometry(1.002, 1.002, 1.002);
@@ -94,6 +96,7 @@ export class Interaction {
     if (isSolid(this.world.getBlock(p.x, p.y, p.z))) return;
     if (this._overlapsPlayer(p.x, p.y, p.z)) return;
     this.world.setBlock(p.x, p.y, p.z, this.selectedBlock);
+    Sound.place(soundCategory(this.selectedBlock));
     if (this.onPlaced) this.onPlaced();
   }
 
@@ -101,6 +104,7 @@ export class Interaction {
   // player lacks (wrong type or too low a tier), it breaks with no drop.
   _breakBlock(block, b) {
     this.world.setBlock(b.x, b.y, b.z, 0);
+    Sound.dig(soundCategory(getBlockId(block.name)), 1); // break sound
     if (this.onBlockBroken) this.onBlockBroken(block.name, b);
 
     const drops = block.drops || [];
@@ -182,6 +186,9 @@ export class Interaction {
       this.crack.visible = true;
       this.crack.position.set(b.x + 0.5, b.y + 0.5, b.z + 0.5);
       this.crack.material.opacity = 0.15 + this.breakProgress * 0.5;
+      // Periodic "hit" sound while mining.
+      this._mineSfxT -= dt;
+      if (this._mineSfxT <= 0) { Sound.dig(soundCategory(id), 0.5); this._mineSfxT = 0.22; }
     } else {
       this.crack.visible = false;
     }

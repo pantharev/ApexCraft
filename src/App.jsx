@@ -129,6 +129,16 @@ export default function App() {
             </div>
           )}
 
+          {/* Flying indicator */}
+          {active && stats?.flying && (
+            <div style={{
+              position: 'absolute', top: 12, left: '50%', transform: 'translateX(-50%)', zIndex: 8,
+              pointerEvents: 'none', color: '#cfe6ff', background: 'rgba(30,60,110,0.55)',
+              padding: '3px 12px', borderRadius: 12, font: 'bold 12px system-ui', letterSpacing: 1,
+              textShadow: '1px 1px 1px #000', border: '1px solid rgba(150,190,255,0.5)',
+            }}>FLYING</div>
+          )}
+
           {gameRef.current?.inventory && active && (
             <Hotbar inventory={gameRef.current.inventory}
               onSelect={IS_TOUCH ? (i) => gameRef.current.inventory.setSelected(i) : undefined} />

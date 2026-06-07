@@ -38,7 +38,9 @@ export class Player {
     this._peakY = this.pos.y; // highest point since last on ground (fall damage)
     this.onLand = null; // (fallDistance) => void
     this.inWater = false;
+    this._wasInWater = false;
     this._stepT = 0; // footstep cadence accumulator
+    this._swimT = 0; // swim-stroke cadence accumulator
 
     this.keys = {};
     this.locked = false;
@@ -137,6 +139,7 @@ export class Player {
       this.inWater = this.world.getBlock(
         Math.floor(this.pos.x), Math.floor(this.pos.y + 0.5), Math.floor(this.pos.z)
       ) === WATER;
+      if (this.inWater && !this._wasInWater) Sound.splash(); // entered water
 
       const speed = this.inWater ? SWIM_SPEED : WALK_SPEED;
       this.vel.x = dir.x * speed;
@@ -187,6 +190,15 @@ export class Player {
     } else {
       this._stepT = 0.34; // so the next step plays promptly
     }
+
+    // Gentle swim strokes while moving in water.
+    if (this.inWater && (movingFlat || (this.enabled && this.keys['Space']))) {
+      this._swimT += dt;
+      if (this._swimT >= 0.5) { Sound.swim(); this._swimT = 0; }
+    } else if (!this.inWater) {
+      this._swimT = 0.5;
+    }
+    this._wasInWater = this.inWater;
 
     // Track the apex of a fall/jump so we can measure landing distance. Water
     // cancels fall damage, so keep the apex pinned while swimming.

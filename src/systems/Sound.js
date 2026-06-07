@@ -184,6 +184,12 @@ class SoundEngine {
     this.burst(900, 0.7, 'bandpass', 0.3, 0.25);
     this.burst(2400, 0.8, 'highpass', 0.15, 0.18, 0.02);
   }
+
+  // Softer, gentler stroke for ongoing swimming.
+  swim() {
+    this.burst(jit(700), 0.7, 'bandpass', 0.13, 0.18);
+    this.burst(jit(1900), 0.8, 'highpass', 0.07, 0.12, 0.02);
+  }
 }
 
 export const Sound = new SoundEngine();

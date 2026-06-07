@@ -254,6 +254,12 @@ export class Game {
     if (this.onScreenChange) this.onScreenChange(screen);
   }
 
+  // Mobile play/pause (no pointer lock). Freezes the player when paused.
+  setTouchActive(active) {
+    this.player.enabled = active;
+    if (active) Sound.resume();
+  }
+
   // On death: scatter the whole inventory as drops, freeze the player, and
   // raise the death overlay.
   _handleDeath() {

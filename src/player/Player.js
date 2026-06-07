@@ -19,6 +19,7 @@ const WATER_GRAVITY = 20; // still weaker than air, but enough to plunge in
 const WATER_DRAG = 0.91;  // gradual drag (closer to 1 = momentum carries on entry)
 const SWIM_UP = 6;        // velocity when holding Space underwater
 const SENSITIVITY = 0.0014; // radians per pixel of mouse movement
+const TOUCH_SENSITIVITY = 0.004; // radians per pixel of touch drag
 const LOOK_SMOOTH = 18; // higher = snappier; lower = floatier
 
 export class Player {
@@ -41,6 +42,7 @@ export class Player {
     this._wasInWater = false;
     this._stepT = 0; // footstep cadence accumulator
     this._swimT = 0; // swim-stroke cadence accumulator
+    this._touchMove = null; // {x, z} analog move vector from a touch joystick
 
     this.keys = {};
     this.locked = false;
@@ -120,11 +122,18 @@ export class Player {
     const right = new THREE.Vector3(Math.cos(this.yaw), 0, -Math.sin(this.yaw));
     const dir = new THREE.Vector3();
     if (this.enabled) {
-      if (this.keys['KeyW']) dir.add(forward);
-      if (this.keys['KeyS']) dir.sub(forward);
-      if (this.keys['KeyD']) dir.add(right);
-      if (this.keys['KeyA']) dir.sub(right);
-      if (dir.lengthSq() > 0) dir.normalize();
+      if (this._touchMove) {
+        // Analog joystick: keep magnitude (partial tilt = slower).
+        dir.add(forward.clone().multiplyScalar(this._touchMove.z));
+        dir.add(right.clone().multiplyScalar(this._touchMove.x));
+        if (dir.lengthSq() > 1) dir.normalize();
+      } else {
+        if (this.keys['KeyW']) dir.add(forward);
+        if (this.keys['KeyS']) dir.sub(forward);
+        if (this.keys['KeyD']) dir.add(right);
+        if (this.keys['KeyA']) dir.sub(right);
+        if (dir.lengthSq() > 0) dir.normalize();
+      }
     }
 
     if (this.flying) {
@@ -213,6 +222,18 @@ export class Player {
       -Math.cos(this.yaw) * Math.cos(this.pitch)
     );
     this.camera.lookAt(this.camera.position.clone().add(dirVec));
+  }
+
+  // Touch joystick: x = strafe (-1..1), z = forward (+1 = forward).
+  setTouchMove(x, z) {
+    this._touchMove = (Math.abs(x) > 0.02 || Math.abs(z) > 0.02) ? { x, z } : null;
+  }
+
+  // Touch drag look (pixels).
+  look(dx, dy) {
+    this.targetYaw -= dx * TOUCH_SENSITIVITY;
+    const lim = Math.PI / 2 - 0.01;
+    this.targetPitch = Math.max(-lim, Math.min(lim, this.targetPitch - dy * TOUCH_SENSITIVITY));
   }
 
   _belowCategory() {

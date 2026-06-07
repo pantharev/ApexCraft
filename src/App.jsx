@@ -4,6 +4,10 @@ import { reseed } from './world/noise.js';
 import { listWorlds, loadWorld, deleteWorld } from './systems/Storage.js';
 import { MainMenu, PauseMenu } from './ui/Menus.jsx';
 import { Hotbar, InventoryPanel, CraftingTableScreen, FurnaceScreen, ChestScreen } from './ui/InventoryUI.jsx';
+import { TouchControls } from './ui/TouchControls.jsx';
+
+const IS_TOUCH = typeof window !== 'undefined' &&
+  (window.matchMedia ? window.matchMedia('(pointer: coarse)').matches : 'ontouchstart' in window);
 
 export default function App() {
   const containerRef = useRef(null);
@@ -19,6 +23,7 @@ export default function App() {
   const [dead, setDead] = useState(false);
   const [saved, setSaved] = useState(false);
   const [hurt, setHurt] = useState(false);
+  const [touchActive, setTouchActive] = useState(false); // mobile "playing" (no pointer lock)
 
   const refreshWorlds = async () => setWorlds(await listWorlds());
   useEffect(() => { refreshWorlds(); }, []);
@@ -63,7 +68,7 @@ export default function App() {
 
   const playExisting = async (meta) => {
     const save = await loadWorld(meta.id);
-    setStats(null); setLocked(false); setOpenScreen(null); setDead(false);
+    setStats(null); setLocked(false); setOpenScreen(null); setDead(false); setTouchActive(false);
     setCurrent({ id: meta.id, name: meta.name, seed: meta.seed, save });
     setPhase('playing');
   };
@@ -71,7 +76,7 @@ export default function App() {
   const createNew = (name) => {
     const seed = Math.floor(Math.random() * 1e9);
     const id = `w_${Date.now()}_${Math.floor(Math.random() * 1000)}`;
-    setStats(null); setLocked(false); setOpenScreen(null); setDead(false);
+    setStats(null); setLocked(false); setOpenScreen(null); setDead(false); setTouchActive(false);
     setCurrent({ id, name, seed, save: null });
     setPhase('playing');
   };
@@ -83,12 +88,20 @@ export default function App() {
 
   const quitToMenu = async () => {
     await gameRef.current?.save();
+    setTouchActive(false);
     setPhase('menu');
     setCurrent(null);
     await refreshWorlds();
   };
 
-  const paused = phase === 'playing' && !locked && !openScreen && !dead;
+  const resume = () => {
+    if (IS_TOUCH) { setTouchActive(true); gameRef.current?.setTouchActive(true); }
+    else requestLock();
+  };
+
+  // "Active" = actually playing (mouse captured on desktop, or tapped-in on touch).
+  const active = phase === 'playing' && !openScreen && !dead && (IS_TOUCH ? touchActive : locked);
+  const paused = phase === 'playing' && !openScreen && !dead && !(IS_TOUCH ? touchActive : locked);
 
   return (
     <div style={{ position: 'relative', width: '100%', height: '100%' }}>
@@ -109,16 +122,47 @@ export default function App() {
           )}
 
           {/* Crosshair */}
-          {locked && !openScreen && !dead && (
+          {active && (
             <div style={{ position: 'absolute', top: '50%', left: '50%', width: 18, height: 18, transform: 'translate(-50%, -50%)', pointerEvents: 'none' }}>
               <div style={{ position: 'absolute', top: 8, left: 0, width: 18, height: 2, background: 'rgba(255,255,255,0.8)' }} />
               <div style={{ position: 'absolute', left: 8, top: 0, width: 2, height: 18, background: 'rgba(255,255,255,0.8)' }} />
             </div>
           )}
 
-          {gameRef.current?.inventory && !openScreen && !dead && <Hotbar inventory={gameRef.current.inventory} />}
-          {stats && !openScreen && !dead && (
+          {/* Flying indicator */}
+          {active && stats?.flying && (
+            <div style={{
+              position: 'absolute', top: 12, left: '50%', transform: 'translateX(-50%)', zIndex: 8,
+              pointerEvents: 'none', color: '#cfe6ff', background: 'rgba(30,60,110,0.55)',
+              padding: '3px 12px', borderRadius: 12, font: 'bold 12px system-ui', letterSpacing: 1,
+              textShadow: '1px 1px 1px #000', border: '1px solid rgba(150,190,255,0.5)',
+            }}>FLYING</div>
+          )}
+
+          {gameRef.current?.inventory && active && (
+            <Hotbar inventory={gameRef.current.inventory}
+              onSelect={IS_TOUCH ? (i) => gameRef.current.inventory.setSelected(i) : undefined} />
+          )}
+          {stats && active && (
             <StatusBars health={stats.health} hunger={stats.hunger} air={stats.air} submerged={stats.submerged} />
+          )}
+
+          {/* Touch controls */}
+          {IS_TOUCH && active && gameRef.current && (
+            <TouchControls
+              game={gameRef.current}
+              onInventory={() => gameRef.current.setScreen('inventory')}
+              onPause={() => { setTouchActive(false); gameRef.current.setTouchActive(false); }}
+            />
+          )}
+
+          {/* Close button for any open screen (works on touch + desktop) */}
+          {openScreen && (
+            <button onClick={() => gameRef.current?.setScreen(null)} style={{
+              position: 'absolute', top: 16, right: 16, zIndex: 40, cursor: 'pointer',
+              font: 'bold 14px system-ui', padding: '8px 14px', background: '#444', color: '#fff',
+              border: '2px solid #222', borderRadius: 4,
+            }}>✕ Close</button>
           )}
 
           {gameRef.current?.inventory && openScreen === 'inventory' && <InventoryPanel inventory={gameRef.current.inventory} />}
@@ -155,7 +199,7 @@ export default function App() {
             <PauseMenu
               worldName={current?.name}
               justSaved={saved}
-              onResume={requestLock}
+              onResume={resume}
               onSave={() => gameRef.current?.save()}
               onQuit={quitToMenu}
             />

@@ -43,9 +43,22 @@ export class Mob {
     this.group.position.copy(this.pos);
   }
 
-  _setEmissive(hex) {
+  _flashRed() {
     for (const p of this.parts) {
-      if (p.material && p.material.emissive) p.material.emissive.setHex(hex);
+      if (p.material && p.material.emissive) {
+        p.material.emissive.setHex(0xff3030);
+        p.material.emissiveIntensity = 1;
+      }
+    }
+  }
+
+  _clearFlash() {
+    for (const p of this.parts) {
+      const m = p.material;
+      if (m && m.emissive) {
+        m.emissive.setHex(m.userData.baseEmissive ?? 0x000000);
+        m.emissiveIntensity = 0.32;
+      }
     }
   }
 
@@ -71,7 +84,7 @@ export class Mob {
     if (this.dead) return;
     this.health -= n;
     this.hurtTimer = 0.25;
-    this._setEmissive(0xaa1010); // flash red
+    this._flashRed();
     if (fromPos) {
       // Knockback away from the attacker.
       const dx = this.pos.x - fromPos.x, dz = this.pos.z - fromPos.z;
@@ -174,7 +187,7 @@ export class Mob {
     // Hurt flash: clear the red tint when it expires.
     if (this.hurtTimer > 0) {
       this.hurtTimer -= dt;
-      if (this.hurtTimer <= 0) this._setEmissive(0x000000);
+      if (this.hurtTimer <= 0) this._clearFlash();
     }
 
     // Sync model + walk animation.

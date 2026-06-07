@@ -30,7 +30,7 @@ export function TouchControls({ game, onInventory, onPause }) {
     t0.current = Date.now();
     moved.current = 0;
     mining.current = false;
-    mineTimer.current = setTimeout(() => { mining.current = true; interaction.primaryDown(); }, HOLD_MS);
+    mineTimer.current = setTimeout(() => { mining.current = true; interaction.startMining(); }, HOLD_MS);
   };
   const onLookMove = (e) => {
     for (const t of e.changedTouches) {
@@ -47,7 +47,7 @@ export function TouchControls({ game, onInventory, onPause }) {
       if (t.identifier !== lookId.current) continue;
       clearTimeout(mineTimer.current);
       if (mining.current) interaction.primaryUp();
-      else if (Date.now() - t0.current < TAP_MS && moved.current < MOVE_PX) interaction.secondary(); // tap = place/use
+      else if (Date.now() - t0.current < TAP_MS && moved.current < MOVE_PX) interaction.attackOrPlace(); // tap = attack mob or place
       lookId.current = null;
       mining.current = false;
     }

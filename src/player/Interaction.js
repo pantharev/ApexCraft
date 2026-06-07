@@ -83,6 +83,17 @@ export class Interaction {
     this._rightClick();
   }
 
+  // Touch tap: attack a targeted mob instantly, otherwise place/use.
+  attackOrPlace() {
+    if (this.onAttack && this.onAttack()) return;
+    this._rightClick();
+  }
+
+  // Touch hold: start mining only (no mob attack — that's the tap).
+  startMining() {
+    this.breaking = true;
+  }
+
   // Right-click: use an interactive block (e.g. crafting table) if targeted,
   // otherwise place the held block.
   _rightClick() {

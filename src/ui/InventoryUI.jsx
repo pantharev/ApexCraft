@@ -128,9 +128,10 @@ const HINT = 'Left-click move/stack · Right-click split · Shift-click output t
 export function Hotbar({ inventory, onSelect }) {
   useInventoryVersion(inventory);
   return (
-    <div style={{ position: 'absolute', bottom: 16, left: '50%', transform: 'translateX(-50%)', display: 'flex', gap: 2, pointerEvents: onSelect ? 'auto' : 'none' }}>
+    <div style={{ position: 'absolute', bottom: 16, left: '50%', transform: 'translateX(-50%)', display: 'flex', gap: 2, zIndex: 8, pointerEvents: onSelect ? 'auto' : 'none' }}>
       {inventory.slots.slice(0, 9).map((stack, i) => (
-        <div key={i} onTouchStart={onSelect ? (e) => { e.stopPropagation(); onSelect(i); } : undefined}
+        <div key={i}
+          onTouchStart={onSelect ? (e) => { e.stopPropagation(); e.preventDefault(); onSelect(i); } : undefined}
           onMouseDown={onSelect ? () => onSelect(i) : undefined}>
           <Slot stack={stack} selected={i === inventory.selected} />
         </div>

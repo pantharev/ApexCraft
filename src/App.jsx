@@ -25,9 +25,19 @@ export default function App() {
   const [saved, setSaved] = useState(false);
   const [hurt, setHurt] = useState(false);
   const [touchActive, setTouchActive] = useState(false); // mobile "playing" (no pointer lock)
+  const [portrait, setPortrait] = useState(false);
 
   const refreshWorlds = async () => setWorlds(await listWorlds());
   useEffect(() => { refreshWorlds(); }, []);
+
+  // Track portrait orientation on touch devices (prompt to rotate while playing).
+  useEffect(() => {
+    if (!IS_TOUCH) return;
+    const check = () => setPortrait(window.innerHeight > window.innerWidth);
+    check();
+    window.addEventListener('resize', check);
+    return () => window.removeEventListener('resize', check);
+  }, []);
 
   // Build/tear down the Game when a world is entered/left.
   useEffect(() => {
@@ -209,6 +219,21 @@ export default function App() {
             />
           )}
         </>
+      )}
+
+      {/* Rotate-to-landscape prompt (touch, portrait, in game) */}
+      {IS_TOUCH && portrait && phase === 'playing' && (
+        <div style={{
+          position: 'absolute', inset: 0, zIndex: 100, background: '#0a1430',
+          display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
+          color: '#eaf2ff', textAlign: 'center', padding: 24, font: '16px system-ui',
+        }}>
+          <div style={{ width: 76, height: 46, border: '3px solid #cfe6ff', borderRadius: 9, marginBottom: 18, position: 'relative' }}>
+            <div style={{ position: 'absolute', right: 5, top: '50%', width: 4, height: 4, marginTop: -2, borderRadius: '50%', background: '#cfe6ff' }} />
+          </div>
+          <div style={{ fontSize: 20, fontWeight: 700, marginBottom: 8 }}>Rotate your device</div>
+          <div style={{ opacity: 0.8 }}>Turn your phone sideways (landscape) for the best view.</div>
+        </div>
       )}
     </div>
   );

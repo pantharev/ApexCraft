@@ -115,6 +115,13 @@ const DRAW = {
     c.fillStyle = '#f0b030'; c.fillRect(6, 2, 4, 5);  // flame
     c.fillStyle = '#fff2a0'; c.fillRect(7, 3, 2, 2);  // hot core
   },
+  chest_top: (c, r) => { fillNoise(c, '#9c7038', 8, r); c.strokeStyle = 'rgba(70,48,24,0.9)'; c.strokeRect(0.5, 0.5, 15, 15); c.fillStyle = '#3a2a14'; c.fillRect(7, 0, 2, 4); },
+  chest_side: (c, r) => {
+    fillNoise(c, '#8a6230', 8, r);
+    c.strokeStyle = 'rgba(70,48,24,0.9)';
+    c.strokeRect(0.5, 0.5, 15, 15); c.strokeRect(0, 5.5, 16, 0);
+    c.fillStyle = '#3a2a14'; c.fillRect(7, 5, 2, 4); // clasp
+  },
 };
 
 // Ores: stone base + a cluster of coloured specks.
@@ -138,6 +145,7 @@ const FACE_TILES = {
   crafting_table: { top: 'crafting_top', side: 'crafting_side', bottom: 'planks' },
   furnace: { top: 'furnace_side', side: 'furnace_front', bottom: 'furnace_side' },
   torch: t('torch'),
+  chest: { top: 'chest_top', side: 'chest_side', bottom: 'chest_top' },
 };
 for (const name of Object.keys(ORE_COLORS)) FACE_TILES[name] = t(name);
 

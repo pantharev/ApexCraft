@@ -81,5 +81,7 @@
   { "id": "diamond_shovel", "type": "shaped", "pattern": ["M", "S", "S"], "key": { "M": "diamond", "S": "stick" }, "result": { "item": "diamond_shovel", "count": 1 } },
 
   { "id": "torch_coal",     "type": "shaped", "pattern": ["C", "S"], "key": { "C": "coal", "S": "stick" }, "result": { "item": "torch", "count": 4 } },
-  { "id": "torch_charcoal", "type": "shaped", "pattern": ["C", "S"], "key": { "C": "charcoal", "S": "stick" }, "result": { "item": "torch", "count": 4 } }
+  { "id": "torch_charcoal", "type": "shaped", "pattern": ["C", "S"], "key": { "C": "charcoal", "S": "stick" }, "result": { "item": "torch", "count": 4 } },
+
+  { "id": "chest", "type": "shaped", "pattern": ["PPP", "P P", "PPP"], "key": { "P": "oak_planks" }, "result": { "item": "chest", "count": 1 } }
 ]

@@ -14,6 +14,7 @@ export class Vitals {
     this.player = player;
     this.world = world;
     this.onDeath = null;
+    this.onDamage = null; // called when the player takes damage
     this.reset();
   }
 
@@ -41,8 +42,9 @@ export class Vitals {
   }
 
   damage(n) {
-    if (this.dead) return;
+    if (this.dead || n <= 0) return;
     this.health = Math.max(0, this.health - n);
+    if (this.onDamage) this.onDamage(n);
     if (this.health === 0) {
       this.dead = true;
       if (this.onDeath) this.onDeath();

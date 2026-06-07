@@ -3,7 +3,7 @@ import { Game } from './core/Game.js';
 import { reseed } from './world/noise.js';
 import { listWorlds, loadWorld, deleteWorld } from './systems/Storage.js';
 import { MainMenu, PauseMenu } from './ui/Menus.jsx';
-import { Hotbar, InventoryPanel, CraftingTableScreen, FurnaceScreen } from './ui/InventoryUI.jsx';
+import { Hotbar, InventoryPanel, CraftingTableScreen, FurnaceScreen, ChestScreen } from './ui/InventoryUI.jsx';
 
 export default function App() {
   const containerRef = useRef(null);
@@ -18,6 +18,7 @@ export default function App() {
   const [openScreen, setOpenScreen] = useState(null);
   const [dead, setDead] = useState(false);
   const [saved, setSaved] = useState(false);
+  const [hurt, setHurt] = useState(false);
 
   const refreshWorlds = async () => setWorlds(await listWorlds());
   useEffect(() => { refreshWorlds(); }, []);
@@ -26,6 +27,7 @@ export default function App() {
   useEffect(() => {
     if (phase !== 'playing' || !current) return;
     let savedTimer = null;
+    let hurtTimer = null;
     reseed(current.seed);
     const save = { ...(current.save || {}), id: current.id, name: current.name, seed: current.seed };
     const game = new Game(containerRef.current, save);
@@ -35,6 +37,7 @@ export default function App() {
     game.onScreenChange = setOpenScreen;
     game.onDead = setDead;
     game.onSaved = () => { setSaved(true); clearTimeout(savedTimer); savedTimer = setTimeout(() => setSaved(false), 1500); };
+    game.onPlayerHurt = () => { setHurt(true); clearTimeout(hurtTimer); hurtTimer = setTimeout(() => setHurt(false), 250); };
     game.start();
 
     const onLock = () => setLocked(document.pointerLockElement === game.renderer.domElement);
@@ -42,6 +45,7 @@ export default function App() {
 
     return () => {
       clearTimeout(savedTimer);
+      clearTimeout(hurtTimer);
       document.removeEventListener('pointerlockchange', onLock);
       game.dispose();
       gameRef.current = null;
@@ -96,6 +100,14 @@ export default function App() {
 
       {phase === 'playing' && (
         <>
+          {/* Damage flash */}
+          {hurt && (
+            <div style={{
+              position: 'absolute', inset: 0, pointerEvents: 'none', zIndex: 18,
+              boxShadow: 'inset 0 0 120px 30px rgba(200,0,0,0.55)',
+            }} />
+          )}
+
           {/* Crosshair */}
           {locked && !openScreen && !dead && (
             <div style={{ position: 'absolute', top: '50%', left: '50%', width: 18, height: 18, transform: 'translate(-50%, -50%)', pointerEvents: 'none' }}>
@@ -113,6 +125,9 @@ export default function App() {
           {gameRef.current?.inventory && openScreen === 'crafting' && <CraftingTableScreen inventory={gameRef.current.inventory} />}
           {gameRef.current?.inventory && openScreen === 'furnace' && (
             <FurnaceScreen inventory={gameRef.current.inventory} furnace={gameRef.current.activeFurnace} />
+          )}
+          {gameRef.current?.inventory && openScreen === 'chest' && (
+            <ChestScreen inventory={gameRef.current.inventory} chest={gameRef.current.activeChest} />
           )}
 
           {saved && (

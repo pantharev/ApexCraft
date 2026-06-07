@@ -39,7 +39,12 @@ export function buildMobModel(type) {
   for (const part of def.parts) {
     const [w, h, d] = part.size;
     const geo = new THREE.BoxGeometry(w, h, d);
+    // A little self-illumination in the part's own colour so mobs stay readable
+    // in low light (e.g. zombies at night) instead of going black.
     const mat = new THREE.MeshLambertMaterial({ map: partTexture(part.color) });
+    mat.emissive = new THREE.Color(part.color);
+    mat.emissiveIntensity = 0.32;
+    mat.userData.baseEmissive = mat.emissive.getHex();
 
     if (part.leg) {
       // Pivot at the top of the leg so rotation looks like a hip joint.

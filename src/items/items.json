@@ -13,6 +13,7 @@
   { "name": "crafting_table", "display": "Crafting Table", "color": "#9c6b3f", "maxStack": 64, "placeBlock": "crafting_table" },
   { "name": "furnace",     "display": "Furnace",     "color": "#5a5a5a", "maxStack": 64, "placeBlock": "furnace" },
   { "name": "torch",       "display": "Torch",       "color": "#f0b030", "maxStack": 64, "placeBlock": "torch" },
+  { "name": "chest",       "display": "Chest",       "color": "#8a6a36", "maxStack": 64, "placeBlock": "chest" },
   { "name": "stick",       "display": "Stick",       "color": "#8a6d3b", "maxStack": 64 },
   { "name": "apple",       "display": "Apple",       "color": "#d4342a", "maxStack": 64, "food": 6 },
   { "name": "raw_porkchop","display": "Raw Porkchop","color": "#e89aa0", "maxStack": 64, "food": 3 },

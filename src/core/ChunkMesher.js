@@ -6,6 +6,7 @@ import { faceMaterialIndex, WATER_MATERIAL_INDEX } from '../textures/atlas.js';
 const SHADE = { top: 1.0, bottom: 0.5, side: 0.8 };
 const DIMS = [CHUNK_SIZE, WORLD_HEIGHT, CHUNK_SIZE];
 const WATER = getBlockId('water');
+const TORCH = getBlockId('torch'); // rendered as a separate stick mesh, not in the chunk
 
 function emptyBuf() { return { positions: [], normals: [], uvs: [], colors: [], indices: [] }; }
 
@@ -103,7 +104,7 @@ export function buildChunkGeometry(chunk, worldGet) {
           for (let i = 0; i < du; i++) {
             cell[axis] = layer; cell[u] = i; cell[v] = j;
             const id = at(cell[0], cell[1], cell[2]);
-            if (id === 0) continue;
+            if (id === 0 || id === TORCH) continue; // torches drawn separately
             const nb = [cell[0], cell[1], cell[2]]; nb[axis] += dir;
             const neighbor = at(nb[0], nb[1], nb[2]);
             const block = getBlock(id);

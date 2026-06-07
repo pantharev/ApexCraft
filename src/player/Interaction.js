@@ -55,21 +55,32 @@ export class Interaction {
   _bind() {
     this.dom.addEventListener('mousedown', (e) => {
       if (document.pointerLockElement !== this.dom) return;
-      if (e.button === 0) {
-        // A mob in front takes priority over mining.
-        if (this.onAttack && this.onAttack()) return;
-        this.breaking = true;
-      } else if (e.button === 2) this._rightClick();
+      if (e.button === 0) this.primaryDown();
+      else if (e.button === 2) this.secondary();
     });
     window.addEventListener('mouseup', (e) => {
-      if (e.button === 0) {
-        this.breaking = false;
-        this.breakProgress = 0;
-        this._breakKey = null;
-      }
+      if (e.button === 0) this.primaryUp();
     });
     // Suppress the context menu so right-click can place.
     this.dom.addEventListener('contextmenu', (e) => e.preventDefault());
+  }
+
+  // Primary action (left mouse / mine button): attack a targeted mob, else
+  // start breaking. Shared by mouse and touch input.
+  primaryDown() {
+    if (this.onAttack && this.onAttack()) return;
+    this.breaking = true;
+  }
+
+  primaryUp() {
+    this.breaking = false;
+    this.breakProgress = 0;
+    this._breakKey = null;
+  }
+
+  // Secondary action (right mouse / place button): use block or place.
+  secondary() {
+    this._rightClick();
   }
 
   // Right-click: use an interactive block (e.g. crafting table) if targeted,

@@ -71,6 +71,8 @@ A voxel survival game in the browser — a Minecraft-style sandbox built with **
 
 Pick or create a world on the title screen, then click the game to lock the mouse and play.
 
+**On touch devices** the game shows on-screen controls: a left **joystick** to move, **drag** anywhere to look, and buttons for **Mine** (hold), **Place**, **Jump**, **Down**, **Fly**, **Bag** (inventory), and **☰** (pause). Tap a hotbar slot to select it.
+
 ---
 
 ## Getting started

@@ -124,13 +124,16 @@ const Panel = ({ title, children, onMouseMove }) => (
 
 const HINT = 'Left-click move/stack · Right-click split · Shift-click output to craft all · E / Esc to close';
 
-// Always-visible read-only hotbar (slots 0-8).
-export function Hotbar({ inventory }) {
+// Always-visible hotbar (slots 0-8). `onSelect` makes slots tappable (touch).
+export function Hotbar({ inventory, onSelect }) {
   useInventoryVersion(inventory);
   return (
-    <div style={{ position: 'absolute', bottom: 16, left: '50%', transform: 'translateX(-50%)', display: 'flex', gap: 2, pointerEvents: 'none' }}>
+    <div style={{ position: 'absolute', bottom: 16, left: '50%', transform: 'translateX(-50%)', display: 'flex', gap: 2, pointerEvents: onSelect ? 'auto' : 'none' }}>
       {inventory.slots.slice(0, 9).map((stack, i) => (
-        <Slot key={i} stack={stack} selected={i === inventory.selected} />
+        <div key={i} onTouchStart={onSelect ? (e) => { e.stopPropagation(); onSelect(i); } : undefined}
+          onMouseDown={onSelect ? () => onSelect(i) : undefined}>
+          <Slot stack={stack} selected={i === inventory.selected} />
+        </div>
       ))}
     </div>
   );

@@ -67,7 +67,7 @@ export class MobManager {
 
     const p = ctx.playerPos;
     for (const mob of this.mobs) {
-      mob.update(dt, { world: this.world, playerPos: p, isNight: ctx.isNight, attackPlayer: ctx.attackPlayer });
+      mob.update(dt, { world: this.world, playerPos: p, isNight: ctx.isNight, attackPlayer: ctx.attackPlayer, shoot: ctx.shoot });
 
       const dx = mob.pos.x - p.x, dz = mob.pos.z - p.z;
       if (mob.dead) {

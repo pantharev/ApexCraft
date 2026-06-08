@@ -15,6 +15,7 @@ export class DayNight {
     this.camera = camera;
     this.cycle = cycleSeconds;
     this.t = startT;
+    this.frozen = false; // dev: hold time of day
     this._sky = new THREE.Color();
 
     // Visible celestial bodies (unlit + fog-disabled so they stay bright).
@@ -46,7 +47,7 @@ export class DayNight {
   }
 
   update(dt) {
-    this.t = (this.t + dt / this.cycle) % 1;
+    if (!this.frozen) this.t = (this.t + dt / this.cycle) % 1;
     const angle = this.t * Math.PI * 2;
     const sunFrac = Math.sin(angle); // -1..1, 1 at noon
     const day = Math.max(0, sunFrac); // 0 at/below horizon, 1 at noon

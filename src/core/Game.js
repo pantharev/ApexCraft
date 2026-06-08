@@ -45,6 +45,8 @@ export class Game {
     this.worldId = save?.id || 'default';
     this.worldName = save?.name || 'World';
     this.seed = save?.seed ?? WORLD_SEED;
+    this.dev = typeof location !== 'undefined' && ['localhost', '127.0.0.1'].includes(location.hostname);
+    this._devTime = 0; // 0 = auto, 1 = day, 2 = night
 
     this.renderer = new THREE.WebGLRenderer({ antialias: true });
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
@@ -114,6 +116,19 @@ export class Game {
     this.mobs = new MobManager(this.world, this.scene, this.itemDrops);
     this.torchLights = new TorchLights(this.scene, this.world);
     this.projectiles = new Projectiles(this.world, this.scene);
+
+    // Dev-only (localhost): press T to cycle day -> night -> auto.
+    if (this.dev) {
+      window.addEventListener('keydown', (e) => {
+        if (e.code !== 'KeyT') return;
+        this._devTime = (this._devTime + 1) % 3;
+        if (this._devTime === 1) { this.dayNight.t = 0.25; this.dayNight.frozen = true; }
+        else if (this._devTime === 2) { this.dayNight.t = 0.78; this.dayNight.frozen = true; }
+        else { this.dayNight.frozen = false; }
+        this.dayNight.update(0);
+      });
+    }
+
     this.interaction.onAttack = () => {
       // Holding a bow fires an arrow instead of meleeing.
       const stack = this.inventory.selectedStack();
@@ -423,6 +438,8 @@ export class Game {
         clock: this.dayNight.clock(),
         night: this.dayNight.isNight,
         mobs: this.mobs.mobs.length,
+        dev: this.dev,
+        devTime: ['Auto', 'Day', 'Night'][this._devTime],
       });
     }
 

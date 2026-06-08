@@ -41,12 +41,16 @@ function columnHeight(worldX, worldZ) {
     h += mtn * (0.35 + 0.65 * ridge) * 34;
   }
 
-  // Rivers: carve winding channels down to just below sea level, on land only.
-  if (h > SEA_LEVEL) {
-    const river = Math.abs(Noise.river(worldX, worldZ));
-    if (river < 0.045) {
-      const depth = (0.045 - river) / 0.045;
-      h = Math.max(SEA_LEVEL - 2, h - (2 + depth * 5));
+  // Rivers: carve wide winding channels with a bed a few blocks below sea level
+  // so water actually fills them, with banks that blend back into the terrain.
+  if (h > SEA_LEVEL - 1) {
+    const RIVER_W = 0.09; // band half-width (bigger = wider river)
+    const rv = Math.abs(Noise.river(worldX, worldZ));
+    if (rv < RIVER_W) {
+      const t = rv / RIVER_W;       // 0 at the centre line, 1 at the bank
+      const carve = 1 - t * t;      // smooth, deepest at the centre
+      const bed = SEA_LEVEL - 3;    // riverbed below sea level -> holds ~3 of water
+      h -= carve * Math.max(0, h - bed);
     }
   }
 

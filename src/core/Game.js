@@ -11,6 +11,7 @@ import { Vitals } from '../player/Vitals.js';
 import { DayNight } from '../systems/DayNight.js';
 import { MobManager } from '../systems/MobManager.js';
 import { TorchLights } from '../systems/TorchLights.js';
+import { Projectiles } from '../systems/Projectiles.js';
 import { Sound } from '../systems/Sound.js';
 import { saveWorld } from '../systems/Storage.js';
 import { WORLD_SEED } from '../config.js';
@@ -31,6 +32,8 @@ const STARTER_KIT = [
   ['torch', 16],
   ['stone_sword', 1],
   ['chest', 2],
+  ['bow', 1],
+  ['arrow', 32],
 ];
 
 // Owns the Three.js renderer/scene/camera, the World, and the Player, plus the
@@ -42,6 +45,8 @@ export class Game {
     this.worldId = save?.id || 'default';
     this.worldName = save?.name || 'World';
     this.seed = save?.seed ?? WORLD_SEED;
+    this.dev = typeof location !== 'undefined' && ['localhost', '127.0.0.1'].includes(location.hostname);
+    this._devTime = 0; // 0 = auto, 1 = day, 2 = night
 
     this.renderer = new THREE.WebGLRenderer({ antialias: true });
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
@@ -110,7 +115,25 @@ export class Game {
     if (this._save?.time != null) { this.dayNight.t = this._save.time; this.dayNight.update(0); }
     this.mobs = new MobManager(this.world, this.scene, this.itemDrops);
     this.torchLights = new TorchLights(this.scene, this.world);
+    this.projectiles = new Projectiles(this.world, this.scene);
+
+    // Dev-only (localhost): press T to cycle day -> night -> auto.
+    if (this.dev) {
+      window.addEventListener('keydown', (e) => {
+        if (e.code !== 'KeyT') return;
+        this._devTime = (this._devTime + 1) % 3;
+        if (this._devTime === 1) { this.dayNight.t = 0.25; this.dayNight.frozen = true; }
+        else if (this._devTime === 2) { this.dayNight.t = 0.78; this.dayNight.frozen = true; }
+        else { this.dayNight.frozen = false; }
+        this.dayNight.update(0);
+      });
+    }
+
     this.interaction.onAttack = () => {
+      // Holding a bow fires an arrow instead of meleeing.
+      const stack = this.inventory.selectedStack();
+      if (stack && stack.item === 'bow') { this._shootBow(); return true; }
+
       const dir = new THREE.Vector3();
       this.camera.getWorldDirection(dir);
       const mob = this.mobs.raycast(this.camera.position, dir, 4);
@@ -312,6 +335,18 @@ export class Game {
     return ok;
   }
 
+  // Fire an arrow from the camera if the player has ammo.
+  _shootBow() {
+    if (this.inventory.count('arrow') <= 0) return;
+    this.inventory.removeItems('arrow', 1);
+    this.inventory.notify();
+    const dir = new THREE.Vector3();
+    this.camera.getWorldDirection(dir);
+    const o = this.camera.position;
+    this.projectiles.spawn(o.x, o.y, o.z, dir, 30, 5, 'mob');
+    Sound.shoot();
+  }
+
   respawn() {
     this.vitals.reset();
     this.player.spawnAtSurface();
@@ -366,6 +401,15 @@ export class Game {
       playerPos: this.player.pos,
       isNight: this.dayNight.isNight,
       attackPlayer: (dmg) => this.vitals.damage(dmg),
+      shoot: (sx, sy, sz, dx, dy, dz, dmg) => {
+        this.projectiles.spawn(sx, sy, sz, new THREE.Vector3(dx, dy, dz), 22, dmg, 'player');
+        Sound.shoot();
+      },
+    });
+    this.projectiles.update(dt, {
+      playerPos: this.player.pos,
+      hitPlayer: (dmg) => this.vitals.damage(dmg),
+      mobs: this.mobs,
     });
     this.world.update(this.player.pos.x, this.player.pos.z, 3);
     this._animateHeld(dt);
@@ -394,6 +438,8 @@ export class Game {
         clock: this.dayNight.clock(),
         night: this.dayNight.isNight,
         mobs: this.mobs.mobs.length,
+        dev: this.dev,
+        devTime: ['Auto', 'Day', 'Night'][this._devTime],
       });
     }
 

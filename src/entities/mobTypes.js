@@ -61,8 +61,8 @@ export const MOBS = {
     ],
   },
   skeleton: {
-    category: 'hostile', health: 20, speed: 1.6, attack: 2, detect: 18, burns: true, hw: 0.4, h: 1.8,
-    drops: [{ item: 'bone', count: [0, 2] }, { item: 'arrow', count: [0, 2] }],
+    category: 'hostile', health: 20, speed: 1.4, attack: 3, detect: 20, burns: true, ranged: true, hw: 0.4, h: 1.8,
+    drops: [{ item: 'bone', count: [0, 2] }, { item: 'arrow', count: [1, 3] }],
     parts: [
       leg(-0.12, 0, 0.16, 0.75, 0.16, '#d8d8d8'), leg(0.12, 0, 0.16, 0.75, 0.16, '#d8d8d8'),
       { size: [0.4, 0.7, 0.22], pos: [0, 1.1, 0], color: '#d0d0d0' },

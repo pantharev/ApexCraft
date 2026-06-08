@@ -30,6 +30,7 @@
   { "name": "bone",        "display": "Bone",        "color": "#e8e4d0", "maxStack": 64 },
   { "name": "string",      "display": "String",      "color": "#dcdcdc", "maxStack": 64 },
   { "name": "arrow",       "display": "Arrow",       "color": "#9a8a6a", "maxStack": 64 },
+  { "name": "bow",         "display": "Bow",         "color": "#8a6a36", "maxStack": 1 },
   { "name": "wool",        "display": "Wool",        "color": "#eeeeee", "maxStack": 64 },
 
   { "name": "coal",        "display": "Coal",        "color": "#2b2b2b", "maxStack": 64 },

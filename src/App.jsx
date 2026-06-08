@@ -198,6 +198,7 @@ export default function App() {
               <div>XYZ: {stats.x} / {stats.y} / {stats.z}</div>
               <div>Time: {stats.clock} ({stats.night ? 'Night' : 'Day'}) &nbsp; Mobs: {stats.mobs}</div>
               <div>Holding: {stats.held}</div>
+              {stats.dev && <div style={{ color: '#9fe084' }}>[T] day/night: {stats.devTime}</div>}
             </div>
           )}
 

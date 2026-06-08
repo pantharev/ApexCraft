@@ -83,5 +83,8 @@
   { "id": "torch_coal",     "type": "shaped", "pattern": ["C", "S"], "key": { "C": "coal", "S": "stick" }, "result": { "item": "torch", "count": 4 } },
   { "id": "torch_charcoal", "type": "shaped", "pattern": ["C", "S"], "key": { "C": "charcoal", "S": "stick" }, "result": { "item": "torch", "count": 4 } },
 
-  { "id": "chest", "type": "shaped", "pattern": ["PPP", "P P", "PPP"], "key": { "P": "oak_planks" }, "result": { "item": "chest", "count": 1 } }
+  { "id": "chest", "type": "shaped", "pattern": ["PPP", "P P", "PPP"], "key": { "P": "oak_planks" }, "result": { "item": "chest", "count": 1 } },
+
+  { "id": "bow", "type": "shaped", "pattern": [" SX", "S X", " SX"], "key": { "S": "stick", "X": "string" }, "result": { "item": "bow", "count": 1 } },
+  { "id": "arrow", "type": "shaped", "pattern": ["I", "S", "F"], "key": { "I": "iron_ingot", "S": "stick", "F": "feather" }, "result": { "item": "arrow", "count": 4 } }
 ]

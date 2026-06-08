@@ -54,6 +54,20 @@ function drawShovel(ctx, color) {
   ctx.fillStyle = 'rgba(255,255,255,0.3)'; ctx.fillRect(2, 2, 5, 1);
 }
 
+function drawBow(ctx) {
+  ctx.strokeStyle = '#8a6a36'; ctx.lineWidth = 2;
+  ctx.beginPath(); ctx.arc(5, 8, 7, -1.0, 1.0); ctx.stroke(); // wooden arc
+  ctx.strokeStyle = '#eeeeee'; ctx.lineWidth = 1;
+  ctx.beginPath(); ctx.moveTo(9, 2); ctx.lineTo(9, 14); ctx.stroke(); // string
+}
+
+function drawArrow(ctx) {
+  ctx.strokeStyle = '#8a7a5a'; ctx.lineWidth = 1;
+  ctx.beginPath(); ctx.moveTo(3, 13); ctx.lineTo(12, 4); ctx.stroke(); // shaft
+  ctx.fillStyle = '#d8d8d8'; ctx.fillRect(11, 2, 3, 3);                // head
+  ctx.fillStyle = '#dddddd'; ctx.fillRect(2, 11, 3, 1); ctx.fillRect(2, 12, 1, 2); // fletching
+}
+
 function drawFood(ctx, color) {
   ctx.fillStyle = color;
   ctx.beginPath(); ctx.arc(8, 9, 5.2, 0, Math.PI * 2); ctx.fill();
@@ -73,7 +87,9 @@ function drawItem(def) {
   const c = newCanvas();
   const ctx = c.getContext('2d');
   const color = def?.color || '#cccccc';
-  if (def?.toolType === 'sword') drawSword(ctx, color);
+  if (def?.name === 'bow') drawBow(ctx);
+  else if (def?.name === 'arrow') drawArrow(ctx);
+  else if (def?.toolType === 'sword') drawSword(ctx, color);
   else if (def?.toolType === 'axe') drawAxe(ctx, color);
   else if (def?.toolType === 'shovel') drawShovel(ctx, color);
   else if (def?.toolType) drawPickaxe(ctx, color);

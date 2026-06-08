@@ -21,7 +21,8 @@ A voxel survival game in the browser — a Minecraft-style sandbox built with **
 - **Swimming** — buoyant water physics: plunge in, sink slowly, hold jump to swim up. Water cancels fall damage.
 - **Mobs**
   - *Passive* (day): pig, cow, sheep, chicken — wander and flee when hit.
-  - *Hostile* (night): zombie, skeleton, spider — chase and melee you. Spiders **climb walls**; zombies and skeletons **burn in daylight**.
+  - *Hostile* (night): zombie & spider chase and melee (spiders **climb walls**); **skeletons keep their distance and shoot arrows** at you. Zombies and skeletons **burn in daylight**.
+  - Craft a **bow** + arrows for your own ranged attacks.
   - Mobs drop loot (meats, leather, bone, string, feather, wool, …). Cook meat in a furnace for more nourishment.
 
 ### Building & items

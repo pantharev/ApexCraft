@@ -160,6 +160,13 @@ class SoundEngine {
 
   swing() { this.burst(1900, 0.6, 'highpass', 0.12, 0.1); }
 
+  shoot() { // bow twang
+    this.tone(420, 0.14, 'triangle', 0.18, 150);
+    this.burst(1400, 0.7, 'highpass', 0.08, 0.08);
+  }
+
+  arrowHit() { this.burst(1600, 1, 'bandpass', 0.12, 0.06); }
+
   hurt() {
     this.tone(260, 0.18, 'sawtooth', 0.28, 120);
     this.burst(400, 1, 'lowpass', 0.18, 0.12);

@@ -126,19 +126,34 @@ export class Mob {
       this.fleeTimer -= dt;
       speed *= 1.6;
     } else if (def.category === 'hostile' && distSq < def.detect * def.detect) {
-      // Chase the player.
       const d = Math.sqrt(distSq) || 1;
-      this.heading = { x: dx / d, z: dz / d };
-      // Attack only when also within reach vertically, so a mob on the ground
-      // can't hit a player perched on a pillar above it.
-      if (d < this.hw + 1.0 && Math.abs(dy) < 1.6) {
-        this.heading = null; // close enough to swing
-        if (this.attackCooldown === 0 && ctx.attackPlayer) {
-          ctx.attackPlayer(def.attack);
-          this.attackCooldown = 1;
-          this.attackTimer = 0.25;          // visible lunge
-          this._lungeDir = { x: dx / d, z: dz / d };
-          this.yaw = Math.atan2(dx, dz);    // face the player
+
+      if (def.ranged) {
+        // Archer: keep mid-range and fire arrows.
+        if (d < 5) this.heading = { x: -dx / d, z: -dz / d };       // too close, back off
+        else if (d > 11) this.heading = { x: dx / d, z: dz / d };   // far, close in
+        else this.heading = null;                                  // good range, hold
+        this.yaw = Math.atan2(dx, dz);
+        if (this.attackCooldown === 0 && ctx.shoot) {
+          const sx = this.pos.x, sy = this.pos.y + 1.4, sz = this.pos.z;
+          let ax = player.x - sx, ay = (player.y + 1.0) - sy, az = player.z - sz;
+          const al = Math.hypot(ax, ay, az) || 1;
+          ctx.shoot(sx, sy, sz, ax / al, ay / al, az / al, def.attack);
+          this.attackCooldown = 2;
+        }
+      } else {
+        // Melee: chase, attack when within reach (and vertically close so a mob
+        // on the ground can't hit a player perched on a pillar above).
+        this.heading = { x: dx / d, z: dz / d };
+        if (d < this.hw + 1.0 && Math.abs(dy) < 1.6) {
+          this.heading = null;
+          if (this.attackCooldown === 0 && ctx.attackPlayer) {
+            ctx.attackPlayer(def.attack);
+            this.attackCooldown = 1;
+            this.attackTimer = 0.25;          // visible lunge
+            this._lungeDir = { x: dx / d, z: dz / d };
+            this.yaw = Math.atan2(dx, dz);    // face the player
+          }
         }
       }
     } else {

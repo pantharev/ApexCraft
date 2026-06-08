@@ -6,6 +6,38 @@ A voxel survival game in the browser — a Minecraft-style sandbox built with **
 
 ---
 
+## 📜 Licensing & Commercial Use
+
+ApexCraft uses a **dual-licensing / open-core model**:
+
+### 1. The open-source core (this repository)
+All code in this repository is licensed under the **[MIT License](LICENSE)**.
+- **For developers:** you are free to fork, modify, extend, and use it in your
+  own projects — **including commercial, closed-source games**.
+- **The rule:** include the original copyright notice and a copy of the MIT
+  License in any distribution or derivative work.
+
+### 2. The premium version (proprietary)
+We develop and may sell a premium/official build of ApexCraft (e.g. hosted
+multiplayer, advanced graphics, exclusive content).
+- Those premium extensions are **closed-source** and governed by a proprietary
+  **[EULA](EULA.md)**.
+- Forking this repository does **not** grant any rights to the proprietary
+  premium code, commercial assets, or the ApexCraft name/branding.
+
+### 3. Contributing to the core
+Community contributions are welcome! Because the same core powers the premium
+build, contributors agree to our **[Contributor License Agreement (CLA)](CLA.md)**
+when opening a pull request.
+- By contributing, you grant us the right to include your improvements in
+  **both** the open-source repository **and** commercial versions. You retain
+  the copyright to your original work.
+
+See [LICENSE](LICENSE), [CLA.md](CLA.md), and [EULA.md](EULA.md) for full
+details. *(The CLA and EULA are templates pending legal review.)*
+
+---
+
 ## Features
 
 ### World
@@ -126,10 +158,7 @@ labels. Be sure to read the [Code of Conduct](CODE_OF_CONDUCT.md).
 
 ## License
 
-ApexCraft's source is released under the **[MIT License](LICENSE)**.
-Contributions are accepted under the [Contributor License Agreement](CLA.md).
-A separate [EULA](EULA.md) applies to any future official/hosted build (the
-MIT-licensed source is unaffected by it).
+MIT for the open-source core — see **[Licensing & Commercial Use](#-licensing--commercial-use)** above, and [LICENSE](LICENSE) / [CLA.md](CLA.md) / [EULA.md](EULA.md).
 
 ## Roadmap
 

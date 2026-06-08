@@ -1,7 +1,7 @@
 import { CHUNK_SIZE, WORLD_HEIGHT, SEA_LEVEL } from '../../config.js';
 import { Chunk } from '../../core/Chunk.js';
 import { Noise } from '../noise.js';
-import { getBiome, Biome, BiomeParams } from '../biomes/BiomeMap.js';
+import { getBiome, BiomeParams } from '../biomes/BiomeMap.js';
 import { getBlockId } from '../../blocks/BlockRegistry.js';
 import { carveCaves } from './CaveGen.js';
 import { generateOres } from './OreGen.js';
@@ -16,30 +16,41 @@ const WATER = getBlockId('water');
 const BEDROCK = getBlockId('bedrock');
 const ANDESITE = getBlockId('andesite');
 
-// Final surface height for a column, combining the biome shape with a low
-// frequency continental field (ocean basins vs highlands) and river carving.
-function columnHeight(worldX, worldZ, biome) {
-  const p = BiomeParams[biome];
-  let n = (Noise.terrain(worldX, worldZ) + 1) / 2; // 0..1
-  n = Math.pow(n, p.exponent);
-  let h = p.base + n * p.amp;
+const smoothstep = (a, b, x) => {
+  const t = Math.max(0, Math.min(1, (x - a) / (b - a)));
+  return t * t * (3 - 2 * t);
+};
 
-  // Continental shaping: large negative regions sink below sea level (oceans),
-  // positive regions rise into highlands.
-  h += Noise.continent(worldX, worldZ) * 22;
+// A continuous heightfield — deliberately NOT keyed to the discrete biome, so
+// there are no cliffs at biome borders (which made mountains look like walls).
+//   • continental field  -> ocean basins vs. land
+//   • gentle fBm          -> rolling hills everywhere
+//   • smooth mountain mask (colder regions) × ridged noise -> rounded highlands
+//     that fade in/out gradually rather than jumping up at a seam
+function columnHeight(worldX, worldZ) {
+  const cont = Noise.continent(worldX, worldZ);   // -1..1, very low frequency
+  let h = SEA_LEVEL + 6 + cont * 20;              // oceans <-> highlands (land-biased)
 
-  // Rivers: where the river field is near zero, carve a winding channel down to
-  // just below sea level — but only on land (leave the open ocean alone).
+  h += Noise.terrain(worldX, worldZ) * 8;         // rolling hills
+
+  // Mountains rise in cold regions and taper off smoothly at the edges; ridged
+  // noise gives ridgelines instead of flat walls.
+  const mtn = smoothstep(-0.15, -0.55, Noise.temperature(worldX, worldZ));
+  if (mtn > 0) {
+    const ridge = 1 - Math.abs(Noise.detail(worldX, worldZ, 0.013)); // 0..1
+    h += mtn * (0.35 + 0.65 * ridge) * 34;
+  }
+
+  // Rivers: carve winding channels down to just below sea level, on land only.
   if (h > SEA_LEVEL) {
     const river = Math.abs(Noise.river(worldX, worldZ));
     if (river < 0.045) {
-      const depth = (0.045 - river) / 0.045; // 1 at the centre line
+      const depth = (0.045 - river) / 0.045;
       h = Math.max(SEA_LEVEL - 2, h - (2 + depth * 5));
     }
   }
 
-  h = Math.max(2, Math.min(WORLD_HEIGHT - 6, h));
-  return Math.floor(h);
+  return Math.max(2, Math.min(WORLD_HEIGHT - 6, Math.floor(h)));
 }
 
 export function generateChunk(chunk) {
@@ -51,7 +62,7 @@ export function generateChunk(chunk) {
       const wx = baseX + x;
       const wz = baseZ + z;
       const biome = getBiome(wx, wz);
-      const height = columnHeight(wx, wz, biome);
+      const height = columnHeight(wx, wz);
 
       const submerged = height < SEA_LEVEL;   // ocean / lake / river bed
       const beach = height <= SEA_LEVEL + 1;  // shoreline sand band
@@ -66,9 +77,10 @@ export function generateChunk(chunk) {
         } else if (y < height) {
           id = sandy ? SAND : DIRT; // sub-surface
         } else if (y === height) {
-          // Surface block: sand underwater/at shorelines, snow on high peaks.
+          // Surface block: sand at shorelines, snowcaps on high peaks (by
+          // altitude, not biome), otherwise the biome's surface.
           if (sandy) id = SAND;
-          else if (biome === Biome.MOUNTAINS && y > 90) id = SNOW;
+          else if (y > 98) id = SNOW;
           else id = getBlockId(BiomeParams[biome].surface);
         }
         // Fill water from the bed up to sea level (oceans, lakes, rivers).

@@ -29,9 +29,11 @@ function useInventoryVersion(inventory) {
 const itemColor = (name) => getItem(name)?.color || '#fff';
 const itemDisplay = (name) => getItem(name)?.display || name;
 
-function Slot({ stack, selected, onLeft, onRight, onEnter, onLeave }) {
+function Slot({ stack, selected, onLeft, onRight, onEnter, onLeave, slotKey, onTouchStart }) {
   return (
     <div
+      data-slotkey={slotKey}
+      onTouchStart={onTouchStart}
       onMouseDown={(e) => {
         e.preventDefault();
         if (e.button === 0) onLeft && onLeft(e.shiftKey);
@@ -42,7 +44,7 @@ function Slot({ stack, selected, onLeft, onRight, onEnter, onLeave }) {
       style={{
         width: SLOT, height: SLOT, boxSizing: 'border-box',
         border: selected ? '2px solid #fff' : '2px solid #555',
-        background: '#8b8b8b', position: 'relative', cursor: 'pointer',
+        background: '#8b8b8b', position: 'relative', cursor: 'pointer', touchAction: 'none',
       }}
     >
       {stack && (
@@ -61,27 +63,57 @@ function Slot({ stack, selected, onLeft, onRight, onEnter, onLeave }) {
 }
 
 // The player's 27-slot main grid + 9-slot hotbar row, shared by every screen.
-function InventoryGrids({ inventory, onLeft, onRight, setHover }) {
+// `touch` (optional) provides onStart(key) for touch drag-and-drop.
+function InventoryGrids({ inventory, onLeft, onRight, setHover, touch }) {
   const main = [];
   for (let i = 9; i < 36; i++) main.push(i);
   return (
     <>
       <div style={{ display: 'grid', gridTemplateColumns: `repeat(9, ${SLOT}px)`, gap: 2 }}>
         {main.map((i) => (
-          <Slot key={i} stack={inventory.slots[i]}
+          <Slot key={i} stack={inventory.slots[i]} slotKey={`s${i}`}
+            onTouchStart={touch && touch.onStart(`s${i}`)}
             onLeft={() => onLeft(i)} onRight={() => onRight(i)}
             onEnter={setHover} onLeave={() => setHover(null)} />
         ))}
       </div>
       <div style={{ display: 'flex', gap: 2, marginTop: 12 }}>
         {inventory.slots.slice(0, 9).map((stack, i) => (
-          <Slot key={i} stack={stack} selected={i === inventory.selected}
+          <Slot key={i} stack={stack} selected={i === inventory.selected} slotKey={`s${i}`}
+            onTouchStart={touch && touch.onStart(`s${i}`)}
             onLeft={() => onLeft(i)} onRight={() => onRight(i)}
             onEnter={setHover} onLeave={() => setHover(null)} />
         ))}
       </div>
     </>
   );
+}
+
+// Touch drag-and-drop for slots: tap/drag a slot to pick up, drag to another
+// and release to drop. `leftByKey(key)` performs the slot's left-click action;
+// keys are read from each slot's data-slotkey.
+function useSlotDrag(leftByKey, setMouse) {
+  const startKey = useRef(null);
+  const onStart = (key) => (e) => {
+    e.stopPropagation();
+    e.preventDefault(); // suppress the emulated mouse events
+    const t = e.touches[0];
+    if (t) setMouse({ x: t.clientX, y: t.clientY });
+    startKey.current = key;
+    leftByKey(key); // pick up (or place/swap if already holding)
+  };
+  const onMove = (e) => { const t = e.touches[0]; if (t) setMouse({ x: t.clientX, y: t.clientY }); };
+  const onEnd = (e) => {
+    const t = e.changedTouches[0];
+    if (!t) return;
+    setMouse({ x: t.clientX, y: t.clientY });
+    const el = document.elementFromPoint(t.clientX, t.clientY);
+    const holder = el && el.closest && el.closest('[data-slotkey]');
+    const key = holder && holder.dataset.slotkey;
+    if (key && key !== startKey.current) leftByKey(key); // dropped on a different slot
+    startKey.current = null;
+  };
+  return { onStart, onMove, onEnd };
 }
 
 // Floating tooltip + the cursor-held stack that follows the mouse.
@@ -110,10 +142,11 @@ function CursorLayer({ cursor, mouse, hover }) {
   );
 }
 
-const Panel = ({ title, children, onMouseMove }) => (
-  <div onMouseMove={onMouseMove} onContextMenu={(e) => e.preventDefault()} style={{
+const Panel = ({ title, children, onMouseMove, onTouchMove, onTouchEnd }) => (
+  <div onMouseMove={onMouseMove} onTouchMove={onTouchMove} onTouchEnd={onTouchEnd}
+    onContextMenu={(e) => e.preventDefault()} style={{
     position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center',
-    background: 'rgba(0,0,0,0.55)', zIndex: 10,
+    background: 'rgba(0,0,0,0.55)', zIndex: 10, touchAction: 'none',
   }}>
     <div style={{ background: '#c6c6c6', border: '4px solid #373737', borderRadius: 6, padding: 14, boxShadow: '0 8px 30px rgba(0,0,0,0.5)' }}>
       <div style={{ font: 'bold 16px system-ui', color: '#333', marginBottom: 10 }}>{title}</div>
@@ -188,21 +221,34 @@ function CraftingScreen({ inventory, gridSize, title }) {
     setGrid(consumeOnce(grid));
   };
 
+  // Touch drag routing by slot key.
+  const leftByKey = (key) => {
+    if (key === 'out') takeOutput(false);
+    else if (key[0] === 'c') cellLeft(+key.slice(1));
+    else invLeft(+key.slice(1)); // 's<index>'
+  };
+  const drag = useSlotDrag(leftByKey, setMouse);
+
   return (
-    <Panel title={title} onMouseMove={(e) => setMouse({ x: e.clientX, y: e.clientY })}>
+    <Panel title={title}
+      onMouseMove={(e) => setMouse({ x: e.clientX, y: e.clientY })}
+      onTouchMove={drag.onMove} onTouchEnd={drag.onEnd}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 14, marginBottom: 14 }}>
         <div style={{ display: 'grid', gridTemplateColumns: `repeat(${gridSize}, ${SLOT}px)`, gap: 2 }}>
           {grid.map((stack, j) => (
-            <Slot key={j} stack={stack} onLeft={() => cellLeft(j)} onRight={() => cellRight(j)}
+            <Slot key={j} stack={stack} slotKey={`c${j}`} onTouchStart={drag.onStart(`c${j}`)}
+              onLeft={() => cellLeft(j)} onRight={() => cellRight(j)}
               onEnter={setHover} onLeave={() => setHover(null)} />
           ))}
         </div>
         <div style={{ font: '22px system-ui', color: '#555' }}>→</div>
         <div
+          data-slotkey="out"
+          onTouchStart={drag.onStart('out')}
           onMouseDown={(e) => { e.preventDefault(); if (e.button === 0) takeOutput(e.shiftKey); }}
           onMouseEnter={() => setHover(result ? result.item : null)}
           onMouseLeave={() => setHover(null)}
-          style={{ width: SLOT, height: SLOT, border: '2px solid #555', background: '#8b8b8b', position: 'relative', cursor: result ? 'pointer' : 'default' }}
+          style={{ width: SLOT, height: SLOT, border: '2px solid #555', background: '#8b8b8b', position: 'relative', cursor: result ? 'pointer' : 'default', touchAction: 'none' }}
         >
           {result && (
             <>
@@ -215,7 +261,7 @@ function CraftingScreen({ inventory, gridSize, title }) {
         </div>
       </div>
 
-      <InventoryGrids inventory={inventory} onLeft={invLeft} onRight={invRight} setHover={setHover} />
+      <InventoryGrids inventory={inventory} onLeft={invLeft} onRight={invRight} setHover={setHover} touch={drag} />
       <div style={{ font: '12px system-ui', color: '#444', marginTop: 10, opacity: 0.8 }}>{HINT}</div>
       <CursorLayer cursor={cursor} mouse={mouse} hover={hover} />
       <RecipeBook inventory={inventory} maxCraftSize={gridSize} />
@@ -259,20 +305,31 @@ function FurnaceScreen({ inventory, furnace }) {
   const cookFrac = smeltTime ? Math.min(1, f.cook / smeltTime) : 0;
   const burnFrac = f.burnMax ? Math.max(0, Math.min(1, f.burnLeft / f.burnMax)) : 0;
 
-  const SlotBox = ({ stack, onLeft, onRight }) => (
-    <Slot stack={stack} onLeft={onLeft} onRight={onRight} onEnter={setHover} onLeave={() => setHover(null)} />
+  const leftByKey = (key) => {
+    if (key === 'fin') slotLeft('input');
+    else if (key === 'ffuel') slotLeft('fuel');
+    else if (key === 'fout') takeOutput();
+    else invLeft(+key.slice(1));
+  };
+  const drag = useSlotDrag(leftByKey, setMouse);
+
+  const SlotBox = ({ stack, onLeft, onRight, slotKey }) => (
+    <Slot stack={stack} onLeft={onLeft} onRight={onRight} slotKey={slotKey}
+      onTouchStart={drag.onStart(slotKey)} onEnter={setHover} onLeave={() => setHover(null)} />
   );
 
   return (
-    <Panel title="Furnace" onMouseMove={(e) => setMouse({ x: e.clientX, y: e.clientY })}>
+    <Panel title="Furnace"
+      onMouseMove={(e) => setMouse({ x: e.clientX, y: e.clientY })}
+      onTouchMove={drag.onMove} onTouchEnd={drag.onEnd}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 16, marginBottom: 14 }}>
         {/* Input over fuel, with a flame gauge between */}
         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6 }}>
-          <SlotBox stack={f.input} onLeft={() => slotLeft('input')} onRight={() => slotRight('input')} />
+          <SlotBox stack={f.input} slotKey="fin" onLeft={() => slotLeft('input')} onRight={() => slotRight('input')} />
           <div style={{ width: 18, height: 18, background: '#555', borderRadius: 2, position: 'relative', overflow: 'hidden' }}>
             <div style={{ position: 'absolute', bottom: 0, left: 0, right: 0, height: `${burnFrac * 100}%`, background: '#ff8c1a' }} />
           </div>
-          <SlotBox stack={f.fuel} onLeft={() => slotLeft('fuel')} onRight={() => slotRight('fuel')} />
+          <SlotBox stack={f.fuel} slotKey="ffuel" onLeft={() => slotLeft('fuel')} onRight={() => slotRight('fuel')} />
         </div>
 
         {/* Cook-progress arrow */}
@@ -282,10 +339,12 @@ function FurnaceScreen({ inventory, furnace }) {
 
         {/* Output (take-only) */}
         <div
+          data-slotkey="fout"
+          onTouchStart={drag.onStart('fout')}
           onMouseDown={(e) => { e.preventDefault(); if (e.button === 0 || e.button === 2) takeOutput(); }}
           onMouseEnter={() => setHover(f.output ? f.output.item : null)}
           onMouseLeave={() => setHover(null)}
-          style={{ width: SLOT, height: SLOT, border: '2px solid #555', background: '#8b8b8b', position: 'relative', cursor: f.output ? 'pointer' : 'default' }}
+          style={{ width: SLOT, height: SLOT, border: '2px solid #555', background: '#8b8b8b', position: 'relative', cursor: f.output ? 'pointer' : 'default', touchAction: 'none' }}
         >
           {f.output && (
             <>
@@ -326,19 +385,24 @@ export function ChestScreen({ chest, inventory }) {
   const invLeft = (i) => setCursor(inventory.clickSlot(i, cursorRef.current));
   const invRight = (i) => setCursor(inventory.rightClickSlot(i, cursorRef.current));
 
+  const leftByKey = (key) => { if (key[0] === 'g') chestLeft(+key.slice(1)); else invLeft(+key.slice(1)); };
+  const drag = useSlotDrag(leftByKey, setMouse);
+
   const slots = [];
   for (let i = 0; i < chest.size; i++) slots.push(i);
 
   return (
-    <Panel title={chest.title} onMouseMove={(e) => setMouse({ x: e.clientX, y: e.clientY })}>
+    <Panel title={chest.title}
+      onMouseMove={(e) => setMouse({ x: e.clientX, y: e.clientY })}
+      onTouchMove={drag.onMove} onTouchEnd={drag.onEnd}>
       <div style={{ display: 'grid', gridTemplateColumns: `repeat(9, ${SLOT}px)`, gap: 2, marginBottom: 14 }}>
         {slots.map((i) => (
-          <Slot key={i} stack={chest.get(i)}
+          <Slot key={i} stack={chest.get(i)} slotKey={`g${i}`} onTouchStart={drag.onStart(`g${i}`)}
             onLeft={() => chestLeft(i)} onRight={() => chestRight(i)}
             onEnter={setHover} onLeave={() => setHover(null)} />
         ))}
       </div>
-      <InventoryGrids inventory={inventory} onLeft={invLeft} onRight={invRight} setHover={setHover} />
+      <InventoryGrids inventory={inventory} onLeft={invLeft} onRight={invRight} setHover={setHover} touch={drag} />
       <div style={{ font: '12px system-ui', color: '#444', marginTop: 10, opacity: 0.8 }}>
         Left-click move/stack · Right-click split · E / Esc to close
       </div>

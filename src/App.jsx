@@ -48,7 +48,7 @@ export default function App() {
     const save = { ...(current.save || {}), id: current.id, name: current.name, seed: current.seed };
     const game = new Game(containerRef.current, save);
     gameRef.current = game;
-    window.__apex = game;
+    if (game.dev) window.__apex = game; // debug handle on localhost only
     game.onStats = setStats;
     game.onScreenChange = setOpenScreen;
     game.onDead = setDead;

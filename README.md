@@ -116,6 +116,21 @@ Blocks, items, recipes, and smelting are **data-driven** (JSON), so adding conte
 
 React 18 · Three.js · Vite · simplex-noise. Rendering is raw Three.js managed imperatively inside a React shell (chosen for control over the render loop and meshing); React handles the HUD and menus.
 
+## Contributing
+
+Contributions are welcome! ApexCraft is **data-driven**, so adding a block,
+item, recipe, or mob is usually a small JSON/JS edit — see
+**[docs/MODDING.md](docs/MODDING.md)**. Start with the
+[Contributing guide](CONTRIBUTING.md) and look for **`good first issue`**
+labels. Be sure to read the [Code of Conduct](CODE_OF_CONDUCT.md).
+
+## License
+
+ApexCraft's source is released under the **[MIT License](LICENSE)**.
+Contributions are accepted under the [Contributor License Agreement](CLA.md).
+A separate [EULA](EULA.md) applies to any future official/hosted build (the
+MIT-licensed source is unaffected by it).
+
 ## Roadmap
 
 - More structures and biome variety; biome blending

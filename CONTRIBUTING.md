@@ -25,6 +25,13 @@ Requirements: **Node 18+**.
 - Be respectful — see the [Code of Conduct](CODE_OF_CONDUCT.md).
 - Keep PRs focused; one feature/fix per PR.
 - `npm run build` must pass (CI enforces it).
+- **Assets must be original or MIT-compatible.** ApexCraft's textures and sounds
+  are generated procedurally in code (`src/textures/`, `src/systems/Sound.js`) —
+  there are no binary asset files, and that's deliberate. If you add any texture,
+  sprite, sound, font, or model, it must be **your own original work** or under a
+  license compatible with MIT (and clearly attributed). **Do not** copy assets
+  from Minecraft or any other game. When in doubt, prefer procedural/code-drawn
+  art so ownership is unambiguous.
 
 ## How to contribute
 

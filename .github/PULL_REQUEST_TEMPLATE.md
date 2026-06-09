@@ -9,4 +9,6 @@
 ## Checklist
 - [ ] Focused change (one feature/fix)
 - [ ] Followed `docs/MODDING.md` for new content (if applicable)
+- [ ] Any textures, sounds, or other assets are **my original work** or under a
+      license compatible with MIT — **not** copied from Minecraft or other games
 - [ ] I have read and agree to the [ApexCraft CLA](../CLA.md)

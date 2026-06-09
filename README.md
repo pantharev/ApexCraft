@@ -6,6 +6,39 @@ A voxel survival game in the browser — a Minecraft-style sandbox built with **
 
 ---
 
+## 📜 Licensing & Commercial Use
+
+ApexCraft uses a **dual-licensing / open-core model**:
+
+### 1. The open-source core (this repository)
+All code in this repository is licensed under the **[MIT License](LICENSE)**.
+- **For developers:** you are free to fork, modify, extend, and use it in your
+  own projects — **including commercial, closed-source games**.
+- **The rule:** include the original copyright notice and a copy of the MIT
+  License in any distribution or derivative work.
+
+### 2. The premium version (proprietary)
+We develop and may sell a premium/official build of ApexCraft (e.g. hosted
+multiplayer, advanced graphics, exclusive content).
+- Those premium extensions are maintained in a **separate, closed-source**
+  project and governed by their own proprietary license/EULA (not part of this
+  repository).
+- Forking this repository does **not** grant any rights to the proprietary
+  premium code, commercial assets, or the ApexCraft name/branding.
+
+### 3. Contributing to the core
+Community contributions are welcome! Because the same core powers the premium
+build, contributors agree to our **[Contributor License Agreement (CLA)](CLA.md)**
+when opening a pull request.
+- By contributing, you grant us the right to include your improvements in
+  **both** the open-source repository **and** commercial versions. You retain
+  the copyright to your original work.
+
+See [LICENSE](LICENSE) and [CLA.md](CLA.md) for full details. *(The CLA is a
+template pending legal review.)*
+
+---
+
 ## Features
 
 ### World
@@ -115,6 +148,18 @@ Blocks, items, recipes, and smelting are **data-driven** (JSON), so adding conte
 ## Tech
 
 React 18 · Three.js · Vite · simplex-noise. Rendering is raw Three.js managed imperatively inside a React shell (chosen for control over the render loop and meshing); React handles the HUD and menus.
+
+## Contributing
+
+Contributions are welcome! ApexCraft is **data-driven**, so adding a block,
+item, recipe, or mob is usually a small JSON/JS edit — see
+**[docs/MODDING.md](docs/MODDING.md)**. Start with the
+[Contributing guide](CONTRIBUTING.md) and look for **`good first issue`**
+labels. Be sure to read the [Code of Conduct](CODE_OF_CONDUCT.md).
+
+## License
+
+MIT for the open-source core — see **[Licensing & Commercial Use](#-licensing--commercial-use)** above, and [LICENSE](LICENSE) / [CLA.md](CLA.md).
 
 ## Roadmap
 

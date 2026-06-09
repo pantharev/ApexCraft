@@ -166,6 +166,7 @@ MIT for the open-source core — see **[Licensing & Commercial Use](#-licensing-
 - More structures and biome variety; biome blending
 - Web-worker chunk generation, LOD
 - Ranged combat (skeleton arrows), more mobs
+- Multiplayer
 
 ---
 

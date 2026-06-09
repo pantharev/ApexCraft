@@ -1,9 +1,5 @@
 # ApexCraft Contributor License Agreement (CLA)
 
-> **Not legal advice.** This is a template. Have it reviewed by a lawyer before
-> relying on it. Adjust the "Project Owner" and governing-law fields to match
-> your situation.
-
 Thank you for contributing to ApexCraft. To keep the project free and open
 under the MIT License **and** to allow the Project Owner to continue developing
 and distributing ApexCraft (including in future commercial or proprietary

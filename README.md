@@ -34,8 +34,7 @@ when opening a pull request.
   **both** the open-source repository **and** commercial versions. You retain
   the copyright to your original work.
 
-See [LICENSE](LICENSE) and [CLA.md](CLA.md) for full details. *(The CLA is a
-template pending legal review.)*
+See [LICENSE](LICENSE) and [CLA.md](CLA.md) for full details.
 
 ---
 

@@ -25,7 +25,7 @@ when representing the project publicly.
 
 ## Enforcement
 
-Report concerns to the maintainer at **[YOUR CONTACT EMAIL]**. Reports will be
+Report concerns to the maintainer at **apexcraftgame@gmail.com**. Reports will be
 handled confidentially. Maintainers may remove content, or warn or ban
 contributors who violate this code.
 

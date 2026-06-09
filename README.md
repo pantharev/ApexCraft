@@ -20,8 +20,9 @@ All code in this repository is licensed under the **[MIT License](LICENSE)**.
 ### 2. The premium version (proprietary)
 We develop and may sell a premium/official build of ApexCraft (e.g. hosted
 multiplayer, advanced graphics, exclusive content).
-- Those premium extensions are **closed-source** and governed by a proprietary
-  **[EULA](EULA.md)**.
+- Those premium extensions are maintained in a **separate, closed-source**
+  project and governed by their own proprietary license/EULA (not part of this
+  repository).
 - Forking this repository does **not** grant any rights to the proprietary
   premium code, commercial assets, or the ApexCraft name/branding.
 
@@ -33,8 +34,8 @@ when opening a pull request.
   **both** the open-source repository **and** commercial versions. You retain
   the copyright to your original work.
 
-See [LICENSE](LICENSE), [CLA.md](CLA.md), and [EULA.md](EULA.md) for full
-details. *(The CLA and EULA are templates pending legal review.)*
+See [LICENSE](LICENSE) and [CLA.md](CLA.md) for full details. *(The CLA is a
+template pending legal review.)*
 
 ---
 
@@ -158,7 +159,7 @@ labels. Be sure to read the [Code of Conduct](CODE_OF_CONDUCT.md).
 
 ## License
 
-MIT for the open-source core — see **[Licensing & Commercial Use](#-licensing--commercial-use)** above, and [LICENSE](LICENSE) / [CLA.md](CLA.md) / [EULA.md](EULA.md).
+MIT for the open-source core — see **[Licensing & Commercial Use](#-licensing--commercial-use)** above, and [LICENSE](LICENSE) / [CLA.md](CLA.md).
 
 ## Roadmap
 

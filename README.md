@@ -156,6 +156,12 @@ item, recipe, or mob is usually a small JSON/JS edit — see
 [Contributing guide](CONTRIBUTING.md) and look for **`good first issue`**
 labels. Be sure to read the [Code of Conduct](CODE_OF_CONDUCT.md).
 
+## Security
+
+Found a vulnerability? **Please don't open a public issue** — report it
+privately as described in **[SECURITY.md](SECURITY.md)** (GitHub's "Report a
+vulnerability" tab or email) so it can be fixed before disclosure.
+
 ## License
 
 MIT for the open-source core — see **[Licensing & Commercial Use](#-licensing--commercial-use)** above, and [LICENSE](LICENSE) / [CLA.md](CLA.md).

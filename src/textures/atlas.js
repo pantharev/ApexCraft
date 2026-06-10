@@ -297,6 +297,46 @@ const DRAW = {
     c.fillStyle = '#9aa0a8'; c.fillRect(7, 4, 2, 3);   // clasp
     c.fillStyle = '#3a2a14'; c.fillRect(7, 6, 2, 1);   // keyhole
   },
+  // Cross-plants (transparent background; rendered as X-quads in the world).
+  tall_grass: (c, r) => {
+    c.clearRect(0, 0, TILE, TILE);
+    for (let i = 0; i < 8; i++) {
+      const x = 1 + ((r() * 14) | 0);
+      const h = 6 + ((r() * 8) | 0);
+      const lean = r() < 0.5 ? -1 : 1;
+      const col = ['#4f8a30', '#5d9c3c', '#6aae46'][(r() * 3) | 0];
+      for (let k = 0; k < h; k++) {
+        const bx = x + (k > h * 0.55 ? lean : 0);
+        setPx(c, Math.max(0, Math.min(15, bx)), 15 - k, k >= h - 2 ? '#86c45e' : col, 1, 14, r);
+      }
+    }
+  },
+  poppy: (c, r) => {
+    c.clearRect(0, 0, TILE, TILE);
+    for (let y = 7; y <= 15; y++) setPx(c, 8, y, y % 3 === 0 ? '#3f7a2c' : '#4f8a30'); // stem
+    setPx(c, 6, 11, '#4f8a30'); setPx(c, 7, 10, '#4f8a30');  // leaf
+    setPx(c, 10, 12, '#4f8a30'); setPx(c, 9, 11, '#3f7a2c'); // leaf
+    // Bloom: red petals around a dark heart.
+    for (const [x, y] of [[7, 4], [8, 4], [9, 4], [6, 5], [7, 5], [9, 5], [10, 5], [7, 6], [8, 6], [9, 6]]) {
+      setPx(c, x, y, '#d23227', 1, 16, r);
+    }
+    setPx(c, 8, 3, '#e8564a'); setPx(c, 6, 4, '#a82318'); setPx(c, 10, 6, '#a82318');
+    setPx(c, 8, 5, '#33150c'); // heart
+  },
+  dandelion: (c, r) => {
+    c.clearRect(0, 0, TILE, TILE);
+    for (let y = 8; y <= 15; y++) setPx(c, 8, y, y % 3 === 0 ? '#3f7a2c' : '#4f8a30'); // stem
+    setPx(c, 6, 12, '#4f8a30'); setPx(c, 7, 11, '#4f8a30'); // leaf
+    setPx(c, 10, 13, '#4f8a30');
+    // Puff: yellow ball with ray petals.
+    for (const [x, y] of [[7, 4], [8, 4], [9, 4], [7, 5], [8, 5], [9, 5], [7, 6], [8, 6], [9, 6]]) {
+      setPx(c, x, y, '#e8c93a', 1, 14, r);
+    }
+    for (const [x, y] of [[8, 2], [6, 3], [10, 3], [5, 5], [11, 5], [6, 7], [10, 7], [8, 7]]) {
+      setPx(c, x, y, '#f4dd6a', 1, 10, r);
+    }
+    setPx(c, 8, 5, '#fff2a8'); // bright core
+  },
 };
 
 // Ores: stone base + crystal clusters with a bright facet and dark outline.
@@ -338,10 +378,11 @@ const FACE_TILES = {
   furnace: { top: 'furnace_side', side: 'furnace_front', bottom: 'furnace_side' },
   torch: t('torch'),
   chest: { top: 'chest_top', side: 'chest_side', bottom: 'chest_top' },
+  tall_grass: t('tall_grass'), poppy: t('poppy'), dandelion: t('dandelion'),
 };
 for (const name of Object.keys(ORE_COLORS)) FACE_TILES[name] = t(name);
 
-const CUTOUT = new Set(['leaves', 'glass']);
+const CUTOUT = new Set(['leaves', 'glass', 'tall_grass', 'poppy', 'dandelion']);
 const TRANSPARENT = new Set(['water']);
 
 // --- Build textures + materials once ---

@@ -4,7 +4,7 @@ import { Chunk } from './Chunk.js';
 import { generateChunk } from '../world/generators/TerrainGen.js';
 import { buildChunkGeometry } from './ChunkMesher.js';
 import { BLOCK_MATERIALS, WATER_MATERIAL_INDEX } from '../textures/atlas.js';
-import { getBlockId } from '../blocks/BlockRegistry.js';
+import { getBlockId, isSolid } from '../blocks/BlockRegistry.js';
 
 const key = (cx, cz) => `${cx},${cz}`;
 const TORCH = getBlockId('torch');
@@ -228,11 +228,11 @@ export class World {
   }
 
   // Height of the highest solid block at a column (for spawn placement).
+  // Skips water and plants so entities stand on real ground.
   surfaceHeight(wx, wz) {
     this.ensureChunk(Math.floor(wx / CHUNK_SIZE), Math.floor(wz / CHUNK_SIZE));
     for (let y = WORLD_HEIGHT - 1; y >= 0; y--) {
-      const id = this.getBlock(wx, y, wz);
-      if (id !== 0 && id !== 6 /* water */) return y;
+      if (isSolid(this.getBlock(wx, y, wz))) return y;
     }
     return 64;
   }

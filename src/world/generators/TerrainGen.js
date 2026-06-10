@@ -5,6 +5,7 @@ import { getBlockId } from '../../blocks/BlockRegistry.js';
 import { carveCaves } from './CaveGen.js';
 import { generateOres } from './OreGen.js';
 import { generateTrees } from '../structures/Tree.js';
+import { generateDecorations } from '../structures/Decorations.js';
 
 const STONE = getBlockId('stone');
 const DIRT = getBlockId('dirt');
@@ -124,6 +125,7 @@ export function generateChunk(chunk) {
   carveCaves(chunk);
   generateOres(chunk);
   generateTrees(chunk);
+  generateDecorations(chunk);
   chunk.generated = true;
   chunk.dirty = true;
 }

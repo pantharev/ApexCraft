@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { isSolid } from '../blocks/BlockRegistry.js';
+import { isSolid, getBlock, getBlockId } from '../blocks/BlockRegistry.js';
 import { getItem } from '../items/ItemRegistry.js';
 import { Sound } from '../systems/Sound.js';
 import { dropPlateGeometry, plateMaterial, buildBlockCube, buildTorchModel } from '../items/ItemModels.js';
@@ -24,7 +24,9 @@ export class ItemDrops {
 
   _model(item) {
     if (item.placeBlock === 'torch') return buildTorchModel(0.7);
-    if (item.placeBlock) return buildBlockCube(item.placeBlock, 0.26, true); // shared geo
+    if (item.placeBlock && !getBlock(getBlockId(item.placeBlock)).plant) {
+      return buildBlockCube(item.placeBlock, 0.26, true); // shared geo
+    }
     return new THREE.Mesh(dropPlateGeometry(item.name, 0.4), plateMaterial());
   }
 

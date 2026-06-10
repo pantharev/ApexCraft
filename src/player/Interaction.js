@@ -3,6 +3,7 @@ import { raycastVoxel } from './Raycast.js';
 import { getBlock, isSolid } from '../blocks/BlockRegistry.js';
 import { getBlockId } from '../blocks/BlockRegistry.js';
 import { Sound, soundCategory } from '../systems/Sound.js';
+import { CRACK_MATERIALS, CRACK_STAGES } from '../textures/cracks.js';
 
 const REACH = 6;
 const BEDROCK = getBlockId('bedrock');
@@ -41,12 +42,10 @@ export class Interaction {
     this.highlight.visible = false;
     scene.add(this.highlight);
 
-    // Break-progress overlay (red box that fades in as the block breaks).
-    this.crack = new THREE.Mesh(
-      new THREE.BoxGeometry(1.01, 1.01, 1.01),
-      new THREE.MeshBasicMaterial({ color: 0xff3333, transparent: true, opacity: 0 })
-    );
+    // Break-progress overlay: staged crack textures wrapped around the block.
+    this.crack = new THREE.Mesh(new THREE.BoxGeometry(1.004, 1.004, 1.004), CRACK_MATERIALS[0]);
     this.crack.visible = false;
+    this._crackStage = 0;
     scene.add(this.crack);
 
     this._bind();
@@ -129,11 +128,22 @@ export class Interaction {
     Sound.dig(soundCategory(getBlockId(block.name)), 1); // break sound
     if (this.onBlockBroken) this.onBlockBroken(block.name, b);
 
+    // A plant sitting on this block loses its support and pops too.
+    const above = getBlock(this.world.getBlock(b.x, b.y + 1, b.z));
+    if (above.plant) {
+      this.world.setBlock(b.x, b.y + 1, b.z, 0);
+      this._spawnDrops(above, { x: b.x, y: b.y + 1, z: b.z }, true);
+    }
+
+    this._spawnDrops(block, b, false);
+  }
+
+  _spawnDrops(block, b, ignoreTool) {
     const drops = block.drops || [];
     if (drops.length === 0) return;
 
-    const tool = this.currentTool;
-    if (block.requiresTool) {
+    if (!ignoreTool && block.requiresTool) {
+      const tool = this.currentTool;
       const ok = tool && tool.toolType === block.requiresTool && tool.tier >= (block.minToolTier || 1);
       if (!ok) return; // no drop without the proper tool
     }
@@ -207,7 +217,8 @@ export class Interaction {
       }
       this.crack.visible = true;
       this.crack.position.set(b.x + 0.5, b.y + 0.5, b.z + 0.5);
-      this.crack.material.opacity = 0.15 + this.breakProgress * 0.5;
+      const stage = Math.min(CRACK_STAGES - 1, (this.breakProgress * CRACK_STAGES) | 0);
+      if (stage !== this._crackStage) { this._crackStage = stage; this.crack.material = CRACK_MATERIALS[stage]; }
       // Periodic "hit" sound while mining.
       this._mineSfxT -= dt;
       if (this._mineSfxT <= 0) { Sound.dig(soundCategory(id), 0.5); this._mineSfxT = 0.22; }

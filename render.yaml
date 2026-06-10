@@ -1,0 +1,19 @@
+# One-service deploy for ApexCraft on Render (https://render.com).
+#
+# This single web service builds the client AND runs the multiplayer server,
+# which serves the built client from dist/. So this one URL hosts the whole
+# game — single-player and online co-op.
+#
+# Deploy: push to GitHub, then on Render → New → Blueprint, pick this repo.
+# (Or New → Web Service and copy the build/start commands below manually.)
+services:
+  - type: web
+    name: apexcraft
+    env: node
+    plan: free
+    buildCommand: npm install && npm run build
+    startCommand: npm start
+    healthCheckPath: /health
+    envVars:
+      - key: NODE_VERSION
+        value: "20"

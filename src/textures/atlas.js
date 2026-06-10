@@ -412,6 +412,13 @@ export function blockAverageColor(blockId) {
   return out;
 }
 
+// Expose a tile's canvas (for UI icons and extruded item models).
+export function tileCanvas(name) {
+  const i = tileIndex[name];
+  if (i == null) return null;
+  return textures[i].image;
+}
+
 // Expose a tile's canvas as a data URL (for UI item icons).
 export function tileDataURL(name) {
   const i = tileIndex[name];

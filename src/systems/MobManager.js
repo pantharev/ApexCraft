@@ -59,15 +59,36 @@ export class MobManager {
   }
 
   update(dt, ctx) {
+    // Multiplayer host: target/spawn around every player in the room, not just
+    // the local one. ctx.players is [{ id, pos }]; absent = single-player.
+    const players = ctx.players && ctx.players.length
+      ? ctx.players
+      : [{ id: 'self', pos: ctx.playerPos }];
+
     this.spawnTimer -= dt;
     if (this.spawnTimer <= 0) {
       this.spawnTimer = 2;
-      this._trySpawn(ctx);
+      const anchor = players[Math.floor(Math.random() * players.length)];
+      this._trySpawn({ ...ctx, playerPos: anchor.pos });
     }
 
     const p = ctx.playerPos;
     for (const mob of this.mobs) {
-      mob.update(dt, { world: this.world, playerPos: p, isNight: ctx.isNight, attackPlayer: ctx.attackPlayer, shoot: ctx.shoot });
+      // Each mob hunts its nearest player; attacks route to that player's id.
+      let near = players[0];
+      let nearSq = Infinity;
+      for (const pl of players) {
+        const ddx = mob.pos.x - pl.pos.x, ddz = mob.pos.z - pl.pos.z;
+        const d2 = ddx * ddx + ddz * ddz;
+        if (d2 < nearSq) { nearSq = d2; near = pl; }
+      }
+      mob.update(dt, {
+        world: this.world,
+        playerPos: near.pos,
+        isNight: ctx.isNight,
+        attackPlayer: (dmg) => ctx.attackPlayer(dmg, near.id),
+        shoot: ctx.shoot,
+      });
 
       const dx = mob.pos.x - p.x, dz = mob.pos.z - p.z;
       if (mob.dead) {
@@ -79,7 +100,8 @@ export class MobManager {
           if (c > 0) this.itemDrops.spawn(d.item, c, Math.floor(mob.pos.x), Math.floor(mob.pos.y), Math.floor(mob.pos.z));
         }
         mob.removed = true;
-      } else if (dx * dx + dz * dz > DESPAWN * DESPAWN || mob.pos.y < -10) {
+      } else if (nearSq > DESPAWN * DESPAWN || mob.pos.y < -10) {
+        // Despawn only when far from *every* player.
         mob.removed = true;
       }
     }
@@ -96,6 +118,21 @@ export class MobManager {
     }
   }
 
+  // Compact state for multiplayer broadcast (host -> guests, ~10 Hz).
+  snapshot() {
+    return this.mobs.map((m) => ({
+      i: m.id, t: m.type,
+      x: +m.pos.x.toFixed(2), y: +m.pos.y.toFixed(2), z: +m.pos.z.toFixed(2),
+      yaw: +m.yaw.toFixed(2), h: m.health,
+    }));
+  }
+
+  // Find a live mob by id (host applies guests' reported hits).
+  byId(id) {
+    for (const m of this.mobs) if (m.id === id && !m.dead) return m;
+    return null;
+  }
+
   // Nearest mob hit by the ray within `reach`, or null. Slab AABB test.
   raycast(origin, dir, reach) {
     let best = null;
@@ -109,7 +146,7 @@ export class MobManager {
   }
 }
 
-function rayAABB(o, d, min, max) {
+export function rayAABB(o, d, min, max) {
   let tmin = -Infinity, tmax = Infinity;
   for (const axis of ['x', 'y', 'z']) {
     if (Math.abs(d[axis]) < 1e-8) {

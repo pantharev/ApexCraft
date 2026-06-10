@@ -2,6 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { Game } from './core/Game.js';
 import { reseed } from './world/noise.js';
 import { listWorlds, loadWorld, deleteWorld } from './systems/Storage.js';
+import { Net } from './net/Net.js';
 import { MainMenu, PauseMenu } from './ui/Menus.jsx';
 import { Landing } from './ui/Landing.jsx';
 import { Hotbar, InventoryPanel, CraftingTableScreen, FurnaceScreen, ChestScreen } from './ui/InventoryUI.jsx';
@@ -26,6 +27,8 @@ export default function App() {
   const [hurt, setHurt] = useState(false);
   const [touchActive, setTouchActive] = useState(false); // mobile "playing" (no pointer lock)
   const [portrait, setPortrait] = useState(false);
+  const [netError, setNetError] = useState(null);
+  const [netBusy, setNetBusy] = useState(false);
 
   const refreshWorlds = async () => setWorlds(await listWorlds());
   useEffect(() => { refreshWorlds(); }, []);
@@ -46,7 +49,7 @@ export default function App() {
     let hurtTimer = null;
     reseed(current.seed);
     const save = { ...(current.save || {}), id: current.id, name: current.name, seed: current.seed };
-    const game = new Game(containerRef.current, save);
+    const game = new Game(containerRef.current, save, current.net || null);
     gameRef.current = game;
     if (game.dev) window.__apex = game; // debug handle on localhost only
     game.onStats = setStats;
@@ -64,6 +67,7 @@ export default function App() {
       clearTimeout(hurtTimer);
       document.removeEventListener('pointerlockchange', onLock);
       game.dispose();
+      current.net?.close();
       gameRef.current = null;
     };
   }, [phase, current]);
@@ -97,6 +101,49 @@ export default function App() {
     refreshWorlds();
   };
 
+  // Host one of our worlds: open a room, get a shareable code, start playing.
+  const hostWorld = async (meta, playerName) => {
+    setNetBusy(true); setNetError(null);
+    const net = new Net();
+    try {
+      const save = await loadWorld(meta.id);
+      await net.host({
+        name: playerName,
+        seed: meta.seed,
+        edits: save?.edits || {},
+        time: save?.time ?? 0.3,
+      });
+      setStats(null); setLocked(false); setOpenScreen(null); setDead(false); setTouchActive(false);
+      setCurrent({ id: meta.id, name: meta.name, seed: meta.seed, save, net });
+      setPhase('playing');
+    } catch (e) {
+      net.close();
+      setNetError(e.message || 'Could not reach the multiplayer server.');
+    } finally {
+      setNetBusy(false);
+    }
+  };
+
+  // Join a friend's room by code; the world (seed + edits) comes from the server.
+  const joinWorld = async (code, playerName) => {
+    setNetBusy(true); setNetError(null);
+    const net = new Net();
+    try {
+      const j = await net.join(code, playerName);
+      setStats(null); setLocked(false); setOpenScreen(null); setDead(false); setTouchActive(false);
+      setCurrent({
+        id: `mp_${j.code}`, name: `Room ${j.code}`, seed: j.seed,
+        save: { edits: j.edits || {}, time: j.time }, net,
+      });
+      setPhase('playing');
+    } catch (e) {
+      net.close();
+      setNetError(e.message || 'Could not reach the multiplayer server.');
+    } finally {
+      setNetBusy(false);
+    }
+  };
+
   const quitToMenu = async () => {
     await gameRef.current?.save();
     setTouchActive(false);
@@ -122,7 +169,8 @@ export default function App() {
 
       {phase === 'menu' && (
         <MainMenu worlds={worlds} onPlay={playExisting} onCreate={createNew} onDelete={removeWorld}
-          onHome={() => setPhase('landing')} />
+          onHome={() => setPhase('landing')}
+          onHost={hostWorld} onJoin={joinWorld} netError={netError} netBusy={netBusy} />
       )}
 
       {phase === 'playing' && (
@@ -198,6 +246,11 @@ export default function App() {
               <div>XYZ: {stats.x} / {stats.y} / {stats.z}</div>
               <div>Time: {stats.clock} ({stats.night ? 'Night' : 'Day'}) &nbsp; Mobs: {stats.mobs}</div>
               <div>Holding: {stats.held}</div>
+              {stats.room && (
+                <div style={{ color: '#8fd0ff' }}>
+                  Room {stats.room} · {stats.peers} player{stats.peers === 1 ? '' : 's'}{stats.hosting ? ' · hosting' : ''}
+                </div>
+              )}
               {stats.dev && <div style={{ color: '#9fe084' }}>[T] day/night: {stats.devTime}</div>}
             </div>
           )}

@@ -12,6 +12,8 @@ import { DayNight } from '../systems/DayNight.js';
 import { MobManager } from '../systems/MobManager.js';
 import { TorchLights } from '../systems/TorchLights.js';
 import { Projectiles } from '../systems/Projectiles.js';
+import { RemotePlayers } from '../net/RemotePlayers.js';
+import { GhostMobs } from '../net/GhostMobs.js';
 import { Sound } from '../systems/Sound.js';
 import { saveWorld } from '../systems/Storage.js';
 import { WORLD_SEED } from '../config.js';
@@ -39,9 +41,12 @@ const STARTER_KIT = [
 // Owns the Three.js renderer/scene/camera, the World, and the Player, plus the
 // requestAnimationFrame loop. Mounted by the React <App/> into a container div.
 export class Game {
-  constructor(container, save = null) {
+  constructor(container, save = null, net = null) {
     this.container = container;
     this._save = save || null;
+    this.net = net; // multiplayer connection (null = single-player)
+    // Guests (and migrated hosts) play someone else's world — don't persist it.
+    this._canPersist = !net || net.isOrigin;
     this.worldId = save?.id || 'default';
     this.worldName = save?.name || 'World';
     this.seed = save?.seed ?? WORLD_SEED;
@@ -117,6 +122,41 @@ export class Game {
     this.torchLights = new TorchLights(this.scene, this.world);
     this.projectiles = new Projectiles(this.world, this.scene);
 
+    // Multiplayer: remote avatars, guest-side mob ghosts, and event wiring.
+    this.remotePlayers = null;
+    this.ghostMobs = null;
+    if (net) {
+      this.remotePlayers = new RemotePlayers(this.scene);
+      this.ghostMobs = new GhostMobs(this.scene, net);
+      for (const [id, p] of net.players) this.remotePlayers.add(id, p.name);
+
+      // Local edits broadcast; remote edits apply with the echo suppressed.
+      this.world.onEdit = (x, y, z, id) => { if (!net.applying) net.sendEdit(x, y, z, id); };
+      net.onEdit = (x, y, z, id) => {
+        net.applying = true;
+        this.world.setBlock(x, y, z, id);
+        net.applying = false;
+      };
+      net.onPlayerJoined = (p) => this.remotePlayers.add(p.id, p.name);
+      net.onPlayerLeft = (p) => this.remotePlayers.remove(p.id);
+      net.onPlayerState = (s) => this.remotePlayers.setState(s);
+      net.onMobs = (snap) => { if (!net.isHost) this.ghostMobs.apply(snap); };
+      net.onProjectile = (p) => {
+        this.projectiles.spawn(p.x, p.y, p.z, new THREE.Vector3(p.dx, p.dy, p.dz), p.speed, p.dmg || 0, p.target);
+        Sound.shoot();
+      };
+      net.onHitPlayer = (dmg) => this.vitals.damage(dmg);
+      net.onMobHit = (m) => { // a guest hit one of our simulated mobs
+        const mob = this.mobs.byId(m.i);
+        if (mob) { mob.takeDamage(m.dmg, new THREE.Vector3(m.x, m.y, m.z)); Sound.mobHurt(); }
+      };
+      net.onBecomeHost = () => this.ghostMobs.clear(); // our MobManager takes over
+      net.onTime = (t) => { this.dayNight.t = t; };
+      this._netT = 0;     // player-state send accumulator (~15 Hz)
+      this._mobNetT = 0;  // mob snapshot accumulator (~10 Hz)
+      this._timeNetT = 0; // clock sync accumulator (every 5 s)
+    }
+
     // Dev-only (localhost): press T to cycle day -> night -> auto.
     if (this.dev) {
       window.addEventListener('keydown', (e) => {
@@ -136,7 +176,7 @@ export class Game {
 
       const dir = new THREE.Vector3();
       this.camera.getWorldDirection(dir);
-      const mob = this.mobs.raycast(this.camera.position, dir, 4);
+      const mob = this._mobApi().raycast(this.camera.position, dir, 4);
       Sound.swing();
       if (!mob) return false;
       const tool = this.interaction.currentTool;
@@ -225,11 +265,17 @@ export class Game {
     this._onResize();
 
     // Best-effort save when the tab closes.
-    this._onUnload = () => { if (!this.vitals.dead) saveWorld(this.worldId, this.serialize()); };
+    this._onUnload = () => { if (!this.vitals.dead && this._canPersist) saveWorld(this.worldId, this.serialize()); };
     window.addEventListener('beforeunload', this._onUnload);
 
     this.onStats = null;  // optional callback for HUD
     this.onSaved = null;  // optional callback when a save completes
+  }
+
+  // Mob interface for attacks/projectiles: guests target the ghost mirror of
+  // the host's simulation; hosts and single-player target the real mobs.
+  _mobApi() {
+    return this.net && !this.net.isHost ? this.ghostMobs : this.mobs;
   }
 
   _onResize() {
@@ -310,7 +356,9 @@ export class Game {
     this.player._peakY = p.y;
   }
 
-  // Bundle the whole world/player state for persistence.
+  // Bundle the whole world/player state for persistence. In multiplayer the
+  // host's edits map already includes everyone's changes (applied via
+  // setBlock), so the shared world persists with the host's save.
   serialize() {
     const p = this.player.pos;
     return {
@@ -329,6 +377,7 @@ export class Game {
   }
 
   async save() {
+    if (!this._canPersist) return false; // guests don't own this world
     if (this.vitals.dead) return false; // don't persist a mid-death state
     const ok = await saveWorld(this.worldId, this.serialize());
     if (ok && this.onSaved) this.onSaved();
@@ -345,6 +394,10 @@ export class Game {
     const o = this.camera.position;
     this.projectiles.spawn(o.x, o.y, o.z, dir, 30, 5, 'mob');
     Sound.shoot();
+    // Co-op: others see the arrow fly, but it can't hurt them (no PvP).
+    if (this.net) {
+      this.net.sendProjectile({ x: o.x, y: o.y, z: o.z, dx: dir.x, dy: dir.y, dz: dir.z, speed: 30, dmg: 0, target: 'none' });
+    }
   }
 
   respawn() {
@@ -397,27 +450,66 @@ export class Game {
     this.vitals.update(dt);
     this.dayNight.update(dt);
     this.torchLights.update(this.player.pos);
-    this.mobs.update(dt, {
-      playerPos: this.player.pos,
-      isNight: this.dayNight.isNight,
-      attackPlayer: (dmg) => this.vitals.damage(dmg),
-      shoot: (sx, sy, sz, dx, dy, dz, dmg) => {
-        this.projectiles.spawn(sx, sy, sz, new THREE.Vector3(dx, dy, dz), 22, dmg, 'player');
-        Sound.shoot();
-      },
-    });
+    const isGuest = this.net && !this.net.isHost;
+    if (isGuest) {
+      // Guests mirror the host's mob simulation instead of running their own.
+      this.ghostMobs.update(dt);
+    } else {
+      this.mobs.update(dt, {
+        playerPos: this.player.pos,
+        // Host: mobs hunt every player in the room.
+        players: this.net
+          ? [{ id: 'self', pos: this.player.pos }, ...this.remotePlayers.list()]
+          : null,
+        isNight: this.dayNight.isNight,
+        attackPlayer: (dmg, id = 'self') => {
+          if (id === 'self' || !this.net) this.vitals.damage(dmg);
+          else this.net.sendHitPlayer(id, dmg); // melee hit on a remote player
+        },
+        shoot: (sx, sy, sz, dx, dy, dz, dmg) => {
+          this.projectiles.spawn(sx, sy, sz, new THREE.Vector3(dx, dy, dz), 22, dmg, 'player');
+          Sound.shoot();
+          // Guests simulate the same arrow locally so it can hit *them*.
+          if (this.net) this.net.sendProjectile({ x: sx, y: sy, z: sz, dx, dy, dz, speed: 22, dmg, target: 'player' });
+        },
+      });
+    }
     this.projectiles.update(dt, {
       playerPos: this.player.pos,
       hitPlayer: (dmg) => this.vitals.damage(dmg),
-      mobs: this.mobs,
+      mobs: this._mobApi(),
     });
+
+    // Multiplayer sync: our transform at ~15 Hz; host adds mob snapshots
+    // (~10 Hz) and the world clock (every 5 s).
+    if (this.net) {
+      this.remotePlayers.update(dt);
+      this._netT += dt;
+      if (this._netT >= 1 / 15) {
+        this._netT = 0;
+        const p = this.player.pos;
+        this.net.sendState({
+          x: +p.x.toFixed(2), y: +p.y.toFixed(2), z: +p.z.toFixed(2),
+          yaw: +this.player.yaw.toFixed(3), pitch: +this.player.pitch.toFixed(3),
+        });
+      }
+      if (this.net.isHost) {
+        this._mobNetT += dt;
+        if (this._mobNetT >= 0.1) { this._mobNetT = 0; this.net.sendMobs(this.mobs.snapshot()); }
+        this._timeNetT += dt;
+        if (this._timeNetT >= 5) { this._timeNetT = 0; this.net.sendTime(this.dayNight.t); }
+      }
+    }
     this.world.update(this.player.pos.x, this.player.pos.z, 3);
     this._animateHeld(dt);
     this.renderer.render(this.scene, this.camera);
 
-    // Autosave every 15s.
+    // Autosave every 15s (hosts/single-player only; guests don't own the world).
     this._autosaveTimer += dt;
-    if (this._autosaveTimer >= 15) { this._autosaveTimer = 0; this.save(); }
+    if (this._autosaveTimer >= 15) {
+      this._autosaveTimer = 0;
+      if (this._canPersist) this.save();
+    }
 
     if (this.onStats) {
       const p = this.player.pos;
@@ -437,9 +529,12 @@ export class Game {
         submerged: this.vitals.submerged,
         clock: this.dayNight.clock(),
         night: this.dayNight.isNight,
-        mobs: this.mobs.mobs.length,
+        mobs: this._mobApi().mobs.length,
         dev: this.dev,
         devTime: ['Auto', 'Day', 'Night'][this._devTime],
+        room: this.net ? this.net.code : null,
+        peers: this.net ? this.net.peerCount + 1 : 0,
+        hosting: this.net ? this.net.isHost : false,
       });
     }
 

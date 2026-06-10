@@ -20,9 +20,26 @@ function fmtDate(ms) {
   return `${d.toLocaleDateString()} ${d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`;
 }
 
-// Title screen: pick an existing world or create a new one.
-export function MainMenu({ worlds, onPlay, onCreate, onDelete, onHome }) {
+const input = {
+  padding: '8px 10px', borderRadius: 4, border: '1px solid #444',
+  background: '#111', color: '#eee', font: '15px system-ui',
+};
+const btnBlue = { ...btn, background: '#2e5d8e', border: '2px solid #1c3a59' };
+
+// Title screen: pick an existing world or create a new one. Worlds can also be
+// hosted for friends (multiplayer), or you can join a friend's room by code.
+export function MainMenu({ worlds, onPlay, onCreate, onDelete, onHome, onHost, onJoin, netError, netBusy }) {
   const [name, setName] = useState('');
+  const [joinCode, setJoinCode] = useState('');
+  const [playerName, setPlayerName] = useState(
+    () => (typeof localStorage !== 'undefined' && localStorage.getItem('apex_player_name')) || ''
+  );
+
+  const myName = () => {
+    const n = playerName.trim() || 'Player';
+    try { localStorage.setItem('apex_player_name', n); } catch (_) { /* private mode */ }
+    return n;
+  };
 
   return (
     <div style={overlay}>
@@ -43,6 +60,10 @@ export function MainMenu({ worlds, onPlay, onCreate, onDelete, onHome }) {
                 <div style={{ fontSize: 12, opacity: 0.55 }}>seed {w.seed} · {fmtDate(w.lastPlayed)}</div>
               </div>
               <button style={btn} onClick={() => onPlay(w)}>Play</button>
+              {onHost && (
+                <button style={btnBlue} disabled={netBusy} onClick={() => onHost(w, myName())}
+                  title="Host this world so friends can join">Host</button>
+              )}
               <button style={btnGrey} onClick={() => onDelete(w)} title="Delete world">✕</button>
             </div>
           ))}
@@ -53,11 +74,42 @@ export function MainMenu({ worlds, onPlay, onCreate, onDelete, onHome }) {
             value={name}
             onChange={(e) => setName(e.target.value)}
             placeholder="New world name"
-            style={{ flex: 1, padding: '8px 10px', borderRadius: 4, border: '1px solid #444', background: '#111', color: '#eee', font: '15px system-ui' }}
+            style={{ ...input, flex: 1 }}
             onKeyDown={(e) => { if (e.key === 'Enter' && name.trim()) { onCreate(name.trim()); setName(''); } }}
           />
           <button style={btn} onClick={() => { if (name.trim()) { onCreate(name.trim()); setName(''); } }}>Create</button>
         </div>
+
+        {onJoin && (
+          <div style={{ marginTop: 18, paddingTop: 14, borderTop: '1px solid #2a2d33' }}>
+            <div style={{ fontWeight: 600, marginBottom: 8 }}>
+              Multiplayer
+              <span style={{ fontWeight: 400, opacity: 0.55 }}> — host a world above, or join a friend</span>
+            </div>
+            <div style={{ display: 'flex', gap: 8 }}>
+              <input
+                value={playerName}
+                onChange={(e) => setPlayerName(e.target.value)}
+                placeholder="Your name"
+                maxLength={16}
+                style={{ ...input, width: 110 }}
+              />
+              <input
+                value={joinCode}
+                onChange={(e) => setJoinCode(e.target.value.toUpperCase())}
+                placeholder="Room code"
+                maxLength={5}
+                style={{ ...input, flex: 1, textTransform: 'uppercase', letterSpacing: 2 }}
+                onKeyDown={(e) => { if (e.key === 'Enter' && joinCode.trim()) onJoin(joinCode.trim(), myName()); }}
+              />
+              <button style={btnBlue} disabled={netBusy}
+                onClick={() => { if (joinCode.trim()) onJoin(joinCode.trim(), myName()); }}>
+                {netBusy ? '…' : 'Join'}
+              </button>
+            </div>
+            {netError && <div style={{ marginTop: 8, color: '#ff9b8a', fontSize: 13 }}>{netError}</div>}
+          </div>
+        )}
       </div>
     </div>
   );

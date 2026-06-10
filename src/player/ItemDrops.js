@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { isSolid } from '../blocks/BlockRegistry.js';
 import { getItem } from '../items/ItemRegistry.js';
 import { Sound } from '../systems/Sound.js';
+import { dropPlateGeometry, plateMaterial, buildBlockCube, buildTorchModel } from '../items/ItemModels.js';
 
 const SIZE = 0.28;
 const COLLECT_RANGE = 1.5;
@@ -9,33 +10,29 @@ const COLLECT_RANGE_SQ = COLLECT_RANGE * COLLECT_RANGE;
 const GRAVITY = 18;
 const MAX_AGE = 300; // seconds before a drop despawns
 
-// Manages free-floating item entities: small cubes that fall to the ground,
-// bob + spin, and auto-collect when the player gets close. Collected items are
-// reported via onCollect(itemName, count) — currently a simple counter store,
-// later the real inventory (Phase 3).
+// Manages free-floating item entities that fall to the ground, bob + spin, and
+// auto-collect when the player gets close. Drops use real item models: block
+// items are mini textured cubes, everything else is its icon extruded into a
+// spinning plate (geometry/materials are shared caches — never disposed here).
 export class ItemDrops {
   constructor(world, scene) {
     this.world = world;
     this.scene = scene;
     this.drops = [];
-    this.geometry = new THREE.BoxGeometry(SIZE, SIZE, SIZE);
-    this.materials = new Map(); // item color -> material
     this.onCollect = null;
   }
 
-  _material(item) {
-    const color = (item && item.color) || '#ffffff';
-    if (!this.materials.has(color)) {
-      this.materials.set(color, new THREE.MeshLambertMaterial({ color }));
-    }
-    return this.materials.get(color);
+  _model(item) {
+    if (item.placeBlock === 'torch') return buildTorchModel(0.7);
+    if (item.placeBlock) return buildBlockCube(item.placeBlock, 0.26, true); // shared geo
+    return new THREE.Mesh(dropPlateGeometry(item.name, 0.4), plateMaterial());
   }
 
   // Spawn a drop at a block-center world position.
   spawn(itemName, count, x, y, z) {
     const item = getItem(itemName);
     if (!item) return;
-    const mesh = new THREE.Mesh(this.geometry, this._material(item));
+    const mesh = this._model(item);
     mesh.position.set(x + 0.5, y + 0.4, z + 0.5);
     this.scene.add(mesh);
     this.drops.push({

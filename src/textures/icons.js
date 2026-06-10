@@ -1,112 +1,366 @@
 import { getItem } from '../items/ItemRegistry.js';
-import { FACE_TILES, tileDataURL } from './atlas.js';
+import { FACE_TILES, tileCanvas } from './atlas.js';
 
-// Item icons for the HUD/inventory. Block items reuse their block tile; other
-// items get a small procedural icon by category. Cached as data URLs.
-const cache = new Map();
+// Item icons for the HUD/inventory, drawn as 16x16 pixel art. Block items
+// reuse their block tile; everything else gets a hand-shaped silhouette by
+// name/category, finished with shared outline + bevel passes so the whole set
+// reads consistently. The same canvases are extruded into the 3D held-item
+// and dropped-item models (see items/ItemModels.js), so this art IS the model.
+
+const S = 16;
+const canvasCache = new Map(); // name -> canvas
+const urlCache = new Map();    // name -> dataURL
 
 function rgb(hex) {
   const n = parseInt((hex || '#cccccc').slice(1), 16);
   return [(n >> 16) & 255, (n >> 8) & 255, n & 255];
 }
+const hexOf = (r, g, b) =>
+  `#${((1 << 24) | (Math.max(0, Math.min(255, r | 0)) << 16) | (Math.max(0, Math.min(255, g | 0)) << 8) | Math.max(0, Math.min(255, b | 0))).toString(16).slice(1)}`;
+const shade = (hex, f) => { const [r, g, b] = rgb(hex); return hexOf(r * f, g * f, b * f); };
+const lighten = (hex, t) => { const [r, g, b] = rgb(hex); return hexOf(r + (255 - r) * t, g + (255 - g) * t, b + (255 - b) * t); };
 
 function newCanvas() {
   const c = document.createElement('canvas');
-  c.width = c.height = 16;
+  c.width = c.height = S;
   return c;
 }
-const set = (ctx, x, y, hex, a = 1) => { ctx.fillStyle = hexA(hex, a); ctx.fillRect(x, y, 1, 1); };
-const hexA = (hex, a) => { const [r, g, b] = rgb(hex); return `rgba(${r},${g},${b},${a})`; };
-const darker = (hex, f) => { const [r, g, b] = rgb(hex); return `rgb(${(r * f) | 0},${(g * f) | 0},${(b * f) | 0})`; };
+const px = (ctx, x, y, hex) => { ctx.fillStyle = hex; ctx.fillRect(x | 0, y | 0, 1, 1); };
 
-function drawPickaxe(ctx, color) {
-  // Brown handle, diagonal.
-  for (let i = 0; i < 8; i++) set(ctx, 5 + i, 12 - i, '#6b4f2a');
-  // Head across the top.
-  ctx.fillStyle = color;
-  ctx.fillRect(3, 3, 10, 2);
-  ctx.fillRect(3, 3, 2, 3);
-  ctx.fillRect(11, 3, 2, 3);
-  ctx.fillStyle = 'rgba(255,255,255,0.25)';
-  ctx.fillRect(3, 3, 10, 1);
+const alphaAt = (data, x, y) =>
+  x >= 0 && x < S && y >= 0 && y < S ? data[(y * S + x) * 4 + 3] : 0;
+
+// Bevel: lighten pixels whose top/left neighbour is empty, darken those whose
+// bottom/right neighbour is empty — instant chunky-pixel depth.
+function bevelPass(ctx) {
+  const img = ctx.getImageData(0, 0, S, S);
+  const d = img.data;
+  const src = new Uint8ClampedArray(d); // read from a copy
+  for (let y = 0; y < S; y++) {
+    for (let x = 0; x < S; x++) {
+      const i = (y * S + x) * 4;
+      if (src[i + 3] < 120) continue;
+      const lit = alphaAt(src, x, y - 1) < 120 || alphaAt(src, x - 1, y) < 120;
+      const dim = alphaAt(src, x, y + 1) < 120 || alphaAt(src, x + 1, y) < 120;
+      if (lit && !dim) { d[i] = Math.min(255, src[i] * 1.28 + 18); d[i + 1] = Math.min(255, src[i + 1] * 1.28 + 18); d[i + 2] = Math.min(255, src[i + 2] * 1.28 + 18); }
+      else if (dim && !lit) { d[i] = src[i] * 0.72; d[i + 1] = src[i + 1] * 0.72; d[i + 2] = src[i + 2] * 0.72; }
+    }
+  }
+  ctx.putImageData(img, 0, 0);
 }
 
+// Outline: dark rim on every empty pixel that touches the silhouette.
+function outlinePass(ctx, hex = '#241a10') {
+  const img = ctx.getImageData(0, 0, S, S);
+  const d = img.data;
+  const src = new Uint8ClampedArray(d);
+  const [r, g, b] = rgb(hex);
+  for (let y = 0; y < S; y++) {
+    for (let x = 0; x < S; x++) {
+      const i = (y * S + x) * 4;
+      if (src[i + 3] >= 120) continue;
+      if (alphaAt(src, x - 1, y) >= 120 || alphaAt(src, x + 1, y) >= 120 ||
+          alphaAt(src, x, y - 1) >= 120 || alphaAt(src, x, y + 1) >= 120) {
+        d[i] = r; d[i + 1] = g; d[i + 2] = b; d[i + 3] = 230;
+      }
+    }
+  }
+  ctx.putImageData(img, 0, 0);
+}
+
+const WOOD = '#7a5733', WOOD_D = '#5d4023';
+
+// ---- Tools (handle runs ↗ bottom-left to top-right; head at the top) ----
+
 function drawSword(ctx, color) {
-  for (let i = 0; i < 4; i++) { set(ctx, 11 - i, 11 - i, '#6b4f2a'); } // handle
-  ctx.fillStyle = '#888'; ctx.fillRect(8, 9, 3, 3); // guard
-  ctx.fillStyle = color; // blade
-  for (let i = 0; i < 8; i++) ctx.fillRect(5 - i / 2 | 0, 8 - i, 2 + (i < 2 ? 0 : 1), 1);
-  ctx.fillStyle = color; ctx.fillRect(3, 2, 3, 6);
-  ctx.fillStyle = 'rgba(255,255,255,0.3)'; ctx.fillRect(3, 2, 1, 6);
+  const edge = lighten(color, 0.5), dark = shade(color, 0.7);
+  // Blade: 2px-wide diagonal from the guard to the tip.
+  for (let i = 0; i < 9; i++) {
+    px(ctx, 6 + i, 9 - i, dark);       // spine
+    px(ctx, 7 + i, 9 - i, color);      // body
+    px(ctx, 7 + i, 8 - i, edge);       // bright cutting edge
+  }
+  px(ctx, 15, 0, edge); // tip
+  // Guard: short perpendicular bar.
+  px(ctx, 4, 9, '#8a8f96'); px(ctx, 5, 10, '#8a8f96'); px(ctx, 6, 11, '#8a8f96');
+  px(ctx, 5, 8, '#b9bec4'); px(ctx, 6, 9, '#b9bec4'); px(ctx, 7, 10, '#b9bec4');
+  // Handle + pommel.
+  px(ctx, 4, 11, WOOD); px(ctx, 3, 12, WOOD); px(ctx, 2, 13, WOOD_D);
+  px(ctx, 1, 14, '#3c2c16'); px(ctx, 2, 14, '#3c2c16'); px(ctx, 1, 13, '#3c2c16');
+}
+
+function drawPickaxe(ctx, color) {
+  const dark = shade(color, 0.72);
+  // Handle.
+  for (let i = 0; i < 9; i++) px(ctx, 4 + i, 13 - i, i > 6 ? WOOD_D : WOOD);
+  // Curved head: a bar arcing across the top with prongs dipping down.
+  const head = [
+    [4, 5], [4, 6], [4, 7], [5, 4], [5, 5], [6, 3], [6, 4], [7, 3], [8, 2], [9, 2],
+    [10, 2], [11, 3], [12, 3], [12, 4], [13, 5], [13, 6],
+  ];
+  for (const [x, y] of head) px(ctx, x, y, color);
+  px(ctx, 4, 8, dark); px(ctx, 13, 7, dark); // prong tips
+  px(ctx, 8, 3, dark); px(ctx, 9, 3, dark);  // underside of the arc
 }
 
 function drawAxe(ctx, color) {
-  for (let i = 0; i < 9; i++) set(ctx, 6 + i * 0.3 | 0, 13 - i, '#6b4f2a'); // handle
-  ctx.fillStyle = color; // head
-  ctx.fillRect(6, 2, 6, 6); ctx.fillRect(4, 3, 2, 4);
-  ctx.fillStyle = 'rgba(255,255,255,0.25)'; ctx.fillRect(6, 2, 6, 1);
+  const edge = lighten(color, 0.45), dark = shade(color, 0.72);
+  for (let i = 0; i < 10; i++) px(ctx, 3 + i, 14 - i, i > 7 ? WOOD_D : WOOD); // handle
+  // Head: blade hanging left of the handle top.
+  for (let y = 2; y <= 7; y++) {
+    for (let x = 6; x <= 10; x++) {
+      if (y === 2 && x < 8) continue;       // shoulder cut
+      if (y === 7 && x < 7) continue;
+      px(ctx, x, y, x >= 10 ? dark : color);
+    }
+  }
+  for (let y = 3; y <= 6; y++) px(ctx, 5, y, edge); // cutting edge
+  px(ctx, 6, 2, edge);
 }
 
 function drawShovel(ctx, color) {
-  for (let i = 0; i < 7; i++) set(ctx, 11 - i, 11 - i, '#6b4f2a'); // handle
-  ctx.fillStyle = color; // scoop
-  ctx.fillRect(2, 2, 5, 6); ctx.fillRect(3, 8, 3, 1);
-  ctx.fillStyle = 'rgba(255,255,255,0.3)'; ctx.fillRect(2, 2, 5, 1);
+  const edge = lighten(color, 0.4);
+  for (let i = 0; i < 8; i++) px(ctx, 6 + i, 13 - i, i > 5 ? WOOD_D : WOOD); // handle
+  // Scoop at the top-left.
+  for (let y = 2; y <= 6; y++) {
+    for (let x = 2; x <= 6; x++) {
+      if ((x === 2 || x === 6) && y > 4) continue; // round the bottom
+      if (x === 2 && y === 2) continue;            // round the corners
+      if (x === 6 && y === 2) continue;
+      px(ctx, x, y, color);
+    }
+  }
+  px(ctx, 3, 7, color); px(ctx, 4, 7, color); px(ctx, 5, 7, color);
+  px(ctx, 4, 8, color);
+  px(ctx, 3, 2, edge); px(ctx, 4, 2, edge); px(ctx, 5, 2, edge); // top lip
 }
 
 function drawBow(ctx) {
-  ctx.strokeStyle = '#8a6a36'; ctx.lineWidth = 2;
-  ctx.beginPath(); ctx.arc(5, 8, 7, -1.0, 1.0); ctx.stroke(); // wooden arc
-  ctx.strokeStyle = '#eeeeee'; ctx.lineWidth = 1;
-  ctx.beginPath(); ctx.moveTo(9, 2); ctx.lineTo(9, 14); ctx.stroke(); // string
+  const wood = '#8a6a36', dark = '#6b4f24', grip = '#4a3018';
+  // Upper and lower limbs: a recurve opening to the right.
+  const limb = [
+    [4, 1], [5, 1], [6, 2], [7, 3], [7, 4], [8, 5], [8, 6],
+  ];
+  for (const [x, y] of limb) { px(ctx, x, y, wood); px(ctx, x, 15 - y, wood); }
+  px(ctx, 8, 7, grip); px(ctx, 8, 8, grip); // wrapped grip
+  px(ctx, 3, 2, dark); px(ctx, 3, 13, dark); // nocks
+  for (let y = 2; y <= 13; y++) px(ctx, 3, y, y <= 2 || y >= 13 ? dark : '#e8e8e8'); // string
 }
 
 function drawArrow(ctx) {
-  ctx.strokeStyle = '#8a7a5a'; ctx.lineWidth = 1;
-  ctx.beginPath(); ctx.moveTo(3, 13); ctx.lineTo(12, 4); ctx.stroke(); // shaft
-  ctx.fillStyle = '#d8d8d8'; ctx.fillRect(11, 2, 3, 3);                // head
-  ctx.fillStyle = '#dddddd'; ctx.fillRect(2, 11, 3, 1); ctx.fillRect(2, 12, 1, 2); // fletching
+  for (let i = 0; i < 8; i++) px(ctx, 4 + i, 11 - i, '#9a7d4e'); // shaft
+  px(ctx, 13, 2, '#d8dde2'); px(ctx, 12, 2, '#d8dde2'); px(ctx, 13, 3, '#d8dde2'); // head
+  px(ctx, 14, 1, '#eef2f6');
+  px(ctx, 3, 12, '#e8e8e8'); px(ctx, 2, 13, '#e8e8e8'); px(ctx, 4, 13, '#cfcfcf'); // fletching
+  px(ctx, 3, 14, '#cfcfcf'); px(ctx, 2, 12, '#cfcfcf');
 }
 
-function drawFood(ctx, color) {
-  ctx.fillStyle = color;
-  ctx.beginPath(); ctx.arc(8, 9, 5.2, 0, Math.PI * 2); ctx.fill();
-  ctx.fillStyle = 'rgba(255,255,255,0.3)'; ctx.fillRect(5, 5, 2, 2);
+// ---- Food & materials ----
+
+function drawApple(ctx, color) {
+  const body = color || '#d63a2e';
+  const dark = shade(body, 0.78);
+  for (let y = 5; y <= 12; y++) {
+    for (let x = 4; x <= 11; x++) {
+      const dx = x - 7.5, dy = y - 8.5;
+      if (dx * dx / 16 + dy * dy / 13 > 1) continue;
+      px(ctx, x, y, x > 8 ? dark : body);
+    }
+  }
+  px(ctx, 7, 4, body); px(ctx, 8, 4, dark);      // shoulders
+  px(ctx, 8, 3, '#5d4023'); px(ctx, 8, 2, '#5d4023'); // stem
+  px(ctx, 9, 2, '#4f8a30'); px(ctx, 10, 2, '#6aa83e'); // leaf
+  px(ctx, 5, 6, lighten(body, 0.55)); px(ctx, 6, 6, lighten(body, 0.4)); px(ctx, 5, 7, lighten(body, 0.35)); // shine
+}
+
+function drawMeat(ctx, color) {
+  const body = color, fat = lighten(color, 0.55), dark = shade(color, 0.75);
+  // Chop: rounded slab with a fat cap along the top edge.
+  for (let y = 4; y <= 12; y++) {
+    for (let x = 3; x <= 12; x++) {
+      const dx = x - 7.5, dy = y - 8;
+      if (dx * dx / 24 + dy * dy / 18 > 1) continue;
+      px(ctx, x, y, y > 9 ? dark : body);
+    }
+  }
+  for (let x = 4; x <= 11; x++) { const dy = Math.abs(x - 7.5) > 2.5 ? 5 : 4; px(ctx, x, dy, fat); }
+  px(ctx, 6, 8, dark); px(ctx, 7, 8, dark); // marbling
+}
+
+function drawDrumstick(ctx, color) {
+  const body = color, dark = shade(color, 0.75);
+  // Meaty end at the top-left.
+  for (let y = 3; y <= 9; y++) {
+    for (let x = 3; x <= 9; x++) {
+      const dx = x - 6, dy = y - 6;
+      if (dx * dx + dy * dy > 11) continue;
+      px(ctx, x, y, dx > 1 ? dark : body);
+    }
+  }
+  px(ctx, 9, 9, '#e8e2d4'); px(ctx, 10, 10, '#e8e2d4'); px(ctx, 11, 11, '#e8e2d4'); // bone
+  px(ctx, 12, 12, '#f4f0e6'); px(ctx, 13, 11, '#f4f0e6'); // knob
+  px(ctx, 11, 13, '#f4f0e6'); px(ctx, 12, 13, '#ffffff');
+}
+
+function drawFeather(ctx) {
+  // Quill spine with barbs sweeping up-right.
+  for (let i = 0; i < 10; i++) px(ctx, 3 + i, 13 - i, i < 3 ? '#caa86a' : '#e8ecf2');
+  for (let i = 2; i < 9; i++) {
+    px(ctx, 3 + i, 12 - i, '#f4f7fb');
+    px(ctx, 4 + i, 13 - i + 1, '#cdd4dd');
+    if (i > 3) px(ctx, 2 + i, 12 - i, '#dfe5ec');
+  }
+  px(ctx, 13, 2, '#ffffff');
+}
+
+function drawBone(ctx) {
+  const b = '#ece8da', d = '#c9c4b2';
+  for (let i = 0; i < 7; i++) px(ctx, 5 + i, 10 - i, i % 2 ? b : '#f6f3e9'); // shaft
+  // Knobs at both ends.
+  px(ctx, 3, 11, b); px(ctx, 4, 11, b); px(ctx, 3, 12, b); px(ctx, 4, 12, d);
+  px(ctx, 4, 10, b); px(ctx, 5, 12, d); px(ctx, 3, 10, '#f6f3e9');
+  px(ctx, 12, 3, b); px(ctx, 13, 3, '#f6f3e9'); px(ctx, 12, 4, d); px(ctx, 13, 4, b);
+  px(ctx, 11, 3, b); px(ctx, 13, 2, '#f6f3e9'); px(ctx, 12, 2, b); px(ctx, 11, 5, d);
+}
+
+function drawIngot(ctx, color) {
+  const top = lighten(color, 0.45), side = shade(color, 0.7);
+  // Classic trapezoid bar.
+  for (let y = 6; y <= 10; y++) {
+    const inset = 10 - y; // wider at the bottom
+    for (let x = 2 + inset; x <= 13 - Math.floor(inset / 2); x++) px(ctx, x, y, color);
+  }
+  for (let x = 6; x <= 13; x++) px(ctx, x, 6, top);     // lit top face
+  for (let x = 2; x <= 12; x++) px(ctx, x, 10, side);   // base shadow
+  px(ctx, 7, 7, top); px(ctx, 8, 7, top);               // glint
+}
+
+function drawGem(ctx, color) {
+  const lite = lighten(color, 0.55), dark = shade(color, 0.7);
+  for (let y = 4; y <= 12; y++) {
+    for (let x = 4; x <= 12; x++) {
+      const d = Math.abs(x - 8) + Math.abs(y - 8);
+      if (d > 4) continue;
+      px(ctx, x, y, d <= 1 ? lite : x + y < 16 ? color : dark);
+    }
+  }
+  px(ctx, 7, 6, '#ffffff'); // sparkle
+}
+
+function drawLump(ctx, color) {
+  const dark = shade(color, 0.7), lite = lighten(color, 0.25);
+  const blobs = [[6, 7, 2.6], [9, 9, 2.2], [8, 6, 1.8]];
+  for (const [cx, cy, r] of blobs) {
+    for (let y = cy - r; y <= cy + r; y++) {
+      for (let x = cx - r; x <= cx + r; x++) {
+        if ((x - cx) ** 2 + (y - cy) ** 2 > r * r) continue;
+        px(ctx, x, y, x < cx ? color : dark);
+      }
+    }
+  }
+  px(ctx, 5, 6, lite); px(ctx, 6, 5, lite);
+}
+
+function drawString(ctx) {
+  const s = '#e8e4da', d = '#c4beae';
+  // Loose coil with a trailing end.
+  const ring = [[6, 4], [7, 3], [8, 3], [9, 4], [10, 5], [10, 6], [10, 7], [9, 8], [8, 9], [7, 9], [6, 8], [5, 7], [5, 6], [5, 5]];
+  for (const [x, y] of ring) px(ctx, x, y, s);
+  px(ctx, 7, 6, d); px(ctx, 8, 6, d);
+  px(ctx, 8, 10, s); px(ctx, 9, 11, d); px(ctx, 10, 12, s); px(ctx, 11, 13, d);
+}
+
+function drawWool(ctx, color) {
+  const body = color || '#eeeeee', dark = shade(body, 0.82);
+  for (let y = 4; y <= 12; y++) {
+    for (let x = 3; x <= 12; x++) {
+      // Scalloped fluffy edges.
+      const e = (x === 3 || x === 12 || y === 4 || y === 12) && (x + y) % 2 === 0;
+      if (e) continue;
+      px(ctx, x, y, (x + y) % 3 === 0 ? dark : body);
+    }
+  }
+}
+
+function drawLeather(ctx, color) {
+  const body = color || '#a3683c', dark = shade(body, 0.75);
+  // A hide: rounded square with notched corners.
+  for (let y = 4; y <= 12; y++) {
+    for (let x = 3; x <= 12; x++) {
+      if ((x <= 4 && y <= 5) || (x >= 11 && y <= 5)) continue; // shoulder notches
+      if ((x <= 3 && y >= 11) || (x >= 12 && y >= 11)) continue;
+      px(ctx, x, y, y > 9 ? dark : body);
+    }
+  }
+  px(ctx, 6, 7, dark); px(ctx, 9, 8, dark); // creases
+}
+
+function drawStick(ctx) {
+  for (let i = 0; i < 9; i++) {
+    px(ctx, 4 + i, 12 - i, WOOD);
+    if (i % 3 === 1) px(ctx, 5 + i, 12 - i, WOOD_D);
+  }
 }
 
 function drawNugget(ctx, color) {
-  ctx.fillStyle = darker(color, 0.6);
-  ctx.fillRect(3, 4, 11, 9);
-  ctx.fillStyle = color;
-  ctx.fillRect(4, 5, 9, 7);
-  ctx.fillStyle = 'rgba(255,255,255,0.35)';
-  ctx.fillRect(5, 6, 4, 2);
+  const dark = shade(color, 0.65);
+  for (let y = 5; y <= 11; y++) for (let x = 4; x <= 11; x++) px(ctx, x, y, y > 8 ? dark : color);
+  px(ctx, 5, 6, lighten(color, 0.4)); px(ctx, 6, 6, lighten(color, 0.3));
 }
+
+const MEATS = new Set(['raw_porkchop', 'cooked_porkchop', 'raw_beef', 'cooked_beef', 'raw_mutton', 'cooked_mutton', 'rotten_flesh']);
+const GEMS = new Set(['diamond', 'emerald', 'lapis', 'redstone']);
+const LUMPS = new Set(['coal', 'charcoal', 'raw_iron', 'raw_gold', 'clay_ball']);
 
 function drawItem(def) {
   const c = newCanvas();
   const ctx = c.getContext('2d');
   const color = def?.color || '#cccccc';
-  if (def?.name === 'bow') drawBow(ctx);
-  else if (def?.name === 'arrow') drawArrow(ctx);
+  const name = def?.name || '';
+
+  if (name === 'bow') drawBow(ctx);
+  else if (name === 'arrow') drawArrow(ctx);
+  else if (name === 'stick') drawStick(ctx);
+  else if (name === 'apple') drawApple(ctx, color);
+  else if (name === 'raw_chicken' || name === 'cooked_chicken') drawDrumstick(ctx, color);
+  else if (MEATS.has(name)) drawMeat(ctx, color);
+  else if (name === 'feather') drawFeather(ctx);
+  else if (name === 'bone') drawBone(ctx);
+  else if (name === 'string') drawString(ctx);
+  else if (name === 'wool') drawWool(ctx, color);
+  else if (name === 'leather') drawLeather(ctx, color);
+  else if (name.endsWith('_ingot')) drawIngot(ctx, color);
+  else if (GEMS.has(name)) drawGem(ctx, color);
+  else if (LUMPS.has(name)) drawLump(ctx, color);
   else if (def?.toolType === 'sword') drawSword(ctx, color);
   else if (def?.toolType === 'axe') drawAxe(ctx, color);
   else if (def?.toolType === 'shovel') drawShovel(ctx, color);
   else if (def?.toolType) drawPickaxe(ctx, color);
-  else if (def?.food) drawFood(ctx, color);
+  else if (def?.food) drawApple(ctx, color);
   else drawNugget(ctx, color);
-  return c.toDataURL();
+
+  bevelPass(ctx);
+  outlinePass(ctx);
+  return c;
+}
+
+// The icon as a canvas — also the source the 3D item models are extruded from.
+export function itemIconCanvas(name) {
+  if (canvasCache.has(name)) return canvasCache.get(name);
+  const def = getItem(name);
+  let canvas;
+  if (def && def.placeBlock && FACE_TILES[def.placeBlock]) {
+    canvas = tileCanvas(FACE_TILES[def.placeBlock].side);
+  } else {
+    canvas = drawItem(def);
+  }
+  canvasCache.set(name, canvas);
+  return canvas;
 }
 
 export function itemIconURL(name) {
-  if (cache.has(name)) return cache.get(name);
-  const def = getItem(name);
-  let url = null;
-  if (def && def.placeBlock && FACE_TILES[def.placeBlock]) {
-    url = tileDataURL(FACE_TILES[def.placeBlock].side);
-  } else {
-    url = drawItem(def);
-  }
-  cache.set(name, url);
+  if (urlCache.has(name)) return urlCache.get(name);
+  const url = itemIconCanvas(name).toDataURL();
+  urlCache.set(name, url);
   return url;
 }

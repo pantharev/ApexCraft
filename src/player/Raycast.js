@@ -1,8 +1,9 @@
-import { isSolid } from '../blocks/BlockRegistry.js';
+import { isSolid, getBlock } from '../blocks/BlockRegistry.js';
 
 // Amanatides & Woo voxel traversal: step a ray through the grid cell-by-cell
-// and stop at the first solid block. Returns the hit block coordinates plus the
-// empty cell just before it (where a new block would be placed), or null.
+// and stop at the first targetable block — solid, or a plant (flowers/grass
+// have no collision but can still be broken). Returns the hit block
+// coordinates plus the empty cell just before it (for placement), or null.
 export function raycastVoxel(world, origin, dir, maxDist = 6) {
   let x = Math.floor(origin.x);
   let y = Math.floor(origin.y);
@@ -29,7 +30,8 @@ export function raycastVoxel(world, origin, dir, maxDist = 6) {
 
   let t = 0;
   while (t <= maxDist) {
-    if (isSolid(world.getBlock(x, y, z))) {
+    const id = world.getBlock(x, y, z);
+    if (isSolid(id) || getBlock(id).plant) {
       return {
         block: { x, y, z },
         place: { x: x + face[0], y: y + face[1], z: z + face[2] },

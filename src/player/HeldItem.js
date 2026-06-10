@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { itemIconCanvas } from '../textures/icons.js';
 import { extrudeCanvas, plateMaterial, buildBlockCube, buildTorchModel } from '../items/ItemModels.js';
+import { getBlock, getBlockId } from '../blocks/BlockRegistry.js';
 
 // First-person view-models for held items. Tools, food, and materials extrude
 // their own 16x16 icon into a voxel plate (so the sword in your hand IS the
@@ -33,8 +34,9 @@ export function buildHeldModel(item) {
     return group;
   }
 
-  // Other block items: textured mini cube of the actual block.
-  if (item.placeBlock) {
+  // Other block items: textured mini cube of the actual block. Cross-plants
+  // (flowers) fall through to the extruded plate — a flower cube looks wrong.
+  if (item.placeBlock && !getBlock(getBlockId(item.placeBlock)).plant) {
     const cube = buildBlockCube(item.placeBlock, 0.3);
     cube.rotation.y = 0.35; // show two faces
     group.add(cube);

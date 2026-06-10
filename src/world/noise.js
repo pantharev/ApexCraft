@@ -16,7 +16,8 @@ export function mulberry32(seed) {
 // Separate noise fields so terrain, climate and caves are independent. They are
 // (re)built by reseed() so each world can have its own seed.
 let terrainNoise, tempNoise, humidNoise, detailNoise, caveNoise, oreNoise, forestNoise,
-  continentNoise, riverNoise, mountainNoise, ridgeNoise, erosionNoise, warpXNoise, warpZNoise;
+  continentNoise, riverNoise, mountainNoise, ridgeNoise, erosionNoise, warpXNoise, warpZNoise,
+  caveBNoise, cavernNoise, riftNoise, riftMaskNoise;
 
 export function reseed(seed) {
   terrainNoise = createNoise2D(mulberry32(seed + 0));
@@ -33,6 +34,10 @@ export function reseed(seed) {
   erosionNoise = createNoise2D(mulberry32(seed + 1111));   // flat <-> rugged
   warpXNoise = createNoise2D(mulberry32(seed + 1212));     // domain warp offsets
   warpZNoise = createNoise2D(mulberry32(seed + 1313));
+  caveBNoise = createNoise3D(mulberry32(seed + 1414));     // second tunnel field
+  cavernNoise = createNoise3D(mulberry32(seed + 1515));    // big deep rooms
+  riftNoise = createNoise2D(mulberry32(seed + 1616));      // ravine centre lines
+  riftMaskNoise = createNoise2D(mulberry32(seed + 1717));  // where ravines occur
 }
 
 reseed(WORLD_SEED); // default world until a save selects its own seed
@@ -96,6 +101,14 @@ export const Noise = {
   // organic, swirling coastlines and ranges instead of round simplex blobs.
   warpX: (x, z) => fbm2D(warpXNoise, x, z, 2, 0.0035),
   warpZ: (x, z) => fbm2D(warpZNoise, x, z, 2, 0.0035),
+  // Second tunnel field: caves form where |cave| and |caveB| are BOTH small.
+  caveB: (x, y, z) => caveBNoise(x, y, z),
+  // Low-frequency room field for big caverns at depth.
+  cavern: (x, y, z) => cavernNoise(x, y, z),
+  // Ravines: |rift| near 0 traces a canyon centre line...
+  rift: (x, z) => fbm2D(riftNoise, x, z, 2, 0.004),
+  // ...but only inside rare regions where the mask runs high.
+  riftMask: (x, z) => fbm2D(riftMaskNoise, x, z, 2, 0.0011),
 };
 
 export { mulberry32 as seededRandom };

@@ -44,7 +44,8 @@ See [LICENSE](LICENSE) and [CLA.md](CLA.md) for full details.
 - **Procedural terrain** from a continuous, domain-warped heightfield: a *continental* field shapes organic coastlines and ocean shelves, an *erosion* field separates flat lowlands from rugged country, and **ridged-fBm mountain ranges** rise where a dedicated range mask says so — rolling, climbable, no cliff walls at biome borders.
 - **Biomes** from temperature + humidity (plains, desert, mountains, snowy, jungle, swamp) with organically dithered borders; **altitude takes over up high** — bare rock above the treeline, wandering snowlines on the peaks. Jungle spots grow tall two-tier trees.
 - **Oceans, lakes & rivers** — winding river channels whose width breathes along the course; varied sea floors (sand banks, gravel runs, clay pockets); beaches at the shore.
-- **Caves** carved with 3D noise, and **ore veins** (coal, iron, gold, redstone, lapis, diamond, emerald) placed by depth and rarity.
+- **A real underground**: winding **spaghetti tunnels** (two intersecting 3D fields) that surface as cave entrances, big **cheese caverns** at depth, and rare **rifts** — deep ravines that split the land open 15–40 blocks down. **Ore veins** (coal, iron, gold, redstone, lapis, diamond, emerald) placed by depth and rarity.
+- **Surface flora**: tall-grass meadows that thicken with humidity, rare **flower fields** of poppies and dandelions (pick + replant them), and **cacti** columns in the deserts.
 - **Trees** scattered only on grass, clumped by a *forest* noise field so you get dense woods and open plains both.
 - **Day/night cycle** with a moving sun and moon (sunrise in the east, set in the west), a **wheeling star dome** at night, glowing halos around the sun/moon, and **orange dawn/dusk skies** with warm horizon light.
 
@@ -59,7 +60,7 @@ See [LICENSE](LICENSE) and [CLA.md](CLA.md) for full details.
   - Mobs drop loot (meats, leather, bone, string, feather, wool, …). Cook meat in a furnace for more nourishment.
 
 ### Building & items
-- **Mining** with break-progress, tool-tier gating (wrong tier = no drop), and item-drop entities that you walk over to collect.
+- **Mining** with staged **crack textures** as the block breaks, tool-tier gating (wrong tier = no drop), and item-drop entities that you walk over to collect.
 - **Inventory** — 36 slots + hotbar, drag/stack/split with a cursor, item tooltips.
 - **Crafting** — 2×2 pocket grid plus a 3×3 crafting table (right-click a placed table). Shaped & shapeless recipes; shift-click to craft a full stack.
 - **Smelting** — place a furnace, add fuel + input; smelt ores into ingots, sand into glass, and raw meat into cooked food.

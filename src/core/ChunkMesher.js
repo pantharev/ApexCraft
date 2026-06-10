@@ -10,6 +10,9 @@ const WATER = getBlockId('water');
 const TORCH = getBlockId('torch'); // rendered as a separate stick mesh, not in the chunk
 const GRASS = getBlockId('grass');
 const LEAVES = getBlockId('oak_leaves');
+const TALL_GRASS = getBlockId('tall_grass');
+// Cross-plants render as two diagonal quads, not cubes.
+const PLANTS = new Set([TALL_GRASS, getBlockId('poppy'), getBlockId('dandelion')]);
 
 // Mask entries pack the block id with the face's 4-corner ambient-occlusion
 // pattern, so greedy merging only joins cells that shade identically (AO stays
@@ -146,7 +149,7 @@ export function buildChunkGeometry(chunk, worldGet) {
           for (let i = 0; i < du; i++) {
             cell[axis] = layer; cell[u] = i; cell[v] = j;
             const id = at(cell[0], cell[1], cell[2]);
-            if (id === 0 || id === TORCH) continue; // torches drawn separately
+            if (id === 0 || id === TORCH || PLANTS.has(id)) continue; // torches/plants drawn separately
             const nb = [cell[0], cell[1], cell[2]]; nb[axis] += dir;
             const neighbor = at(nb[0], nb[1], nb[2]);
             const block = getBlock(id);
@@ -206,5 +209,44 @@ export function buildChunkGeometry(chunk, worldGet) {
     }
   }
 
+  // Cross-plant pass: every plant cell becomes two diagonal quads (an X),
+  // double-sided cutout material, lit like the ground (up normal). Tall grass
+  // picks up the same climate tint as the turf under it.
+  for (let lx = 0; lx < CHUNK_SIZE; lx++) {
+    for (let lz = 0; lz < CHUNK_SIZE; lz++) {
+      for (let y = 1; y < WORLD_HEIGHT - 1; y++) {
+        const id = chunk.get(lx, y, lz);
+        if (!PLANTS.has(id)) continue;
+        const matIndex = faceMaterialIndex(id, 'side');
+        let buf = byMat.get(matIndex);
+        if (!buf) { buf = emptyBuf(); byMat.set(matIndex, buf); }
+        const wx = baseX + lx, wz = baseZ + lz;
+        const tint = id === TALL_GRASS ? climateTint(wx, wz) : [1, 1, 1];
+        pushCross(buf, wx, y, wz, tint);
+      }
+    }
+  }
+
   return { opaque: assembleGrouped(byMat), water: assembleSingle(water) };
+}
+
+// Two crossed quads spanning a cell's diagonals (slightly inset).
+function pushCross(buf, x, y, z, tint) {
+  const a = 0.15, b = 0.85;
+  const quads = [
+    [[x + a, z + a], [x + b, z + b]], // diagonal /
+    [[x + a, z + b], [x + b, z + a]], // diagonal \
+  ];
+  for (const [[x0, z0], [x1, z1]] of quads) {
+    const vi = buf.positions.length / 3;
+    const corners = [[x0, y, z0], [x1, y, z1], [x1, y + 1, z1], [x0, y + 1, z0]];
+    const uvs = [[0, 0], [1, 0], [1, 1], [0, 1]];
+    for (let k = 0; k < 4; k++) {
+      buf.positions.push(corners[k][0], corners[k][1], corners[k][2]);
+      buf.normals.push(0, 1, 0); // lit like the ground it grows from
+      buf.uvs.push(uvs[k][0], uvs[k][1]);
+      buf.colors.push(tint[0], tint[1], tint[2]);
+    }
+    buf.indices.push(vi, vi + 1, vi + 2, vi, vi + 2, vi + 3);
+  }
 }

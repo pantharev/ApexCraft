@@ -64,6 +64,21 @@ See [LICENSE](LICENSE) and [CLA.md](CLA.md) for full details.
 - **Smelting** — place a furnace, add fuel + input; smelt ores into ingots, sand into glass, and raw meat into cooked food.
 - **Recipe book** — a "Recipes" tab in the inventory, crafting table, and furnace screens lists every recipe with its ingredients (have/need), and one-click crafts anything you have materials for (shift-click crafts all).
 
+### Multiplayer (co-op)
+- **Host any of your worlds** from the title screen and share the 5-letter
+  **room code**; up to 8 friends can join your world live.
+- **Shared world**: block breaking/placing syncs instantly for everyone, and
+  late joiners receive the full edited world. The host's save persists all
+  changes.
+- **See each other**: blocky player avatars with name tags, smoothly
+  interpolated; everyone's arrows fly for all to see (no friendly fire).
+- **One simulation**: the host runs the mobs — they hunt whichever player is
+  nearest, and everyone can fight them. If the host leaves, another player
+  takes over automatically.
+- Runs on a small **Node.js + Express + Socket.IO** server (`npm run server`,
+  see [Getting started](#getting-started)). *Current limits: chest/furnace
+  contents and item drops are per-player, not synced.*
+
 ### Worlds & persistence
 - **Multiple worlds** — a title screen lists your saved worlds (create/play/
   delete); each world has its own random seed, so terrain differs per world.
@@ -117,7 +132,16 @@ npm install
 npm run dev      # start the dev server (http://localhost:5188)
 npm run build    # production build to dist/
 npm run preview  # preview the production build
+npm run server   # multiplayer server (http://localhost:3001) — optional
 ```
+
+**Multiplayer:** run `npm run server` alongside `npm run dev`, then use
+**Host** / **Join** on the title screen (on localhost the client finds the
+server on port 3001 automatically). To play over the internet, deploy the
+server to an always-on host (Railway/Render/Fly.io — Vercel can't hold
+WebSocket connections) and set `VITE_GAME_SERVER=https://your-server` when
+building the client; the server also serves `dist/` itself, so a single
+deploy can host both the game and its multiplayer.
 
 > **Note:** mouse-look uses the Pointer Lock API. If "Click to play" doesn't grab the mouse, open the game in a normal browser tab (not an embedded preview pane), which may block pointer lock.
 
@@ -139,7 +163,10 @@ src/
 ├── player/         # player physics, inventory, mining/placing, vitals, item drops
 ├── entities/       # mob types, models, and AI
 ├── systems/        # day/night cycle, mob spawning/management
+├── net/            # multiplayer client: connection, remote avatars, ghost mobs
 └── ui/             # React HUD, inventory/crafting/furnace screens
+
+server/             # multiplayer server (Express + Socket.IO rooms/relay)
 ```
 
 Blocks, items, recipes, and smelting are **data-driven** (JSON), so adding content is mostly editing data plus a sprite later.
@@ -171,7 +198,8 @@ MIT for the open-source core — see **[Licensing & Commercial Use](#-licensing-
 - More structures and biome variety; biome blending
 - Web-worker chunk generation, LOD
 - Ranged combat (skeleton arrows), more mobs
-- Multiplayer
+- Multiplayer polish: synced chests/furnaces/item drops, in-game chat,
+  client-side prediction
 
 ---
 

@@ -60,8 +60,12 @@ src/
 ├── player/     # physics, inventory, mining/placing, vitals, drops, slots
 ├── entities/   # mob types, models, AI
 ├── systems/    # day/night, mobs, projectiles, torch lights, sound, storage
+├── net/        # multiplayer client (Socket.IO, remote avatars, ghost mobs)
 ├── textures/   # procedural texture atlas + item icons
 └── ui/         # React HUD, menus, inventory/crafting/furnace/chest, touch
+
+server/         # multiplayer server (Express + Socket.IO) — `npm run server`,
+                # tests in server/test.js (CI runs them)
 ```
 
 Rendering is raw Three.js managed imperatively inside a React shell (chosen for

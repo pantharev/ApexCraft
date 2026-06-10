@@ -30,13 +30,15 @@ function placeCanopy(chunk, lx, top, lz, rand) {
   }
 }
 
-function placeTree(chunk, lx, surfaceY, lz, rand) {
-  const height = 4 + Math.floor(rand() * 3); // 4..6
+function placeTree(chunk, lx, surfaceY, lz, rand, tall = false) {
+  // Lush (jungle-ish) spots grow taller trees with a second canopy tier.
+  const height = (tall ? 6 : 4) + Math.floor(rand() * 3);
   const top = surfaceY + height;
   if (top + 2 >= WORLD_HEIGHT) return;
   chunk.set(lx, surfaceY, lz, DIRT); // grass turns to dirt under the trunk
   for (let y = surfaceY + 1; y <= top; y++) chunk.set(lx, y, lz, LOG);
   placeCanopy(chunk, lx, top, lz, rand);
+  if (tall) placeCanopy(chunk, lx, top - 3, lz, rand); // lower skirt of leaves
 }
 
 // Scatter oak trees across a chunk: only on grass, clumped by the forest noise
@@ -71,7 +73,9 @@ export function generateTrees(chunk) {
       }
       if (tooClose) continue;
 
-      placeTree(chunk, lx, surfaceY, lz, rand);
+      // Hot + humid columns (jungle) grow tall trees.
+      const tall = Noise.humidity(wx, wz) > 0.22 && Noise.temperature(wx, wz) > 0.3 && rand() < 0.7;
+      placeTree(chunk, lx, surfaceY, lz, rand, tall);
       placed.push([lx, lz]);
     }
   }

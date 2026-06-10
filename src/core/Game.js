@@ -12,9 +12,11 @@ import { DayNight } from '../systems/DayNight.js';
 import { MobManager } from '../systems/MobManager.js';
 import { TorchLights } from '../systems/TorchLights.js';
 import { Projectiles } from '../systems/Projectiles.js';
+import { Particles } from '../systems/Particles.js';
 import { RemotePlayers } from '../net/RemotePlayers.js';
 import { GhostMobs } from '../net/GhostMobs.js';
 import { Sound } from '../systems/Sound.js';
+import { blockAverageColor } from '../textures/atlas.js';
 import { saveWorld } from '../systems/Storage.js';
 import { WORLD_SEED } from '../config.js';
 import { getBlockId } from '../blocks/BlockRegistry.js';
@@ -121,6 +123,17 @@ export class Game {
     this.mobs = new MobManager(this.world, this.scene, this.itemDrops);
     this.torchLights = new TorchLights(this.scene, this.world);
     this.projectiles = new Projectiles(this.world, this.scene);
+    this.particles = new Particles(this.scene);
+    this._waterT = 0; // water texture scroll clock
+
+    // Every block edit: spray break particles (local AND remote breaks), and
+    // broadcast local edits in multiplayer (remote applies suppress the echo).
+    this.world.onEdit = (x, y, z, id, prev) => {
+      if (id === 0 && prev) {
+        this.particles.burst(x + 0.5, y + 0.5, z + 0.5, blockAverageColor(prev));
+      }
+      if (this.net && !this.net.applying) this.net.sendEdit(x, y, z, id);
+    };
 
     // Multiplayer: remote avatars, guest-side mob ghosts, and event wiring.
     this.remotePlayers = null;
@@ -129,9 +142,6 @@ export class Game {
       this.remotePlayers = new RemotePlayers(this.scene);
       this.ghostMobs = new GhostMobs(this.scene, net);
       for (const [id, p] of net.players) this.remotePlayers.add(id, p.name);
-
-      // Local edits broadcast; remote edits apply with the echo suppressed.
-      this.world.onEdit = (x, y, z, id) => { if (!net.applying) net.sendEdit(x, y, z, id); };
       net.onEdit = (x, y, z, id) => {
         net.applying = true;
         this.world.setBlock(x, y, z, id);
@@ -145,7 +155,10 @@ export class Game {
         this.projectiles.spawn(p.x, p.y, p.z, new THREE.Vector3(p.dx, p.dy, p.dz), p.speed, p.dmg || 0, p.target);
         Sound.shoot();
       };
-      net.onHitPlayer = (dmg) => this.vitals.damage(dmg);
+      net.onHitPlayer = (dmg, kx, kz) => {
+        this.vitals.damage(dmg);
+        if (kx || kz) this.player.knockback(kx, kz);
+      };
       net.onMobHit = (m) => { // a guest hit one of our simulated mobs
         const mob = this.mobs.byId(m.i);
         if (mob) { mob.takeDamage(m.dmg, new THREE.Vector3(m.x, m.y, m.z)); Sound.mobHurt(); }
@@ -462,9 +475,14 @@ export class Game {
           ? [{ id: 'self', pos: this.player.pos }, ...this.remotePlayers.list()]
           : null,
         isNight: this.dayNight.isNight,
-        attackPlayer: (dmg, id = 'self') => {
-          if (id === 'self' || !this.net) this.vitals.damage(dmg);
-          else this.net.sendHitPlayer(id, dmg); // melee hit on a remote player
+        attackPlayer: (dmg, id = 'self', kdir = null) => {
+          if (id === 'self' || !this.net) {
+            this.vitals.damage(dmg);
+            if (kdir) this.player.knockback(kdir.x, kdir.z);
+          } else {
+            // Melee hit on a remote player; they apply their own knockback.
+            this.net.sendHitPlayer(id, dmg, kdir);
+          }
         },
         shoot: (sx, sy, sz, dx, dy, dz, dmg) => {
           this.projectiles.spawn(sx, sy, sz, new THREE.Vector3(dx, dy, dz), 22, dmg, 'player');
@@ -476,7 +494,10 @@ export class Game {
     }
     this.projectiles.update(dt, {
       playerPos: this.player.pos,
-      hitPlayer: (dmg) => this.vitals.damage(dmg),
+      hitPlayer: (dmg, vel) => {
+        this.vitals.damage(dmg);
+        if (vel) this.player.knockback(vel.x, vel.z, 5); // ride the arrow's push
+      },
       mobs: this._mobApi(),
     });
 
@@ -500,6 +521,11 @@ export class Game {
         if (this._timeNetT >= 5) { this._timeNetT = 0; this.net.sendTime(this.dayNight.t); }
       }
     }
+    this.particles.update(dt);
+    // Drift the shared water texture for a gentle current.
+    this._waterT += dt;
+    const waterMap = this.world.waterMaterial.map;
+    waterMap.offset.set((this._waterT * 0.02) % 1, (this._waterT * 0.012) % 1);
     this.world.update(this.player.pos.x, this.player.pos.z, 3);
     this._animateHeld(dt);
     this.renderer.render(this.scene, this.camera);

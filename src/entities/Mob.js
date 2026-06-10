@@ -5,12 +5,22 @@ import { buildMobModel } from './MobModels.js';
 
 const GRAVITY = 26;
 const JUMP = 7;
+const TURN_SPEED = 9;     // body yaw easing (rad-ish/s factor)
+const HEAD_SPEED = 7;     // head look easing
+const DEATH_TIME = 0.6;   // tip-over + fade duration
 
 let nextId = 1;
 
+const wrapAngle = (a) => {
+  while (a > Math.PI) a -= Math.PI * 2;
+  while (a < -Math.PI) a += Math.PI * 2;
+  return a;
+};
+
 // A single mob: blocky model + simple physics (gravity, per-axis AABB
 // collision, auto-hop over 1-block steps) and lightweight AI. Passive mobs
-// wander and flee when hurt; hostile mobs chase and melee the player at night.
+// wander/graze and flee when hurt; hostile mobs hunt the player. Bodies turn
+// smoothly, heads track their target, and death plays a short tip-over.
 export class Mob {
   constructor(type, x, y, z) {
     this.id = nextId++;
@@ -23,6 +33,7 @@ export class Mob {
     this.pos = new THREE.Vector3(x, y, z);
     this.vel = new THREE.Vector3();
     this.yaw = 0;
+    this.targetYaw = 0;   // body eases toward this
     this.onGround = false;
 
     this.heading = null; // {x,z} unit, or null = idle
@@ -32,14 +43,23 @@ export class Mob {
     this.burnTimer = 0;
     this.walkPhase = 0;
     this.dead = false;
+    this.deathT = 0;        // death animation clock
+    this.deathHandled = false; // MobManager: loot + sound fired
     this.removed = false;
     this.hurtTimer = 0;     // red flash when damaged
     this.attackTimer = 0;   // lunge when attacking
     this._lungeDir = null;
+    this._deathSpin = Math.random() < 0.5 ? 1 : -1;
+
+    this.grazeTimer = 0;    // passive: head-down grazing
+    this.lookAt = null;     // world point the head tracks (or null)
 
     this.group = buildMobModel(type);
     this.legs = this.group.userData.legs || [];
-    this.parts = this.group.children.slice(); // part meshes (for hurt tint)
+    this.head = this.group.userData.head || null;
+    // Collect every mesh (including head sub-parts) for tint/fade effects.
+    this.parts = [];
+    this.group.traverse((o) => { if (o.isMesh) this.parts.push(o); });
     this.group.position.copy(this.pos);
   }
 
@@ -104,14 +124,37 @@ export class Mob {
     this.wanderTimer = 2 + Math.random() * 4;
     if (Math.random() < 0.35) {
       this.heading = null; // idle
+      // Idle passive mobs often dip their head to graze.
+      if (this.def.category === 'passive' && Math.random() < 0.55) {
+        this.grazeTimer = 1.2 + Math.random() * 1.6;
+      }
     } else {
       const a = Math.random() * Math.PI * 2;
       this.heading = { x: Math.sin(a), z: Math.cos(a) };
     }
   }
 
+  // Death: slump sideways, sink a little, fade out. Physics/AI stop.
+  _updateDeath(dt) {
+    this.deathT += dt;
+    const k = Math.min(1, this.deathT / DEATH_TIME);
+    const ease = k * k * (3 - 2 * k);
+    this.group.rotation.z = this._deathSpin * ease * (Math.PI / 2);
+    this.group.position.set(this.pos.x, this.pos.y + 0.15 - ease * 0.3, this.pos.z);
+    for (const p of this.parts) {
+      if (p.material) {
+        p.material.transparent = true;
+        p.material.opacity = 1 - ease;
+        p.material.depthWrite = false;
+      }
+    }
+    if (this.deathT >= DEATH_TIME) this.removed = true;
+  }
+
   update(dt, ctx) {
     this.world = ctx.world;
+    if (this.dead) { this._updateDeath(dt); return; }
+
     const player = ctx.playerPos;
     const def = this.def;
     this.attackCooldown = Math.max(0, this.attackCooldown - dt);
@@ -122,18 +165,21 @@ export class Mob {
     const dz = player.z - this.pos.z;
     const distSq = dx * dx + dz * dz;
 
+    this.lookAt = null;
+
     if (this.fleeTimer > 0) {
       this.fleeTimer -= dt;
       speed *= 1.6;
     } else if (def.category === 'hostile' && distSq < def.detect * def.detect) {
       const d = Math.sqrt(distSq) || 1;
+      this.lookAt = player; // hunters keep eye contact
 
       if (def.ranged) {
         // Archer: keep mid-range and fire arrows.
         if (d < 5) this.heading = { x: -dx / d, z: -dz / d };       // too close, back off
         else if (d > 11) this.heading = { x: dx / d, z: dz / d };   // far, close in
         else this.heading = null;                                  // good range, hold
-        this.yaw = Math.atan2(dx, dz);
+        this.targetYaw = Math.atan2(dx, dz);
         if (this.attackCooldown === 0 && ctx.shoot) {
           const sx = this.pos.x, sy = this.pos.y + 1.4, sz = this.pos.z;
           let ax = player.x - sx, ay = (player.y + 1.0) - sy, az = player.z - sz;
@@ -148,17 +194,21 @@ export class Mob {
         if (d < this.hw + 1.0 && Math.abs(dy) < 1.6) {
           this.heading = null;
           if (this.attackCooldown === 0 && ctx.attackPlayer) {
-            ctx.attackPlayer(def.attack);
+            ctx.attackPlayer(def.attack, this.pos); // pos -> knockback direction
             this.attackCooldown = 1;
             this.attackTimer = 0.25;          // visible lunge
             this._lungeDir = { x: dx / d, z: dz / d };
-            this.yaw = Math.atan2(dx, dz);    // face the player
+            this.targetYaw = Math.atan2(dx, dz); // face the player
           }
         }
       }
     } else {
       this.wanderTimer -= dt;
       if (this.wanderTimer <= 0) this._pickWander();
+      // Passive mobs glance at a nearby player out of curiosity.
+      if (def.category === 'passive' && distSq < 25 && this.grazeTimer <= 0) {
+        this.lookAt = player;
+      }
     }
 
     // Daylight burning for undead.
@@ -171,11 +221,15 @@ export class Mob {
     if (this.heading) {
       this.vel.x = this.heading.x * speed;
       this.vel.z = this.heading.z * speed;
-      this.yaw = Math.atan2(this.heading.x, this.heading.z);
+      this.targetYaw = Math.atan2(this.heading.x, this.heading.z);
+      this.grazeTimer = 0; // moving cancels grazing
     } else {
       this.vel.x *= 0.6;
       this.vel.z *= 0.6;
     }
+
+    // Body turns smoothly toward where it wants to face.
+    this.yaw += wrapAngle(this.targetYaw - this.yaw) * Math.min(1, dt * TURN_SPEED);
 
     this.vel.y -= GRAVITY * dt;
 
@@ -208,6 +262,25 @@ export class Mob {
     // Sync model + walk animation.
     this.group.position.copy(this.pos);
     this.group.rotation.y = this.yaw;
+
+    // Head look: track the target, graze, or settle back to neutral.
+    if (this.head) {
+      let hy = 0, hp = 0;
+      if (this.lookAt) {
+        const ldx = this.lookAt.x - this.pos.x, ldz = this.lookAt.z - this.pos.z;
+        hy = wrapAngle(Math.atan2(ldx, ldz) - this.yaw);
+        hy = Math.max(-1.0, Math.min(1.0, hy));
+        const eyeY = this.pos.y + this.head.position.y;
+        const ldy = (this.lookAt.y + 1.5) - eyeY;
+        hp = -Math.max(-0.5, Math.min(0.5, Math.atan2(ldy, Math.hypot(ldx, ldz) || 1)));
+      } else if (this.grazeTimer > 0) {
+        this.grazeTimer -= dt;
+        hp = 0.65; // muzzle to the grass
+      }
+      const k = Math.min(1, dt * HEAD_SPEED);
+      this.head.rotation.y += (hy - this.head.rotation.y) * k;
+      this.head.rotation.x += (hp - this.head.rotation.x) * k;
+    }
 
     // Attack lunge: nudge the model toward the player and back.
     if (this.attackTimer > 0 && this._lungeDir) {

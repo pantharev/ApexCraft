@@ -12,7 +12,8 @@ export const Biome = {
   SWAMP: 6,
 };
 
-// Per-biome generation parameters consumed by TerrainGen.
+// Per-biome generation parameters consumed by TerrainGen. Heights come from a
+// single continuous heightfield (see TerrainGen) — biomes only pick surfaces.
 export const BiomeParams = {
   [Biome.OCEAN]:     { base: SEA_LEVEL - 8, amp: 4,  surface: 'sand',  exponent: 1.0 },
   [Biome.PLAINS]:    { base: SEA_LEVEL + 4, amp: 8,  surface: 'grass', exponent: 1.0 },
@@ -24,19 +25,20 @@ export const BiomeParams = {
 };
 
 // Returns biome id for a world column from temperature + humidity climate maps.
-// The terrain height check for ocean happens in TerrainGen (below sea level).
+// A little high-frequency jitter is added to both axes so biome borders wander
+// and interlock organically instead of tracing smooth contour lines.
 export function getBiome(worldX, worldZ) {
-  const t = Noise.temperature(worldX, worldZ); // -1..1
-  const h = Noise.humidity(worldX, worldZ); // -1..1
+  const t = Noise.temperature(worldX, worldZ) + Noise.detail(worldX, worldZ, 0.02) * 0.07;
+  const h = Noise.humidity(worldX, worldZ) + Noise.detail(worldZ + 31, worldX - 17, 0.02) * 0.07;
 
   // Cold
   if (t < -0.3) {
     return h > 0 ? Biome.SNOWY : Biome.MOUNTAINS;
   }
-  // Warm
+  // Temperate
   if (t < 0.35) {
-    return h > 0 ? Biome.JUNGLE : Biome.PLAINS;
+    return h > 0 ? Biome.SWAMP : Biome.PLAINS;
   }
-  // Hot
-  return h > 0 ? Biome.SWAMP : Biome.DESERT;
+  // Hot: lush jungle when wet, desert when dry.
+  return h > 0 ? Biome.JUNGLE : Biome.DESERT;
 }

@@ -30,6 +30,7 @@ export class Player {
 
     this.pos = new THREE.Vector3(0, 80, 0); // feet position
     this.vel = new THREE.Vector3();
+    this.impulse = new THREE.Vector3(); // knockback push, decays over ~half a second
     this.yaw = 0;
     this.pitch = 0;
     this.targetYaw = 0; // raw input target; rendered yaw eases toward this
@@ -151,8 +152,13 @@ export class Player {
       if (this.inWater && !this._wasInWater) Sound.splash(); // entered water
 
       const speed = this.inWater ? SWIM_SPEED : WALK_SPEED;
-      this.vel.x = dir.x * speed;
-      this.vel.z = dir.z * speed;
+      // Input velocity plus any knockback impulse still in flight.
+      this.vel.x = dir.x * speed + this.impulse.x;
+      this.vel.z = dir.z * speed + this.impulse.z;
+      const decay = Math.exp(-7 * dt);
+      this.impulse.x *= decay;
+      this.impulse.z *= decay;
+      if (Math.abs(this.impulse.x) + Math.abs(this.impulse.z) < 0.05) this.impulse.set(0, 0, 0);
 
       if (this.inWater) {
         // Sink under gravity with gradual drag, so an incoming fall carries you
@@ -222,6 +228,17 @@ export class Player {
       -Math.cos(this.yaw) * Math.cos(this.pitch)
     );
     this.camera.lookAt(this.camera.position.clone().add(dirVec));
+  }
+
+  // Shove the player away from an attacker: horizontal impulse + a hop.
+  // (dx, dz) is the push direction (any length); ignored while flying.
+  knockback(dx, dz, power = 7) {
+    if (this.flying) return;
+    const len = Math.hypot(dx, dz) || 1;
+    this.impulse.x = (dx / len) * power;
+    this.impulse.z = (dz / len) * power;
+    if (!this.inWater) this.vel.y = Math.max(this.vel.y, 4.5);
+    else this.vel.y = Math.max(this.vel.y, 2);
   }
 
   // Touch joystick: x = strafe (-1..1), z = forward (+1 = forward).

@@ -15,7 +15,8 @@ export function mulberry32(seed) {
 
 // Separate noise fields so terrain, climate and caves are independent. They are
 // (re)built by reseed() so each world can have its own seed.
-let terrainNoise, tempNoise, humidNoise, detailNoise, caveNoise, oreNoise, forestNoise, continentNoise, riverNoise;
+let terrainNoise, tempNoise, humidNoise, detailNoise, caveNoise, oreNoise, forestNoise,
+  continentNoise, riverNoise, mountainNoise, ridgeNoise, erosionNoise, warpXNoise, warpZNoise;
 
 export function reseed(seed) {
   terrainNoise = createNoise2D(mulberry32(seed + 0));
@@ -27,6 +28,11 @@ export function reseed(seed) {
   forestNoise = createNoise2D(mulberry32(seed + 606));
   continentNoise = createNoise2D(mulberry32(seed + 707));
   riverNoise = createNoise2D(mulberry32(seed + 808));
+  mountainNoise = createNoise2D(mulberry32(seed + 909));   // where ranges rise
+  ridgeNoise = createNoise2D(mulberry32(seed + 1010));     // ridge/valley detail
+  erosionNoise = createNoise2D(mulberry32(seed + 1111));   // flat <-> rugged
+  warpXNoise = createNoise2D(mulberry32(seed + 1212));     // domain warp offsets
+  warpZNoise = createNoise2D(mulberry32(seed + 1313));
 }
 
 reseed(WORLD_SEED); // default world until a save selects its own seed
@@ -46,6 +52,27 @@ export function fbm2D(noise, x, z, octaves, freq, persistence = 0.5, lacunarity 
   return sum / norm; // -1..1
 }
 
+// Ridged fBm: folds each octave (1 - |n|) so crests form connected ridge lines
+// instead of round blobs — the classic mountain-range shape. Returns 0..1.
+export function ridged2D(noise, x, z, octaves, freq, persistence = 0.5, lacunarity = 2) {
+  let amp = 0.5;
+  let sum = 0;
+  let norm = 0;
+  let f = freq;
+  let weight = 1;
+  for (let i = 0; i < octaves; i++) {
+    let n = 1 - Math.abs(noise(x * f, z * f)); // 0..1, sharp crest at 1
+    n *= n;            // sharpen
+    n *= weight;       // damp octaves in the valleys so detail lives on crests
+    weight = Math.max(0, Math.min(1, n * 2));
+    sum += n * amp;
+    norm += amp;
+    amp *= persistence;
+    f *= lacunarity;
+  }
+  return sum / norm; // 0..1
+}
+
 export const Noise = {
   terrain: (x, z, octaves = 4, freq = 0.008) => fbm2D(terrainNoise, x, z, octaves, freq),
   temperature: (x, z) => fbm2D(tempNoise, x, z, 2, 0.0018),
@@ -59,6 +86,16 @@ export const Noise = {
   continent: (x, z) => fbm2D(continentNoise, x, z, 3, 0.0009),
   // River field; |value| near 0 traces winding river channels.
   river: (x, z) => fbm2D(riverNoise, x, z, 2, 0.0035),
+  // Mountain-range mask field (where ranges rise), -1..1.
+  mountain: (x, z) => fbm2D(mountainNoise, x, z, 2, 0.0013),
+  // Ridge detail for mountain tops, 0..1 with connected crest lines.
+  ridge: (x, z) => ridged2D(ridgeNoise, x, z, 3, 0.009),
+  // Erosion: low = flat/smooth lowlands, high = rugged relief. -1..1.
+  erosion: (x, z) => fbm2D(erosionNoise, x, z, 2, 0.0016),
+  // Domain warp offsets (in blocks) — feed warped coords into other fields for
+  // organic, swirling coastlines and ranges instead of round simplex blobs.
+  warpX: (x, z) => fbm2D(warpXNoise, x, z, 2, 0.0035),
+  warpZ: (x, z) => fbm2D(warpZNoise, x, z, 2, 0.0035),
 };
 
 export { mulberry32 as seededRandom };

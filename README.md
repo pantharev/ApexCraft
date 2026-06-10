@@ -2,7 +2,7 @@
 
 A voxel survival game in the browser — a Minecraft-style sandbox built with **React** and **Three.js**. Explore a procedurally generated world of biomes, oceans, and forests; mine and build; craft tools and smelt ores; survive hunger, drowning, and falls; and fend off mobs that hunt you after dark.
 
-> Pre-alpha. Blocks and mobs use flat colors / simple box models (textures are on the roadmap), but the full gameplay loop is in place.
+> Pre-alpha. All textures and sounds are procedurally generated in code (no asset files) — pixel-art block tiles, ambient-occlusion shading, synthesized audio — and the full gameplay loop is in place.
 
 ---
 
@@ -41,19 +41,20 @@ See [LICENSE](LICENSE) and [CLA.md](CLA.md) for full details.
 ## Features
 
 ### World
-- **Procedural terrain** from layered simplex noise, with a biome map driven by temperature + humidity (plains, desert, mountains, snowy, jungle, swamp).
-- **Oceans, lakes & rivers** — a low-frequency *continental* field carves ocean basins and raises highlands; a *river* field carves winding channels; inland basins fill into lakes. Beaches and seabeds are sand.
+- **Procedural terrain** from a continuous, domain-warped heightfield: a *continental* field shapes organic coastlines and ocean shelves, an *erosion* field separates flat lowlands from rugged country, and **ridged-fBm mountain ranges** rise where a dedicated range mask says so — rolling, climbable, no cliff walls at biome borders.
+- **Biomes** from temperature + humidity (plains, desert, mountains, snowy, jungle, swamp) with organically dithered borders; **altitude takes over up high** — bare rock above the treeline, wandering snowlines on the peaks. Jungle spots grow tall two-tier trees.
+- **Oceans, lakes & rivers** — winding river channels whose width breathes along the course; varied sea floors (sand banks, gravel runs, clay pockets); beaches at the shore.
 - **Caves** carved with 3D noise, and **ore veins** (coal, iron, gold, redstone, lapis, diamond, emerald) placed by depth and rarity.
 - **Trees** scattered only on grass, clumped by a *forest* noise field so you get dense woods and open plains both.
-- **Day/night cycle** with a moving sun and moon (sunrise in the east, set in the west), shifting sky/fog color and light.
+- **Day/night cycle** with a moving sun and moon (sunrise in the east, set in the west), a **wheeling star dome** at night, glowing halos around the sun/moon, and **orange dawn/dusk skies** with warm horizon light.
 
 ### Survival & combat
 - **Health, hunger, and air** — hunger drains with activity, health regenerates when well-fed, and you starve at empty. Head underwater drains the air bar, then you drown.
-- **Damage** from falls (scales with distance), drowning, and mob attacks. Death drops your inventory and shows a respawn screen.
+- **Damage** from falls (scales with distance), drowning, and mob attacks — hits **knock you back** away from the attacker (arrows shove you along their flight). Death drops your inventory and shows a respawn screen.
 - **Swimming** — buoyant water physics: plunge in, sink slowly, hold jump to swim up. Water cancels fall damage.
 - **Mobs**
-  - *Passive* (day): pig, cow, sheep, chicken — wander and flee when hit.
-  - *Hostile* (night): zombie & spider chase and melee (spiders **climb walls**); **skeletons keep their distance and shoot arrows** at you. Zombies and skeletons **burn in daylight**.
+  - *Passive* (day): pig, cow, sheep, chicken — wander, **graze**, watch you walk by (heads track), and flee when hit.
+  - *Hostile* (night): zombie & spider chase and melee (spiders **climb walls**); **skeletons keep their distance and shoot arrows** at you. Zombies and skeletons **burn in daylight**. Bodies turn smoothly, keep eye contact while hunting, and **slump over and fade** when slain.
   - Craft a **bow** + arrows for your own ranged attacks.
   - Mobs drop loot (meats, leather, bone, string, feather, wool, …). Cook meat in a furnace for more nourishment.
 
@@ -94,8 +95,14 @@ See [LICENSE](LICENSE) and [CLA.md](CLA.md) for full details.
   pickup, eating, crafting, container open, combat swings, mob hurt/death (with
   distance falloff), player hurt/death, jump/land. Press **M** to mute.
 
+### Graphics
+- **Procedural pixel-art textures** drawn on canvas at load (zero asset files): voronoi cobblestone/gravel, growth-ring logs, crystal ores with bright facets, wind-rippled sand, grainy planks.
+- **Per-vertex ambient occlusion** baked into the greedy mesher — soft contact shadows in every corner and crevice (with the classic diagonal-flip fix for smooth interpolation).
+- **Climate-tinted foliage**: grass tops and leaves blend per-vertex from lush deep green (wet) to dry yellow-brown (hot+dry) across the map.
+- **Block-break particles** colored from the broken block's texture, a gently **drifting water surface**, and animated star/dusk skies.
+
 ### Performance
-- **Greedy meshing** merges coplanar block faces into large quads.
+- **Greedy meshing** merges coplanar block faces into large quads (AO patterns are part of the merge key, so shading stays exact).
 - **Chunk streaming** around the player with an LRU cache that preserves edits on revisit.
 - **Frustum culling** of off-screen chunks.
 

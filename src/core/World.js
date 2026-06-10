@@ -17,7 +17,7 @@ export class World {
     this.edits = new Map(); // chunkKey -> Map(localIndex -> blockId): player changes
     this.torches = new Set(); // "x,y,z" of placed torches (for dynamic lights)
     this.torchVersion = 0;    // bumped when the torch set changes
-    this.onEdit = null;       // (wx, wy, wz, id) — fired on every setBlock (multiplayer sync)
+    this.onEdit = null;       // (wx, wy, wz, id, prevId) — fired on every setBlock (sync + particles)
 
     // Opaque chunk meshes use the shared per-tile material array (geometry
     // groups index into it); water uses its own transparent material.
@@ -77,6 +77,7 @@ export class World {
     const chunk = this.ensureChunk(cx, cz);
     const lx = wx - cx * CHUNK_SIZE;
     const lz = wz - cz * CHUNK_SIZE;
+    const prevId = chunk.get(lx, wy, lz);
     chunk.set(lx, wy, lz, id);
     chunk.dirty = true;
 
@@ -99,7 +100,7 @@ export class World {
     if (lz === 0) this.markDirty(cx, cz - 1);
     if (lz === CHUNK_SIZE - 1) this.markDirty(cx, cz + 1);
 
-    if (this.onEdit) this.onEdit(wx, wy, wz, id);
+    if (this.onEdit) this.onEdit(wx, wy, wz, id, prevId);
   }
 
   markDirty(cx, cz) {

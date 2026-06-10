@@ -28,38 +28,68 @@ function partTexture(hex) {
   return tex;
 }
 
-// Builds a placeholder box model for a mob type. Returns a Group; leg parts are
-// collected on group.userData.legs (pivoted at the top) so the Mob can swing
-// them while walking. Easy to replace with real models/textures later.
+function partMesh(part) {
+  const [w, h, d] = part.size;
+  const geo = new THREE.BoxGeometry(w, h, d);
+  // A little self-illumination in the part's own colour so mobs stay readable
+  // in low light (e.g. zombies at night) instead of going black.
+  const mat = new THREE.MeshLambertMaterial({ map: partTexture(part.color) });
+  mat.emissive = new THREE.Color(part.color);
+  mat.emissiveIntensity = 0.32;
+  mat.userData.baseEmissive = mat.emissive.getHex();
+  return new THREE.Mesh(geo, mat);
+}
+
+// Builds a placeholder box model for a mob type. Returns a Group with:
+//   userData.legs — leg meshes (pivoted at the hip) that swing while walking
+//   userData.head — a sub-group pivoted at the first `head: true` part, so the
+//                   mob can look around (eyes/beak/snout ride along)
 export function buildMobModel(type) {
   const def = MOBS[type];
   const group = new THREE.Group();
   const legs = [];
 
-  for (const part of def.parts) {
-    const [w, h, d] = part.size;
-    const geo = new THREE.BoxGeometry(w, h, d);
-    // A little self-illumination in the part's own colour so mobs stay readable
-    // in low light (e.g. zombies at night) instead of going black.
-    const mat = new THREE.MeshLambertMaterial({ map: partTexture(part.color) });
-    mat.emissive = new THREE.Color(part.color);
-    mat.emissiveIntensity = 0.32;
-    mat.userData.baseEmissive = mat.emissive.getHex();
+  // Head parts get their own pivot group anchored at the first head part.
+  const headParts = def.parts.filter((p) => p.head);
+  let headGroup = null;
+  let headPivot = null;
+  if (headParts.length) {
+    headPivot = headParts[0].pos;
+    headGroup = new THREE.Group();
+    headGroup.position.set(headPivot[0], headPivot[1], headPivot[2]);
+    group.add(headGroup);
+  }
 
+  for (const part of def.parts) {
     if (part.leg) {
       // Pivot at the top of the leg so rotation looks like a hip joint.
+      const [w, h, d] = part.size;
+      const geo = new THREE.BoxGeometry(w, h, d);
       geo.translate(0, -h / 2, 0);
+      const mat = new THREE.MeshLambertMaterial({ map: partTexture(part.color) });
+      mat.emissive = new THREE.Color(part.color);
+      mat.emissiveIntensity = 0.32;
+      mat.userData.baseEmissive = mat.emissive.getHex();
       const mesh = new THREE.Mesh(geo, mat);
       mesh.position.set(part.pos[0], part.pos[1] + h / 2, part.pos[2]);
       group.add(mesh);
       legs.push(mesh);
+    } else if (part.head && headGroup) {
+      const mesh = partMesh(part);
+      mesh.position.set(
+        part.pos[0] - headPivot[0],
+        part.pos[1] - headPivot[1],
+        part.pos[2] - headPivot[2]
+      );
+      headGroup.add(mesh);
     } else {
-      const mesh = new THREE.Mesh(geo, mat);
+      const mesh = partMesh(part);
       mesh.position.set(part.pos[0], part.pos[1], part.pos[2]);
       group.add(mesh);
     }
   }
 
   group.userData.legs = legs;
+  group.userData.head = headGroup;
   return group;
 }

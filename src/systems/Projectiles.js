@@ -51,13 +51,14 @@ export class Projectiles {
         if (next.x > pp.x - 0.45 && next.x < pp.x + 0.45 &&
             next.y > pp.y && next.y < pp.y + 1.85 &&
             next.z > pp.z - 0.45 && next.z < pp.z + 0.45) {
-          ctx.hitPlayer(p.damage);
+          ctx.hitPlayer(p.damage, p.vel); // velocity -> knockback direction
           hit = true;
         }
       }
 
       if (!hit && p.target === 'mob' && ctx.mobs) {
         for (const m of ctx.mobs.mobs) {
+          if (m.dead) continue; // corpses don't stop arrows
           const { min, max } = m.aabb();
           if (next.x > min.x && next.x < max.x && next.y > min.y && next.y < max.y && next.z > min.z && next.z < max.z) {
             m.takeDamage(p.damage, next);

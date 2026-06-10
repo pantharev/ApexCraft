@@ -86,12 +86,19 @@ export class MobManager {
         world: this.world,
         playerPos: near.pos,
         isNight: ctx.isNight,
-        attackPlayer: (dmg) => ctx.attackPlayer(dmg, near.id),
+        // fromPos (the mob) -> knockback direction for whoever got hit.
+        attackPlayer: (dmg, fromPos) => ctx.attackPlayer(
+          dmg, near.id,
+          fromPos ? { x: near.pos.x - fromPos.x, z: near.pos.z - fromPos.z } : null
+        ),
         shoot: ctx.shoot,
       });
 
       const dx = mob.pos.x - p.x, dz = mob.pos.z - p.z;
-      if (mob.dead) {
+      if (mob.dead && !mob.deathHandled) {
+        // Loot + sound fire once; the corpse animates its tip-over and then
+        // flags itself `removed` (see Mob._updateDeath).
+        mob.deathHandled = true;
         const dist = Math.sqrt(dx * dx + dz * dz);
         Sound.mobDeath(Math.max(0.1, 1 - dist / 30));
         for (const d of mob.def.drops) {
@@ -99,8 +106,7 @@ export class MobManager {
           const c = lo + Math.floor(Math.random() * (hi - lo + 1));
           if (c > 0) this.itemDrops.spawn(d.item, c, Math.floor(mob.pos.x), Math.floor(mob.pos.y), Math.floor(mob.pos.z));
         }
-        mob.removed = true;
-      } else if (nearSq > DESPAWN * DESPAWN || mob.pos.y < -10) {
+      } else if (!mob.dead && (nearSq > DESPAWN * DESPAWN || mob.pos.y < -10)) {
         // Despawn only when far from *every* player.
         mob.removed = true;
       }
@@ -138,6 +144,7 @@ export class MobManager {
     let best = null;
     let bestT = reach;
     for (const mob of this.mobs) {
+      if (mob.dead) continue; // corpses don't soak hits
       const { min, max } = mob.aabb();
       const t = rayAABB(origin, dir, min, max);
       if (t !== null && t >= 0 && t <= bestT) { bestT = t; best = mob; }

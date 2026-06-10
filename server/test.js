@@ -88,8 +88,9 @@ try {
 
   // --- hit routing: host -> specific player, guest -> host ---
   const hitP = once(guest, 'hitPlayer');
-  host.emit('hitPlayer', { to: guest.id, dmg: 3 });
-  ok((await hitP).dmg === 3, 'mob hit routes to the targeted player');
+  host.emit('hitPlayer', { to: guest.id, dmg: 3, kx: 0.6, kz: -0.8 });
+  const hp = await hitP;
+  ok(hp.dmg === 3 && hp.kx === 0.6 && hp.kz === -0.8, 'mob hit routes to the targeted player with knockback');
 
   const mobHitP = once(host, 'mobHit');
   guest.emit('mobHit', { i: 9, dmg: 5, x: 1, y: 2, z: 3 });

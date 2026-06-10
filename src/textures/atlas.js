@@ -4,6 +4,11 @@ import blockData from '../blocks/blocks.json';
 // Procedural pixel-art textures generated on a canvas at load time — no binary
 // assets to ship. Each tile is its own 16x16 CanvasTexture with RepeatWrapping
 // so the greedy mesher can tile one tile across a merged quad (UVs run 0..w).
+//
+// Tiles are built from a few primitives that all tile seamlessly:
+//   • value noise (wrapped lattice)  -> soft organic patches
+//   • toroidal voronoi               -> stones/cells with mortar seams
+//   • per-pixel painters             -> ripples, rings, grain, cracks
 
 const TILE = 16;
 
@@ -22,6 +27,7 @@ function rgb(hex) {
   return [(n >> 16) & 255, (n >> 8) & 255, n & 255];
 }
 const clamp = (v) => Math.max(0, Math.min(255, v | 0));
+const mix = (a, b, t) => a + (b - a) * t;
 
 function makeCtx() {
   const c = document.createElement('canvas');
@@ -29,19 +35,44 @@ function makeCtx() {
   return { canvas: c, ctx: c.getContext('2d') };
 }
 
-// Fill the whole tile with a base colour plus per-pixel brightness jitter.
-function fillNoise(ctx, hex, jitter, rng) {
+// Smooth value noise on a wrapped lattice — seamless across tile repeats.
+// Returns fn(x, y) -> 0..1 for x,y in pixel space.
+function valueNoise(rng, cells = 4) {
+  const n = cells;
+  const g = [];
+  for (let i = 0; i < n; i++) { g.push([]); for (let j = 0; j < n; j++) g[i].push(rng()); }
+  const at = (i, j) => g[((i % n) + n) % n][((j % n) + n) % n];
+  return (x, y) => {
+    const fx = (x / TILE) * n, fy = (y / TILE) * n;
+    const ix = Math.floor(fx), iy = Math.floor(fy);
+    const tx = fx - ix, ty = fy - iy;
+    const sx = tx * tx * (3 - 2 * tx), sy = ty * ty * (3 - 2 * ty);
+    const a = mix(at(ix, iy), at(ix + 1, iy), sx);
+    const b = mix(at(ix, iy + 1), at(ix + 1, iy + 1), sx);
+    return mix(a, b, sy);
+  };
+}
+
+// Per-pixel painter: base colour modulated by brighten(x, y) (in colour steps,
+// ±) plus white jitter. Writes a full ImageData in one pass.
+function paint(ctx, hex, brighten, jitter, rng) {
   const [r, g, b] = rgb(hex);
   const img = ctx.createImageData(TILE, TILE);
-  for (let i = 0; i < TILE * TILE; i++) {
-    const d = (rng() - 0.5) * 2 * jitter;
-    img.data[i * 4] = clamp(r + d);
-    img.data[i * 4 + 1] = clamp(g + d);
-    img.data[i * 4 + 2] = clamp(b + d);
-    img.data[i * 4 + 3] = 255;
+  for (let y = 0; y < TILE; y++) {
+    for (let x = 0; x < TILE; x++) {
+      const i = (y * TILE + x) * 4;
+      const d = (brighten ? brighten(x, y) : 0) + (jitter ? (rng() - 0.5) * 2 * jitter : 0);
+      img.data[i] = clamp(r + d);
+      img.data[i + 1] = clamp(g + d);
+      img.data[i + 2] = clamp(b + d);
+      img.data[i + 3] = 255;
+    }
   }
   ctx.putImageData(img, 0, 0);
 }
+
+// Backwards-compatible simple fill (kept for a few tiles).
+function fillNoise(ctx, hex, jitter, rng) { paint(ctx, hex, null, jitter, rng); }
 
 function setPx(ctx, x, y, hex, a = 1, jitter = 0, rng = null) {
   const [r, g, b] = rgb(hex);
@@ -50,87 +81,248 @@ function setPx(ctx, x, y, hex, a = 1, jitter = 0, rng = null) {
   ctx.fillRect(x, y, 1, 1);
 }
 
-function blobs(ctx, color, count, rng, size = 2) {
-  for (let i = 0; i < count; i++) {
-    const x = Math.floor(rng() * TILE), y = Math.floor(rng() * TILE);
-    const s = 1 + Math.floor(rng() * size);
-    for (let dx = 0; dx < s; dx++) for (let dy = 0; dy < s; dy++) {
-      setPx(ctx, (x + dx) % TILE, (y + dy) % TILE, color, 1, 18, rng);
+// Toroidal voronoi cells: k seed stones, each with its own brightness; pixels
+// near a boundary between two cells become mortar. Tiles seamlessly.
+function voronoi(ctx, baseHex, mortarHex, k, rng, vary = 26, mortarW = 1.1) {
+  const seeds = [];
+  for (let i = 0; i < k; i++) seeds.push([rng() * TILE, rng() * TILE, (rng() - 0.5) * 2 * vary]);
+  const [br, bg, bb] = rgb(baseHex);
+  const [mr, mg, mb] = rgb(mortarHex);
+  const img = ctx.createImageData(TILE, TILE);
+  const wrapD = (a, b) => { const d = Math.abs(a - b); return Math.min(d, TILE - d); };
+  for (let y = 0; y < TILE; y++) {
+    for (let x = 0; x < TILE; x++) {
+      let d1 = 1e9, d2 = 1e9, s1 = 0;
+      for (const [sx, sy, sb] of seeds) {
+        const d = wrapD(x + 0.5, sx) ** 2 + wrapD(y + 0.5, sy) ** 2;
+        if (d < d1) { d2 = d1; d1 = d; s1 = sb; }
+        else if (d < d2) d2 = d;
+      }
+      const i = (y * TILE + x) * 4;
+      const edge = Math.sqrt(d2) - Math.sqrt(d1); // small near boundaries
+      if (edge < mortarW) {
+        img.data[i] = mr; img.data[i + 1] = mg; img.data[i + 2] = mb;
+      } else {
+        const j = (rng() - 0.5) * 14;
+        // Stones get a soft 3D feel: brighter at their centre.
+        const dome = Math.max(0, 1 - Math.sqrt(d1) / 6) * 10;
+        img.data[i] = clamp(br + s1 + j + dome);
+        img.data[i + 1] = clamp(bg + s1 + j + dome);
+        img.data[i + 2] = clamp(bb + s1 + j + dome);
+      }
+      img.data[i + 3] = 255;
     }
+  }
+  ctx.putImageData(img, 0, 0);
+}
+
+// A meandering 1px crack with occasional highlight on its sunward side.
+function crack(ctx, rng, dark, light) {
+  let x = Math.floor(rng() * TILE), y = Math.floor(rng() * 4);
+  const len = 8 + Math.floor(rng() * 5);
+  for (let i = 0; i < len; i++) {
+    setPx(ctx, ((x % TILE) + TILE) % TILE, ((y % TILE) + TILE) % TILE, dark, 0.9);
+    if (rng() < 0.4) setPx(ctx, (((x + 1) % TILE) + TILE) % TILE, ((y % TILE) + TILE) % TILE, light, 0.5);
+    y += 1;
+    if (rng() < 0.45) x += rng() < 0.5 ? -1 : 1;
   }
 }
 
 // --- Per-tile drawing routines (seeded so the atlas is stable) ---
 const DRAW = {
-  grass_top: (c, r) => { fillNoise(c, '#5d9c3c', 18, r); blobs(c, '#4f8a30', 18, r, 1); },
+  grass_top: (c, r) => {
+    const vn = valueNoise(r, 4);
+    paint(c, '#5b9c3a', (x, y) => (vn(x, y) - 0.5) * 34, 9, r);
+    for (let i = 0; i < 20; i++) setPx(c, (r() * TILE) | 0, (r() * TILE) | 0, '#477e2c', 1, 14, r); // dark blades
+    for (let i = 0; i < 10; i++) setPx(c, (r() * TILE) | 0, (r() * TILE) | 0, '#79bd4e', 1, 14, r); // light blades
+  },
   grass_side: (c, r) => {
-    fillNoise(c, '#7a5c3e', 16, r);
-    for (let x = 0; x < TILE; x++) { const top = 3 + Math.floor(r() * 2); for (let y = 0; y < top; y++) setPx(c, x, y, '#5d9c3c', 1, 16, r); }
+    DRAW.dirt(c, r);
+    // Grass band with a wavy lower edge and hanging drips.
+    for (let x = 0; x < TILE; x++) {
+      const top = 2 + ((x * 7 + 3) % 3 === 0 ? 1 : 0) + (r() < 0.3 ? 1 : 0);
+      for (let y = 0; y < top; y++) setPx(c, x, y, y === top - 1 ? '#4d8531' : '#5b9c3a', 1, 12, r);
+      if (r() < 0.22) setPx(c, x, top, '#4d8531', 1, 10, r); // drip
+    }
   },
-  dirt: (c, r) => { fillNoise(c, '#7a5c3e', 18, r); blobs(c, '#6b4f33', 10, r, 1); },
-  stone: (c, r) => { fillNoise(c, '#8a8a8a', 16, r); blobs(c, '#787878', 8, r, 2); },
-  cobblestone: (c, r) => {
-    fillNoise(c, '#8a8a8a', 14, r);
-    c.strokeStyle = 'rgba(70,70,70,0.8)';
-    for (const [x, y, w, h] of [[0, 0, 7, 7], [8, 0, 7, 9], [0, 8, 6, 7], [7, 10, 8, 5]]) c.strokeRect(x + 0.5, y + 0.5, w, h);
+  dirt: (c, r) => {
+    const vn = valueNoise(r, 4);
+    paint(c, '#7a5a3c', (x, y) => (vn(x, y) - 0.5) * 30, 11, r);
+    for (let i = 0; i < 6; i++) { // little stones with a shadow pixel
+      const x = (r() * TILE) | 0, y = (r() * TILE) | 0;
+      setPx(c, x, y, '#9b8259', 1, 10, r);
+      setPx(c, x, (y + 1) % TILE, '#5e4429', 0.8, 10, r);
+    }
+    for (let i = 0; i < 5; i++) setPx(c, (r() * TILE) | 0, (r() * TILE) | 0, '#65482c', 1, 10, r);
   },
-  sand: (c, r) => fillNoise(c, '#dbcd9c', 12, r),
-  gravel: (c, r) => { fillNoise(c, '#86807c', 18, r); blobs(c, '#5e5a57', 14, r, 1); blobs(c, '#a8a29c', 8, r, 1); },
-  snow: (c, r) => fillNoise(c, '#f4f8fc', 7, r),
-  bedrock: (c, r) => { fillNoise(c, '#555555', 30, r); blobs(c, '#2c2c2c', 14, r, 2); },
-  andesite: (c, r) => { fillNoise(c, '#888a88', 12, r); blobs(c, '#9a9c9a', 8, r, 1); },
+  stone: (c, r) => {
+    const vn = valueNoise(r, 3);
+    paint(c, '#8b8b8f', (x, y) => (vn(x, y) - 0.5) * 22, 7, r);
+    crack(c, r, '#6c6c70', '#a2a2a6');
+    crack(c, r, '#707074', '#9e9ea2');
+  },
+  cobblestone: (c, r) => voronoi(c, '#8d8d8d', '#585858', 7, r, 24),
+  sand: (c, r) => {
+    const vn = valueNoise(r, 3);
+    // Wind ripples: soft horizontal waves bent by the noise field.
+    paint(c, '#dccf9f', (x, y) => Math.sin((y + vn(x, y) * 5) * 1.15) * 9 + (vn(x, y) - 0.5) * 10, 6, r);
+    for (let i = 0; i < 5; i++) setPx(c, (r() * TILE) | 0, (r() * TILE) | 0, '#bda97a', 1, 8, r);
+  },
+  gravel: (c, r) => voronoi(c, '#85807b', '#55504c', 13, r, 30, 0.8),
+  snow: (c, r) => {
+    const vn = valueNoise(r, 4);
+    paint(c, '#f3f7fb', (x, y) => (vn(x, y) - 0.6) * 16, 3, r);
+    for (let i = 0; i < 4; i++) setPx(c, (r() * TILE) | 0, (r() * TILE) | 0, '#ffffff', 1);
+  },
+  bedrock: (c, r) => voronoi(c, '#4e4e52', '#222226', 6, r, 44),
+  andesite: (c, r) => {
+    const vn = valueNoise(r, 5);
+    paint(c, '#888d88', (x, y) => (vn(x, y) - 0.5) * 18, 9, r);
+    crack(c, r, '#6f746f', '#9da29d');
+  },
   log_top: (c, r) => {
-    fillNoise(c, '#b3884f', 10, r);
-    c.strokeStyle = 'rgba(90,67,39,0.9)';
-    for (const rad of [2, 4, 6]) c.strokeRect(8 - rad + 0.5, 8 - rad + 0.5, rad * 2, rad * 2);
+    const vn = valueNoise(r, 3);
+    paint(c, '#c0935a', (x, y) => {
+      const dx = x - 7.5, dy = y - 7.5;
+      const d = Math.sqrt(dx * dx + dy * dy) + vn(x, y) * 1.6;
+      const edge = Math.max(Math.abs(dx), Math.abs(dy));
+      if (edge > 6.4) return -54; // bark rim
+      return Math.sin(d * 2.1) * 16 - d * 1.5; // growth rings
+    }, 6, r);
   },
-  log_side: (c, r) => { fillNoise(c, '#6b5235', 12, r); for (let x = 2; x < TILE; x += 5) for (let y = 0; y < TILE; y++) setPx(c, x, y, '#5a4327', 0.7, 10, r); },
+  log_side: (c, r) => {
+    // Vertical bark strips with per-column relief and a knot.
+    const colShade = [];
+    for (let x = 0; x < TILE; x++) colShade.push((r() - 0.5) * 26 - (x % 5 === 0 ? 22 : 0));
+    const vn = valueNoise(r, 4);
+    paint(c, '#6e5536', (x, y) => colShade[x] + (vn(x, y) - 0.5) * 14, 8, r);
+    const kx = 3 + ((r() * 10) | 0), ky = 4 + ((r() * 8) | 0);
+    setPx(c, kx, ky, '#3f2e1a', 1); setPx(c, kx, ky + 1, '#3f2e1a', 1);
+    setPx(c, kx, ky - 1, '#8a6b42', 1); setPx(c, kx, ky + 2, '#8a6b42', 1);
+  },
   leaves: (c, r) => {
-    fillNoise(c, '#3f7a2c', 22, r);
+    const vn = valueNoise(r, 4);
+    paint(c, '#3f7a2c', (x, y) => (vn(x, y) - 0.5) * 44, 15, r);
     const img = c.getImageData(0, 0, TILE, TILE);
-    for (let i = 0; i < TILE * TILE; i++) if (r() < 0.22) img.data[i * 4 + 3] = 0; // gaps
+    for (let i = 0; i < TILE * TILE; i++) {
+      if (r() < 0.16) img.data[i * 4 + 3] = 0;            // sky gaps
+      else if (r() < 0.12) {                              // deep shadow leaves
+        img.data[i * 4] = clamp(img.data[i * 4] * 0.6);
+        img.data[i * 4 + 1] = clamp(img.data[i * 4 + 1] * 0.6);
+        img.data[i * 4 + 2] = clamp(img.data[i * 4 + 2] * 0.6);
+      }
+    }
     c.putImageData(img, 0, 0);
   },
   planks: (c, r) => {
-    fillNoise(c, '#b3884f', 10, r);
-    c.strokeStyle = 'rgba(120,90,52,0.9)';
-    for (let y = 0; y < TILE; y += 4) c.strokeRect(-0.5, y + 0.5, TILE + 1, 0);
-    c.strokeRect(7.5, 0, 0, TILE);
+    // Four planks with their own tone, grain streaks, gaps, and nails.
+    const tones = [0, 0, 0, 0].map(() => (r() - 0.5) * 22);
+    const vn = valueNoise(r, 5);
+    paint(c, '#b3884f', (x, y) => {
+      const row = (y / 4) | 0;
+      const gap = y % 4 === 3 ? -46 : 0;
+      const grain = Math.sin(x * 1.6 + row * 2 + vn(x, y) * 5) * 6;
+      return tones[row] + gap + grain;
+    }, 5, r);
+    for (let row = 0; row < 4; row++) {
+      const nx = row % 2 === 0 ? 1 : 9;
+      setPx(c, nx, row * 4 + 1, '#5e4626', 1);
+      setPx(c, nx + 6, row * 4 + 1, '#5e4626', 1);
+    }
   },
-  clay: (c, r) => fillNoise(c, '#9aa0ac', 9, r),
-  cactus: (c, r) => { fillNoise(c, '#3c7a3c', 12, r); for (let y = 0; y < TILE; y += 3) setPx(c, 8, y, '#2e5e2e', 1, 8, r); },
-  water: (c, r) => { fillNoise(c, '#3a6dd1', 16, r); const img = c.getImageData(0, 0, TILE, TILE); for (let i = 0; i < TILE * TILE; i++) img.data[i * 4 + 3] = 205; c.putImageData(img, 0, 0); },
+  clay: (c, r) => {
+    const vn = valueNoise(r, 3);
+    paint(c, '#9aa0ac', (x, y) => Math.sin(x * 0.55 + vn(x, y) * 4.5) * 6 + (vn(x, y) - 0.5) * 8, 4, r);
+  },
+  cactus: (c, r) => {
+    // Ribbed body: bright ridges and dark grooves, with pale spines.
+    paint(c, '#3c7a3c', (x) => Math.sin(x * 1.6 + 0.8) * 14, 7, r);
+    for (let x = 1; x < TILE; x += 4) {
+      for (let y = 1; y < TILE; y += 4) setPx(c, x, (y + ((x * 3) % 4)) % TILE, '#d8e8c0', 0.9);
+    }
+  },
+  water: (c, r) => {
+    const vn = valueNoise(r, 3);
+    paint(c, '#3567c9', (x, y) => Math.sin((y + vn(x, y) * 6) * 0.82) * 14 + (vn(x, y) - 0.5) * 18, 5, r);
+    const img = c.getImageData(0, 0, TILE, TILE);
+    for (let i = 0; i < TILE * TILE; i++) img.data[i * 4 + 3] = 205;
+    c.putImageData(img, 0, 0);
+  },
   glass: (c) => {
     c.clearRect(0, 0, TILE, TILE);
-    c.strokeStyle = 'rgba(200,235,245,0.85)'; c.strokeRect(0.5, 0.5, TILE - 1, TILE - 1);
-    c.fillStyle = 'rgba(220,245,255,0.5)'; c.fillRect(3, 3, 4, 1); c.fillRect(3, 3, 1, 4);
+    c.fillStyle = 'rgba(215,240,250,0.10)'; c.fillRect(0, 0, TILE, TILE);
+    c.strokeStyle = 'rgba(200,235,245,0.9)'; c.strokeRect(0.5, 0.5, TILE - 1, TILE - 1);
+    c.fillStyle = 'rgba(235,250,255,0.55)';
+    for (let i = 0; i < 5; i++) { c.fillRect(3 + i, 8 - i, 1, 1); c.fillRect(8 + i, 13 - i, 1, 1); }
   },
-  crafting_top: (c, r) => { DRAW.planks(c, r); c.strokeStyle = 'rgba(70,50,30,0.9)'; c.strokeRect(0.5, 0.5, 15, 15); c.strokeRect(8.5, 0, 0, 16); c.strokeRect(0, 8.5, 16, 0); },
-  crafting_side: (c, r) => { DRAW.planks(c, r); c.fillStyle = 'rgba(90,67,39,0.8)'; c.fillRect(2, 2, 5, 5); c.fillRect(9, 9, 4, 4); },
-  furnace_side: (c, r) => DRAW.cobblestone(c, r),
-  furnace_front: (c, r) => { DRAW.cobblestone(c, r); c.fillStyle = '#241c14'; c.fillRect(4, 7, 8, 6); c.fillStyle = '#c2531a'; c.fillRect(5, 11, 6, 2); },
+  crafting_top: (c, r) => {
+    DRAW.planks(c, r);
+    c.strokeStyle = 'rgba(60,42,22,0.95)'; c.strokeRect(0.5, 0.5, 15, 15);
+    c.strokeRect(8.5, 0, 0, 16); c.strokeRect(0, 8.5, 16, 0);
+  },
+  crafting_side: (c, r) => {
+    DRAW.planks(c, r);
+    c.fillStyle = 'rgba(80,58,32,0.9)'; c.fillRect(2, 2, 5, 5); c.fillRect(9, 9, 4, 4);
+    c.fillStyle = 'rgba(150,150,158,0.9)'; c.fillRect(3, 3, 2, 1); c.fillRect(10, 10, 1, 2); // tool glints
+  },
+  furnace_side: (c, r) => voronoi(c, '#828282', '#525252', 7, r, 22),
+  furnace_front: (c, r) => {
+    voronoi(c, '#828282', '#525252', 7, r, 22);
+    // Arched mouth with embers glowing inside.
+    c.fillStyle = '#1c150e';
+    c.fillRect(5, 7, 6, 1); c.fillRect(4, 8, 8, 6);
+    c.fillStyle = '#7a2d08'; c.fillRect(5, 11, 6, 3);
+    c.fillStyle = '#c2531a'; c.fillRect(5, 12, 6, 2);
+    c.fillStyle = '#f0a040'; c.fillRect(6, 13, 4, 1);
+    c.fillStyle = '#ffe080'; c.fillRect(7, 13, 2, 1);
+  },
   torch: (c) => {
     c.fillStyle = '#1a1208'; c.fillRect(0, 0, TILE, TILE);
     c.fillStyle = '#6b4f2a'; c.fillRect(7, 6, 2, 9); // stick
     c.fillStyle = '#f0b030'; c.fillRect(6, 2, 4, 5);  // flame
     c.fillStyle = '#fff2a0'; c.fillRect(7, 3, 2, 2);  // hot core
   },
-  chest_top: (c, r) => { fillNoise(c, '#9c7038', 8, r); c.strokeStyle = 'rgba(70,48,24,0.9)'; c.strokeRect(0.5, 0.5, 15, 15); c.fillStyle = '#3a2a14'; c.fillRect(7, 0, 2, 4); },
+  chest_top: (c, r) => {
+    const vn = valueNoise(r, 4);
+    paint(c, '#9c7038', (x, y) => (vn(x, y) - 0.5) * 18 + Math.sin(x * 1.7) * 4, 5, r);
+    c.strokeStyle = 'rgba(62,42,20,0.95)'; c.strokeRect(0.5, 0.5, 15, 15);
+    c.fillStyle = '#9aa0a8'; c.fillRect(7, 0, 2, 4);
+    c.fillStyle = '#5a6068'; c.fillRect(7, 3, 2, 1);
+  },
   chest_side: (c, r) => {
-    fillNoise(c, '#8a6230', 8, r);
-    c.strokeStyle = 'rgba(70,48,24,0.9)';
+    const vn = valueNoise(r, 4);
+    paint(c, '#8a6230', (x, y) => (vn(x, y) - 0.5) * 18 + Math.sin(x * 1.7) * 4, 5, r);
+    c.strokeStyle = 'rgba(62,42,20,0.95)';
     c.strokeRect(0.5, 0.5, 15, 15); c.strokeRect(0, 5.5, 16, 0);
-    c.fillStyle = '#3a2a14'; c.fillRect(7, 5, 2, 4); // clasp
+    c.fillStyle = '#9aa0a8'; c.fillRect(7, 4, 2, 3);   // clasp
+    c.fillStyle = '#3a2a14'; c.fillRect(7, 6, 2, 1);   // keyhole
   },
 };
 
-// Ores: stone base + a cluster of coloured specks.
+// Ores: stone base + crystal clusters with a bright facet and dark outline.
 const ORE_COLORS = {
-  coal_ore: '#2b2b2b', iron_ore: '#caa07e', gold_ore: '#e8d24a',
-  redstone_ore: '#d11616', lapis_ore: '#27479e', diamond_ore: '#4fd3c8', emerald_ore: '#2fbf5e',
+  coal_ore: ['#2b2b2b', '#101010', '#4a4a4a'],
+  iron_ore: ['#caa07e', '#8a6a4e', '#e8c8a8'],
+  gold_ore: ['#e8d24a', '#a8921e', '#fff0a0'],
+  redstone_ore: ['#d11616', '#7a0c0c', '#ff6a5a'],
+  lapis_ore: ['#27479e', '#142a66', '#5a7ad8'],
+  diamond_ore: ['#4fd3c8', '#23837c', '#b0fff4'],
+  emerald_ore: ['#2fbf5e', '#157a36', '#8af0ae'],
 };
-for (const [name, col] of Object.entries(ORE_COLORS)) {
-  DRAW[name] = (c, r) => { DRAW.stone(c, r); blobs(c, col, 7, r, 2); };
+for (const [name, [col, dark, lite]] of Object.entries(ORE_COLORS)) {
+  DRAW[name] = (c, r) => {
+    DRAW.stone(c, r);
+    const clusters = 3 + ((r() * 2) | 0);
+    for (let i = 0; i < clusters; i++) {
+      const x = 2 + ((r() * 12) | 0), y = 2 + ((r() * 12) | 0);
+      // Diamond-shaped crystal: dark outline, body, bright facet.
+      setPx(c, x, y - 1, dark, 0.85); setPx(c, x, y + 1, dark, 0.85);
+      setPx(c, x - 1, y, dark, 0.85); setPx(c, x + 1, y, dark, 0.85);
+      setPx(c, x, y, col, 1, 14, r);
+      setPx(c, x + (r() < 0.5 ? 0 : 1), y, lite, 0.95);
+      if (r() < 0.6) setPx(c, x + 1, y + 1, col, 1, 18, r);
+    }
+  };
 }
 
 // Block name -> per-face tile names.
@@ -177,9 +369,11 @@ tileNames.forEach((name, i) => {
   materials.push(new THREE.MeshLambertMaterial(opts));
 });
 
-// Per block id -> { top, side, bottom } material indices.
+// Per block id -> { top, side, bottom } material indices (+ name for lookups).
 const faceMat = [];
+const blockName = [];
 for (const def of blockData) {
+  blockName[def.id] = def.name;
   const ft = FACE_TILES[def.name];
   if (!ft) continue;
   faceMat[def.id] = {
@@ -194,6 +388,28 @@ export function faceMaterialIndex(blockId, face) {
   const m = faceMat[blockId];
   if (!m) return 0;
   return face === 'top' ? m.top : face === 'bottom' ? m.bottom : m.side;
+}
+
+// Average colour of a block's side tile (0..1 rgb) — used for break particles.
+const avgCache = new Map();
+export function blockAverageColor(blockId) {
+  if (avgCache.has(blockId)) return avgCache.get(blockId);
+  const name = blockName[blockId];
+  const ft = FACE_TILES[name];
+  let out = [0.6, 0.6, 0.6];
+  if (ft) {
+    const img = textures[tileIndex[ft.side]].image;
+    const ctx = img.getContext('2d');
+    const d = ctx.getImageData(0, 0, TILE, TILE).data;
+    let r = 0, g = 0, b = 0, n = 0;
+    for (let i = 0; i < TILE * TILE; i++) {
+      if (d[i * 4 + 3] < 100) continue;
+      r += d[i * 4]; g += d[i * 4 + 1]; b += d[i * 4 + 2]; n++;
+    }
+    if (n > 0) out = [r / n / 255, g / n / 255, b / n / 255];
+  }
+  avgCache.set(blockId, out);
+  return out;
 }
 
 // Expose a tile's canvas as a data URL (for UI item icons).

@@ -28,11 +28,13 @@ export class GhostMobs {
         g = this._create(s);
         if (!g) continue;
       }
-      // Red flash when the host reports a health drop.
-      if (s.h < g.health) {
+      // Red flash when the host reports a health drop; 0 hp starts the
+      // tip-over death animation (removal comes when the snapshot drops it).
+      if (s.h < g.health && s.h > 0) {
         g.hurtTimer = 0.25;
         this._tint(g, 0xff3030, 1);
       }
+      if (s.h <= 0) g.dead = true;
       g.health = s.h;
       g.target = { x: s.x, y: s.y, z: s.z, yaw: s.yaw };
     }
@@ -69,11 +71,13 @@ export class GhostMobs {
       target: null,
       group,
       legs: group.userData.legs || [],
-      parts: group.children.slice(),
+      parts: [],
       walkPhase: 0,
       hurtTimer: 0,
       removed: false,
       dead: false,
+      deathT: 0,
+      _deathSpin: (s.i & 1) === 0 ? 1 : -1,
       aabb() {
         return {
           min: new THREE.Vector3(this.pos.x - this.hw, this.pos.y, this.pos.z - this.hw),
@@ -88,6 +92,7 @@ export class GhostMobs {
         });
       },
     };
+    group.traverse((o) => { if (o.isMesh) g.parts.push(o); });
     this.mobs.push(g);
     this._byId.set(s.i, g);
     return g;
@@ -115,6 +120,22 @@ export class GhostMobs {
   update(dt) {
     const k = Math.min(1, dt * LERP);
     for (const g of this.mobs) {
+      if (g.dead) {
+        // Mirror the host's death animation: slump sideways and fade.
+        g.deathT += dt;
+        const dk = Math.min(1, g.deathT / 0.6);
+        const ease = dk * dk * (3 - 2 * dk);
+        g.group.rotation.z = g._deathSpin * ease * (Math.PI / 2);
+        g.group.position.set(g.pos.x, g.pos.y + 0.15 - ease * 0.3, g.pos.z);
+        for (const p of g.parts) {
+          if (p.material) {
+            p.material.transparent = true;
+            p.material.opacity = 1 - ease;
+            p.material.depthWrite = false;
+          }
+        }
+        continue;
+      }
       if (g.target) {
         const dx = g.target.x - g.pos.x, dz = g.target.z - g.pos.z;
         g.pos.x += dx * k;
@@ -150,6 +171,7 @@ export class GhostMobs {
     let best = null;
     let bestT = reach;
     for (const g of this.mobs) {
+      if (g.dead) continue;
       const { min, max } = g.aabb();
       const t = rayAABB(origin, dir, min, max);
       if (t !== null && t >= 0 && t <= bestT) { bestT = t; best = g; }

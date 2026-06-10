@@ -127,11 +127,12 @@ io.on('connection', (socket) => {
     socket.to(code).emit('time', r.time);
   });
 
-  // A mob (simulated on the host) hit a specific player.
+  // A mob (simulated on the host) hit a specific player. kx/kz carry the
+  // knockback direction so the victim is shoved away from the attacker.
   socket.on('hitPlayer', (m) => {
     const r = room();
     if (!r || r.host !== socket.id || !m?.to) return;
-    io.to(String(m.to)).emit('hitPlayer', { dmg: +m.dmg || 0 });
+    io.to(String(m.to)).emit('hitPlayer', { dmg: +m.dmg || 0, kx: +m.kx || 0, kz: +m.kz || 0 });
   });
 
   // A guest hit a mob; route to the host who owns the simulation.

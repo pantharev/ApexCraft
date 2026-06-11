@@ -86,6 +86,12 @@ try {
   guest.emit('projectile', { x: 0, y: 70, z: 0, dx: 1, dy: 0, dz: 0, speed: 30, dmg: 0, target: 'none' });
   ok((await projP).speed === 30, 'projectile spawn relays');
 
+  // --- explosions relay ---
+  const boomP = once(guest, 'boom');
+  host.emit('boom', { x: 10, y: 65, z: -4, r: 3.4 });
+  const bm = await boomP;
+  ok(bm.x === 10 && bm.r === 3.4, 'explosion event relays to the room');
+
   // --- hit routing: host -> specific player, guest -> host ---
   const hitP = once(guest, 'hitPlayer');
   host.emit('hitPlayer', { to: guest.id, dmg: 3, kx: 0.6, kz: -0.8 });
@@ -96,6 +102,15 @@ try {
   guest.emit('mobHit', { i: 9, dmg: 5, x: 1, y: 2, z: 3 });
   const mh = await mobHitP;
   ok(mh.i === 9 && mh.dmg === 5, 'guest mob hit routes to the host');
+
+  // --- chess routing: guest action -> host; host state -> room ---
+  const chessP = once(host, 'chess');
+  guest.emit('chess', { action: 'open', key: '1,64,2' });
+  const ch = await chessP;
+  ok(ch.action === 'open' && ch.from === guest.id, 'chess action routes to host with sender id');
+  const chessStateP = once(guest, 'chessState');
+  host.emit('chessState', { key: '1,64,2', turn: 'w' });
+  ok((await chessStateP).key === '1,64,2', 'chess state broadcasts from host');
 
   // --- time sync (host only) ---
   const timeP = once(guest, 'time');

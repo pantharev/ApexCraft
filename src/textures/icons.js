@@ -342,6 +342,18 @@ function drawFence(ctx) {
   ctx.fillRect(3, 13, 2, 1); ctx.fillRect(11, 13, 2, 1); // post feet
 }
 
+function drawChessTable(ctx) {
+  // A tilted tabletop with the board inlay.
+  ctx.fillStyle = '#7a5733'; ctx.fillRect(1, 3, 14, 10);
+  for (let by = 0; by < 4; by++) {
+    for (let bx = 0; bx < 5; bx++) {
+      ctx.fillStyle = (bx + by) % 2 === 0 ? '#e8d8b8' : '#5a4028';
+      ctx.fillRect(3 + bx * 2, 4 + by * 2, 2, 2);
+    }
+  }
+  ctx.fillStyle = '#5d4023'; ctx.fillRect(2, 13, 2, 2); ctx.fillRect(12, 13, 2, 2); // legs
+}
+
 function drawNugget(ctx, color) {
   const dark = shade(color, 0.65);
   for (let y = 5; y <= 11; y++) for (let x = 4; x <= 11; x++) px(ctx, x, y, y > 8 ? dark : color);
@@ -350,7 +362,7 @@ function drawNugget(ctx, color) {
 
 const MEATS = new Set(['raw_porkchop', 'cooked_porkchop', 'raw_beef', 'cooked_beef', 'raw_mutton', 'cooked_mutton', 'rotten_flesh']);
 const GEMS = new Set(['diamond', 'emerald', 'lapis', 'redstone']);
-const LUMPS = new Set(['coal', 'charcoal', 'raw_iron', 'raw_gold', 'clay_ball']);
+const LUMPS = new Set(['coal', 'charcoal', 'raw_iron', 'raw_gold', 'clay_ball', 'gunpowder']);
 
 function drawItem(def) {
   const c = newCanvas();
@@ -363,6 +375,7 @@ function drawItem(def) {
   else if (name === 'oak_stairs') drawStairs(ctx);
   else if (name === 'bed') drawBed(ctx);
   else if (name === 'fence') drawFence(ctx);
+  else if (name === 'chess_table') drawChessTable(ctx);
   else if (name === 'arrow') drawArrow(ctx);
   else if (name === 'stick') drawStick(ctx);
   else if (name === 'apple') drawApple(ctx, color);
@@ -389,7 +402,7 @@ function drawItem(def) {
 }
 
 // Block items that look better with a hand-drawn icon than their block tile.
-const CUSTOM_BLOCK_ICONS = new Set(['door', 'oak_stairs', 'bed', 'fence']);
+const CUSTOM_BLOCK_ICONS = new Set(['door', 'oak_stairs', 'bed', 'fence', 'chess_table']);
 
 // The icon as a canvas — also the source the 3D item models are extruded from.
 export function itemIconCanvas(name) {

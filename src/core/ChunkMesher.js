@@ -19,12 +19,15 @@ const DOOR_OPEN = getBlockId('door_open');
 const BED = getBlockId('bed');
 const BED_HEAD = getBlockId('bed_head');
 const FENCE = getBlockId('fence');
+const LADDER = getBlockId('ladder');
+const PANE = getBlockId('glass_pane');
+const SLABS = new Set([getBlockId('oak_slab'), getBlockId('stone_slab')]);
 const STAIR_DIR = {
   [getBlockId('oak_stairs_px')]: 'px', [getBlockId('oak_stairs_nx')]: 'nx',
   [getBlockId('oak_stairs_pz')]: 'pz', [getBlockId('oak_stairs_nz')]: 'nz',
 };
-const SPECIAL = new Set([...PLANTS, DOOR, DOOR_OPEN, BED, BED_HEAD, FENCE,
-  ...Object.keys(STAIR_DIR).map(Number)]);
+const SPECIAL = new Set([...PLANTS, DOOR, DOOR_OPEN, BED, BED_HEAD, FENCE, LADDER, PANE,
+  ...SLABS, ...Object.keys(STAIR_DIR).map(Number)]);
 
 // Mask entries pack the block id with the face's 4-corner ambient-occlusion
 // pattern, so greedy merging only joins cells that shade identically (AO stays
@@ -274,6 +277,25 @@ export function buildChunkGeometry(chunk, worldGet) {
           pushBox(bufFor,
             wx + bx0, y, wz + bz0, wx + bx1, y + 0.55, wz + bz1,
             faceMaterialIndex(id, 'top'), faceMaterialIndex(id, 'side'), faceMaterialIndex(id, 'bottom'));
+        } else if (SLABS.has(id)) {
+          pushBox(bufFor, wx, y, wz, wx + 1, y + 0.5, wz + 1,
+            faceMaterialIndex(id, 'top'), faceMaterialIndex(id, 'side'), faceMaterialIndex(id, 'bottom'));
+        } else if (id === LADDER) {
+          // Flat against whichever neighbouring wall it hangs on.
+          const mat = faceMaterialIndex(LADDER, 'side');
+          let b = [0.42, 0, 0, 0.5, 1, 1]; // default: centred, spanning z
+          if (isSolid(at(lx, y, lz - 1))) b = [0, 0, 0.02, 1, 1, 0.1];
+          else if (isSolid(at(lx, y, lz + 1))) b = [0, 0, 0.9, 1, 1, 0.98];
+          else if (isSolid(at(lx - 1, y, lz))) b = [0.02, 0, 0, 0.1, 1, 1];
+          else if (isSolid(at(lx + 1, y, lz))) b = [0.9, 0, 0, 0.98, 1, 1];
+          pushBox(bufFor, wx + b[0], y + b[1], wz + b[2], wx + b[3], y + b[4], wz + b[5], mat, mat, mat);
+        } else if (id === PANE) {
+          // Thin glass sheet aligned with its solid neighbours (cross if both).
+          const mat = faceMaterialIndex(PANE, 'side');
+          const xConn = isSolid(at(lx - 1, y, lz)) || isSolid(at(lx + 1, y, lz));
+          const zConn = isSolid(at(lx, y, lz - 1)) || isSolid(at(lx, y, lz + 1));
+          if (xConn || !zConn) pushBox(bufFor, wx, y, wz + 0.44, wx + 1, y + 1, wz + 0.56, mat, mat, mat);
+          if (zConn) pushBox(bufFor, wx + 0.44, y, wz, wx + 0.56, y + 1, wz + 1, mat, mat, mat);
         } else if (id === FENCE) {
           const mat = faceMaterialIndex(FENCE, 'side');
           // Centre post...

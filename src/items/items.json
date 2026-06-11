@@ -150,6 +150,89 @@
     "maxStack": 64
   },
   {
+    "name": "tnt",
+    "display": "TNT",
+    "color": "#c43c2a",
+    "placeBlock": "tnt",
+    "maxStack": 16
+  },
+  {
+    "name": "gunpowder",
+    "display": "Gunpowder",
+    "color": "#6e6e6e",
+    "maxStack": 64
+  },
+  {
+    "name": "pumpkin",
+    "display": "Pumpkin",
+    "color": "#d8821e",
+    "placeBlock": "pumpkin",
+    "maxStack": 64
+  },
+  {
+    "name": "melon",
+    "display": "Melon",
+    "color": "#5da831",
+    "placeBlock": "melon",
+    "maxStack": 64
+  },
+  {
+    "name": "hay_bale",
+    "display": "Hay Bale",
+    "color": "#d8b34a",
+    "placeBlock": "hay_bale",
+    "maxStack": 64
+  },
+  {
+    "name": "sandstone",
+    "display": "Sandstone",
+    "color": "#d8c694",
+    "placeBlock": "sandstone",
+    "maxStack": 64
+  },
+  {
+    "name": "mossy_cobblestone",
+    "display": "Mossy Cobblestone",
+    "color": "#6e8a5e",
+    "placeBlock": "mossy_cobblestone",
+    "maxStack": 64
+  },
+  {
+    "name": "oak_slab",
+    "display": "Oak Slab",
+    "color": "#b3884f",
+    "placeBlock": "oak_slab",
+    "maxStack": 64
+  },
+  {
+    "name": "stone_slab",
+    "display": "Stone Slab",
+    "color": "#8a8a8a",
+    "placeBlock": "stone_slab",
+    "maxStack": 64
+  },
+  {
+    "name": "ladder",
+    "display": "Ladder",
+    "color": "#9a7d4e",
+    "placeBlock": "ladder",
+    "maxStack": 64
+  },
+  {
+    "name": "glass_pane",
+    "display": "Glass Pane",
+    "color": "#bfe6ee",
+    "placeBlock": "glass_pane",
+    "maxStack": 64
+  },
+  {
+    "name": "chess_table",
+    "display": "Chess Table",
+    "color": "#9c7a44",
+    "placeBlock": "chess_table",
+    "maxStack": 8
+  },
+  {
     "name": "stick",
     "display": "Stick",
     "color": "#8a6d3b",
@@ -265,7 +348,8 @@
     "name": "wool",
     "display": "Wool",
     "color": "#eeeeee",
-    "maxStack": 64
+    "maxStack": 64,
+    "placeBlock": "wool"
   },
   {
     "name": "coal",

@@ -347,6 +347,85 @@ const DRAW = {
     }
     c.strokeStyle = 'rgba(60,40,20,0.85)'; c.strokeRect(0.5, 0.5, 15, 15);
   },
+  tnt_side: (c, r) => {
+    paint(c, '#c43c2a', (x, y) => (y < 3 || y > 12 ? -20 : 0), 10, r);
+    c.fillStyle = '#e8e2d4'; c.fillRect(0, 5, 16, 5);          // label band
+    c.fillStyle = '#1a1a1a';                                    // T N T
+    c.fillRect(2, 6, 3, 1); c.fillRect(3, 6, 1, 3);
+    c.fillRect(6, 6, 1, 3); c.fillRect(9, 6, 1, 3); c.fillRect(6, 6, 4, 1); c.fillRect(9, 8, 1, 1);
+    c.fillRect(11, 6, 3, 1); c.fillRect(12, 6, 1, 3);
+  },
+  tnt_top: (c, r) => {
+    paint(c, '#d8c694', null, 10, r);
+    c.fillStyle = '#c43c2a';
+    for (const [x, y] of [[2, 2], [9, 2], [2, 9], [9, 9]]) c.fillRect(x, y, 5, 5);
+    c.fillStyle = '#3a2a14'; c.fillRect(7, 7, 2, 2); // fuse
+  },
+  wool_block: (c, r) => {
+    const vn = valueNoise(r, 4);
+    // Soft weave: gentle diagonal crosshatch.
+    paint(c, '#e8e4dc', (x, y) => (vn(x, y) - 0.5) * 14 + ((x + y) % 4 === 0 ? -10 : 0) + ((x - y & 3) === 2 ? -5 : 0), 4, r);
+  },
+  pumpkin_side: (c, r) => {
+    paint(c, '#d8821e', (x) => Math.sin(x * 1.35 + 0.6) * 18, 6, r); // ribs
+    for (let x = 0; x < 16; x++) { setPx(c, x, 0, '#a85f12', 1, 8, r); setPx(c, x, 15, '#a85f12', 1, 8, r); }
+  },
+  pumpkin_top: (c, r) => {
+    const vn = valueNoise(r, 3);
+    paint(c, '#c87718', (x, y) => { const d = Math.hypot(x - 7.5, y - 7.5); return Math.sin(Math.atan2(y - 7.5, x - 7.5) * 6) * 8 - d + (vn(x, y) - 0.5) * 8; }, 6, r);
+    c.fillStyle = '#5d7a23'; c.fillRect(7, 6, 2, 3); c.fillRect(8, 5, 1, 2); // curled stem
+  },
+  melon_side: (c, r) => {
+    paint(c, '#5da831', (x) => ((x % 4) < 2 ? 12 : -14) + Math.sin(x) * 3, 7, r); // stripes
+  },
+  hay_side: (c, r) => {
+    const vn = valueNoise(r, 5);
+    paint(c, '#d8b34a', (x, y) => (vn(x, y) - 0.5) * 20 + (x % 3 === 0 ? -12 : 0), 9, r); // strands
+    for (let x = 0; x < 16; x++) { setPx(c, x, 4, '#a8842c', 1, 8, r); setPx(c, x, 11, '#a8842c', 1, 8, r); } // ties
+  },
+  hay_top: (c, r) => {
+    const vn = valueNoise(r, 3);
+    paint(c, '#c9a43e', (x, y) => { const d = Math.hypot(x - 7.5, y - 7.5); return Math.sin(d * 2.2 + vn(x, y) * 3) * 12 - d; }, 8, r); // cut swirl
+  },
+  sandstone: (c, r) => {
+    const vn = valueNoise(r, 4);
+    // Horizontal strata with subtle pocking.
+    paint(c, '#d8c694', (x, y) => (y % 5 === 0 ? -16 : 0) + Math.sin(y * 0.8) * 6 + (vn(x, y) - 0.5) * 10, 5, r);
+  },
+  mossy_cobblestone: (c, r) => {
+    voronoi(c, '#8d8d8d', '#585858', 7, r, 24);
+    const vn = valueNoise(r, 3);
+    const img = c.getImageData(0, 0, TILE, TILE);
+    for (let y = 0; y < TILE; y++) for (let x = 0; x < TILE; x++) {
+      if (vn(x, y) < 0.58) continue; // moss creeps over the high-noise patches
+      const i = (y * TILE + x) * 4;
+      img.data[i] = img.data[i] * 0.45 + 40;
+      img.data[i + 1] = img.data[i + 1] * 0.5 + 80;
+      img.data[i + 2] = img.data[i + 2] * 0.4 + 30;
+    }
+    c.putImageData(img, 0, 0);
+  },
+  ladder: (c, r) => {
+    c.clearRect(0, 0, TILE, TILE);
+    c.fillStyle = '#9a7d4e';
+    c.fillRect(2, 0, 2, 16); c.fillRect(12, 0, 2, 16);           // rails
+    for (const y of [2, 7, 12]) { c.fillRect(2, y, 12, 2); }     // rungs
+    c.fillStyle = '#7a5f38';
+    for (const y of [3, 8, 13]) c.fillRect(2, y, 12, 1);         // rung shading
+  },
+  chess_top: (c, r) => {
+    // An 8x8 board (2px squares) inlaid on a wooden rim.
+    paint(c, '#7a5733', null, 8, r);
+    for (let by = 0; by < 8; by++) {
+      for (let bx = 0; bx < 8; bx++) {
+        const light = (bx + by) % 2 === 0;
+        const col = light ? '#e8d8b8' : '#5a4028';
+        for (let dy = 0; dy < 2; dy++) for (let dx = 0; dx < 2; dx++) {
+          setPx(c, bx * 2 + dx, by * 2 + dy, col, 1, 6, r);
+        }
+      }
+    }
+  },
   // Cross-plants (transparent background; rendered as X-quads in the world).
   tall_grass: (c, r) => {
     c.clearRect(0, 0, TILE, TILE);
@@ -437,10 +516,20 @@ const FACE_TILES = {
   bed: { top: 'bed_top', side: 'bed_side', bottom: 'planks' },
   bed_head: { top: 'bed_top_head', side: 'bed_side', bottom: 'planks' },
   fence: t('planks'),
+  tnt: { top: 'tnt_top', side: 'tnt_side', bottom: 'tnt_top' },
+  wool: t('wool_block'),
+  pumpkin: { top: 'pumpkin_top', side: 'pumpkin_side', bottom: 'pumpkin_top' },
+  melon: { top: 'melon_side', side: 'melon_side', bottom: 'melon_side' },
+  hay_bale: { top: 'hay_top', side: 'hay_side', bottom: 'hay_top' },
+  sandstone: t('sandstone'),
+  mossy_cobblestone: t('mossy_cobblestone'),
+  oak_slab: t('planks'), stone_slab: t('stone'),
+  ladder: t('ladder'), glass_pane: t('glass'),
+  chess_table: { top: 'chess_top', side: 'crafting_side', bottom: 'planks' },
 };
 for (const name of Object.keys(ORE_COLORS)) FACE_TILES[name] = t(name);
 
-const CUTOUT = new Set(['leaves', 'glass', 'tall_grass', 'poppy', 'dandelion', 'door_top']);
+const CUTOUT = new Set(['leaves', 'glass', 'tall_grass', 'poppy', 'dandelion', 'door_top', 'ladder']);
 const TRANSPARENT = new Set(['water']);
 
 // --- Build textures + materials once ---

@@ -90,13 +90,14 @@ export function villageLayout(v) {
     const d = 5 + Math.floor(rng() * 3); // 5..7 along z
     const table = rng() < 0.5;
     const chest = rng() < 0.35;
+    const hay = rng() < 0.45;
     const floorY = columnHeight(hx, hz);
     // Drop houses that would hang off a slope or stand in water.
     if (Math.abs(floorY - v.y) > 6 || floorY <= SEA_LEVEL + 1) continue;
     // Door faces the well, snapped to the dominant axis.
     const dx = v.x - hx, dz = v.z - hz;
     const facing = Math.abs(dx) > Math.abs(dz) ? (dx > 0 ? '+x' : '-x') : (dz > 0 ? '+z' : '-z');
-    houses.push({ x: hx, z: hz, w, d, floorY, facing, table, chest });
+    houses.push({ x: hx, z: hz, w, d, floorY, facing, table, chest, hay });
   }
 
   const layout = { well: { x: v.x, z: v.z, y: v.y }, houses };

@@ -173,6 +173,16 @@ class SoundEngine {
     this.burst(900, 1.2, 'bandpass', 0.1, 0.07, 0.05);
   }
 
+  // TNT/creeper fuse: a long thin hiss.
+  fuse() { this.burst(3200, 0.8, 'highpass', 0.5, 0.07); }
+
+  // The big one: deep thump + rumbling noise tail.
+  explode() {
+    this.tone(70, 0.5, 'sine', 0.5, 28);
+    this.burst(180, 1.4, 'lowpass', 0.6, 0.45);
+    this.burst(900, 1.2, 'bandpass', 0.35, 0.2, 0.04);
+  }
+
   hurt() {
     this.tone(260, 0.18, 'sawtooth', 0.28, 120);
     this.burst(400, 1, 'lowpass', 0.18, 0.12);

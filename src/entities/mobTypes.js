@@ -63,9 +63,23 @@ export const MOBS = {
     ],
   },
 
+  // Village defender: ignores players, hunts hostiles, hits like a truck.
+  iron_golem: {
+    category: 'golem', health: 60, speed: 1.1, attack: 8, detect: 16, hw: 0.55, h: 2.4,
+    drops: [{ item: 'iron_ingot', count: [1, 2] }],
+    parts: [
+      leg(-0.2, 0, 0.34, 0.85, 0.34, '#9a958c'), leg(0.2, 0, 0.34, 0.85, 0.34, '#9a958c'),
+      { size: [0.95, 0.85, 0.5], pos: [0, 1.3, 0], color: '#c2bdb4' },               // broad torso
+      { size: [0.26, 1.0, 0.26], pos: [-0.62, 1.25, 0], color: '#aaa49a' },          // long arms
+      { size: [0.26, 1.0, 0.26], pos: [0.62, 1.25, 0], color: '#aaa49a' },
+      { size: [0.45, 0.4, 0.42], pos: [0, 1.98, 0], color: '#c2bdb4', head: true },  // head
+      { size: [0.1, 0.22, 0.1], pos: [0, 1.9, 0.26], color: '#8a857c', head: true }, // nose
+    ],
+  },
+
   // ---- Hostile ----
   zombie: {
-    category: 'hostile', health: 20, speed: 1.5, attack: 3, detect: 18, burns: true, hw: 0.4, h: 1.8,
+    category: 'hostile', health: 20, speed: 1.5, attack: 3, detect: 18, burns: true, huntsVillagers: true, hw: 0.4, h: 1.8,
     drops: [{ item: 'rotten_flesh', count: [0, 2] }],
     parts: [
       leg(-0.13, 0, 0.25, 0.75, 0.25, '#2a3d6b'), leg(0.13, 0, 0.25, 0.75, 0.25, '#2a3d6b'),
@@ -84,6 +98,19 @@ export const MOBS = {
       { size: [0.14, 0.7, 0.14], pos: [-0.32, 1.1, 0], color: '#d8d8d8' },
       { size: [0.14, 0.7, 0.14], pos: [0.32, 1.1, 0], color: '#d8d8d8' },
       { size: [0.42, 0.42, 0.42], pos: [0, 1.72, 0], color: '#e6e6e6', head: true },
+    ],
+  },
+  creeper: {
+    // Doesn't melee: closes in, hisses, swells, and detonates (see Mob.update).
+    category: 'hostile', health: 20, speed: 1.6, attack: 0, detect: 16, burns: false, exploder: true, hw: 0.35, h: 1.6,
+    drops: [{ item: 'gunpowder', count: [1, 2] }],
+    parts: [
+      leg(-0.16, 0, 0.26, 0.4, 0.3, '#3a7a36'), leg(0.16, 0, 0.26, 0.4, 0.3, '#3a7a36'),
+      { size: [0.5, 0.8, 0.34], pos: [0, 0.8, 0], color: '#48a83e' },                // tall body
+      { size: [0.48, 0.48, 0.48], pos: [0, 1.44, 0], color: '#48a83e', head: true }, // head
+      { size: [0.1, 0.14, 0.02], pos: [-0.11, 1.5, 0.25], color: '#1a1a1a', head: true }, // eyes
+      { size: [0.1, 0.14, 0.02], pos: [0.11, 1.5, 0.25], color: '#1a1a1a', head: true },
+      { size: [0.14, 0.2, 0.02], pos: [0, 1.32, 0.25], color: '#1a1a1a', head: true },    // that mouth
     ],
   },
   spider: {

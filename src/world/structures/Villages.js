@@ -19,6 +19,8 @@ const DOOR_OPEN = getBlockId('door_open');
 const BED = getBlockId('bed');
 const BED_HEAD = getBlockId('bed_head');
 const FENCE = getBlockId('fence');
+const HAY = getBlockId('hay_bale');
+const MOSSY = getBlockId('mossy_cobblestone');
 
 // Surfaces a path is allowed to pave over.
 const PAVEABLE = new Set([GRASS, DIRT, SAND, SNOW, GRAVEL]);
@@ -103,6 +105,7 @@ function emitHouse(chunk, h, baseX, baseZ) {
         else if (h.chest && wx === chestX && wz === chestZ) chunk.set(lx, fy + 1, lz, CHEST);
         else if (wx === x0 + 1 && wz === z1 - 1) chunk.set(lx, fy + 1, lz, BED);
         else if (wx === x0 + 2 && wz === z1 - 1) chunk.set(lx, fy + 1, lz, BED_HEAD);
+        else if (h.hay && wx === x1 - 1 && wz === z0 + 1) chunk.set(lx, fy + 1, lz, HAY);
       }
     }
   }
@@ -125,10 +128,12 @@ function emitWell(chunk, well, baseX, baseZ) {
       for (let yy = Math.min(ground, y - 3); yy < y - 2; yy++) chunk.set(lx, yy, lz, COBBLE);
 
       if (ring) {
+        // A little weathering: some rim stones grow moss (deterministic).
+        const stone = ((wx * 31 + wz * 17) & 7) < 2 ? MOSSY : COBBLE;
         chunk.set(lx, y - 2, lz, COBBLE);
         chunk.set(lx, y - 1, lz, COBBLE);
-        chunk.set(lx, y, lz, COBBLE);                      // rim
-        chunk.set(lx, y + 1, lz, post ? COBBLE : FENCE);   // fence closes the basin in
+        chunk.set(lx, y, lz, stone);                       // rim
+        chunk.set(lx, y + 1, lz, post ? stone : FENCE);    // fence closes the basin in
         chunk.set(lx, y + 2, lz, post ? COBBLE : 0);
       } else {
         // Basin: cobble bottom, two of water, open above.

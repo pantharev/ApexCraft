@@ -413,6 +413,19 @@ const DRAW = {
     c.fillStyle = '#7a5f38';
     for (const y of [3, 8, 13]) c.fillRect(2, y, 12, 1);         // rung shading
   },
+  chess_top: (c, r) => {
+    // An 8x8 board (2px squares) inlaid on a wooden rim.
+    paint(c, '#7a5733', null, 8, r);
+    for (let by = 0; by < 8; by++) {
+      for (let bx = 0; bx < 8; bx++) {
+        const light = (bx + by) % 2 === 0;
+        const col = light ? '#e8d8b8' : '#5a4028';
+        for (let dy = 0; dy < 2; dy++) for (let dx = 0; dx < 2; dx++) {
+          setPx(c, bx * 2 + dx, by * 2 + dy, col, 1, 6, r);
+        }
+      }
+    }
+  },
   // Cross-plants (transparent background; rendered as X-quads in the world).
   tall_grass: (c, r) => {
     c.clearRect(0, 0, TILE, TILE);
@@ -512,6 +525,7 @@ const FACE_TILES = {
   mossy_cobblestone: t('mossy_cobblestone'),
   oak_slab: t('planks'), stone_slab: t('stone'),
   ladder: t('ladder'), glass_pane: t('glass'),
+  chess_table: { top: 'chess_top', side: 'crafting_side', bottom: 'planks' },
 };
 for (const name of Object.keys(ORE_COLORS)) FACE_TILES[name] = t(name);
 

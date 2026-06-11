@@ -226,6 +226,13 @@
     "maxStack": 64
   },
   {
+    "name": "chess_table",
+    "display": "Chess Table",
+    "color": "#9c7a44",
+    "placeBlock": "chess_table",
+    "maxStack": 8
+  },
+  {
     "name": "stick",
     "display": "Stick",
     "color": "#8a6d3b",

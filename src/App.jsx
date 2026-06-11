@@ -6,6 +6,7 @@ import { Net } from './net/Net.js';
 import { MainMenu, PauseMenu } from './ui/Menus.jsx';
 import { Landing } from './ui/Landing.jsx';
 import { Hotbar, InventoryPanel, CraftingTableScreen, FurnaceScreen, ChestScreen } from './ui/InventoryUI.jsx';
+import { ChessScreen } from './ui/ChessScreen.jsx';
 import { TouchControls } from './ui/TouchControls.jsx';
 
 const IS_TOUCH = typeof window !== 'undefined' &&
@@ -243,6 +244,7 @@ export default function App() {
           {gameRef.current?.inventory && openScreen === 'chest' && (
             <ChestScreen inventory={gameRef.current.inventory} chest={gameRef.current.activeChest} />
           )}
+          {gameRef.current && openScreen === 'chess' && <ChessScreen game={gameRef.current} />}
 
           {saved && (
             <div style={{ position: 'absolute', bottom: 8, right: 10, color: '#cfe9c0', font: '12px monospace', textShadow: '1px 1px 2px #000', pointerEvents: 'none' }}>Saved</div>

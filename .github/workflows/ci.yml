@@ -17,3 +17,4 @@ jobs:
       - run: npm ci
       - run: npm run build
       - run: node server/test.js
+      - run: node src/chess/engineTest.js

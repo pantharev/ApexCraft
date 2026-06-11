@@ -14,6 +14,7 @@ import { TorchLights } from '../systems/TorchLights.js';
 import { Projectiles } from '../systems/Projectiles.js';
 import { Particles } from '../systems/Particles.js';
 import { Explosions } from '../systems/Explosions.js';
+import { ChessGames } from '../chess/ChessGames.js';
 import { RemotePlayers } from '../net/RemotePlayers.js';
 import { GhostMobs } from '../net/GhostMobs.js';
 import { Sound } from '../systems/Sound.js';
@@ -160,6 +161,18 @@ export class Game {
       };
       // Remote explosion: visuals + own damage only (edits arrive separately).
       net.onBoom = (b) => this.explosions.boom(b.x, b.y, b.z, b.r, this._boomCtx(), false);
+      // Chess: the host validates every action and broadcasts the new view.
+      net.onChess = (m) => {
+        if (!net.isHost || !m) return;
+        let view = null;
+        if (m.action === 'open') view = this.chessGames.open(m.key, m.from);
+        else if (m.action === 'move') view = this.chessGames.move(m.key, m.from, m.a, m.b);
+        else if (m.action === 'reset') view = this.chessGames.reset(m.key, m.from);
+        if (view) this._pushChess(view);
+      };
+      net.onChessState = (view) => {
+        if (view && view.key === this.activeChessKey && this.onChess) this.onChess(view);
+      };
       net.onHitPlayer = (dmg, kx, kz) => {
         this.vitals.damage(dmg);
         if (kx || kz) this.player.knockback(kx, kz);
@@ -209,6 +222,13 @@ export class Game {
       return true;
     };
 
+    // Chess tables: per-position games. Single-player is hotseat (you play
+    // both sides); in multiplayer the host owns every board.
+    this.chessGames = new ChessGames({ hotseat: !net });
+    if (this._save?.chess && (!net || net.isOrigin)) this.chessGames.load(this._save.chess);
+    this.activeChessKey = null;
+    this.onChess = null; // React: receives the current table view
+
     // Per-position furnace + chest state.
     this.furnaces = new Furnaces();
     if (this._save?.furnaces) this.furnaces.load(this._save.furnaces);
@@ -232,6 +252,8 @@ export class Game {
         // Light it: the block becomes a primed, flashing entity.
         this.world.setBlock(pos.x, pos.y, pos.z, 0);
         this.explosions.prime(pos.x, pos.y, pos.z);
+      } else if (name === 'chess_table') {
+        this._openChess(pos);
       }
     };
     this.onSleep = null; // React fade-to-black overlay
@@ -450,6 +472,7 @@ export class Game {
       inventory: this.inventory.serialize(),
       furnaces: this.furnaces.serialize(),
       chests: this.chests.serialize(),
+      chess: this.chessGames.serialize(),
       time: this.dayNight.t,
     };
   }
@@ -460,6 +483,57 @@ export class Game {
     const ok = await saveWorld(this.worldId, this.serialize());
     if (ok && this.onSaved) this.onSaved();
     return ok;
+  }
+
+  // ---- Chess table ----
+
+  // My seat identity at chess tables: 'p1' hotseat in single-player, 'host'
+  // for the multiplayer host, the socket id for guests.
+  _chessId() {
+    if (!this.net) return 'p1';
+    return this.net.isHost ? 'host' : this.net.id;
+  }
+
+  // Render locally and, as host, broadcast the authoritative view.
+  _pushChess(view) {
+    if (view.key === this.activeChessKey && this.onChess) this.onChess(view);
+    if (this.net && this.net.isHost) this.net.sendChessState(view);
+  }
+
+  _openChess(pos) {
+    this.activeChessKey = `${pos.x},${pos.y},${pos.z}`;
+    if (!this.net || this.net.isHost) {
+      this._pushChess(this.chessGames.open(this.activeChessKey, this._chessId()));
+    } else {
+      this.net.sendChess({ action: 'open', key: this.activeChessKey });
+    }
+    this.setScreen('chess');
+  }
+
+  chessMove(from, to) {
+    if (!this.activeChessKey) return;
+    if (!this.net || this.net.isHost) {
+      const view = this.chessGames.move(this.activeChessKey, this._chessId(), from, to);
+      if (view) this._pushChess(view);
+    } else {
+      this.net.sendChess({ action: 'move', key: this.activeChessKey, a: from, b: to });
+    }
+  }
+
+  chessReset() {
+    if (!this.activeChessKey) return;
+    if (!this.net || this.net.isHost) {
+      const view = this.chessGames.reset(this.activeChessKey, this._chessId());
+      if (view) this._pushChess(view);
+    } else {
+      this.net.sendChess({ action: 'reset', key: this.activeChessKey });
+    }
+  }
+
+  // Legal targets for highlighting. Guests compute them locally from the
+  // synced view (the host still validates the actual move).
+  chessLegalTargets(view, from) {
+    return this.chessGames.legalTargetsFor(view, from, this._chessId());
   }
 
   // Sleep in a bed: short fade to black, then wake at dawn. Night only; in

@@ -645,5 +645,21 @@
       "item": "glass_pane",
       "count": 16
     }
+  },
+  {
+    "id": "chess_table",
+    "type": "shaped",
+    "pattern": [
+      "WW",
+      "PP"
+    ],
+    "key": {
+      "W": "wool",
+      "P": "oak_planks"
+    },
+    "result": {
+      "item": "chess_table",
+      "count": 1
+    }
   }
 ]

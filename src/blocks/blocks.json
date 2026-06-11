@@ -807,5 +807,22 @@
         ]
       }
     ]
+  },
+  {
+    "id": 50,
+    "name": "chess_table",
+    "solid": true,
+    "hardness": 2.0,
+    "preferredTool": "axe",
+    "interactive": true,
+    "drops": [
+      {
+        "item": "chess_table",
+        "count": [
+          1,
+          1
+        ]
+      }
+    ]
   }
 ]

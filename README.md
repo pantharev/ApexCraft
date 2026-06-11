@@ -68,6 +68,7 @@ See [LICENSE](LICENSE) and [CLA.md](CLA.md) for full details.
 - **Doors, stairs & beds** — craft **doors** (right-click to swing them open/shut), **stairs** that orient to face you when placed (and that you **walk up** without jumping), and **beds**: right-click one at night for a short sleep fade that skips straight to sunrise.
 - **TNT** — craft it from gunpowder + sand, place it, right-click to light the fuse… and stand back. Chain reactions included.
 - **More to build with** — wool, sandstone (and natural sandstone under deserts), mossy cobblestone, **slabs** (half-steps you walk up), **ladders** you can climb, glass panes, fences, pumpkins, melons, and hay bales.
+- **♟️ Chess table** — craft one (wool + planks), place it, right-click to sit down at a full **lichess-style board** floating over the game world. Complete rules (castling, en passant, promotion, mate detection — perft-verified engine). In multiplayer the first two players get the seats and everyone else **spectates live**; solo it's a hotseat board. Games persist with your save.
 - **Smelting** — place a furnace, add fuel + input; smelt ores into ingots, sand into glass, and raw meat into cooked food.
 - **Recipe book** — a "Recipes" tab in the inventory, crafting table, and furnace screens lists every recipe with its ingredients (have/need), and one-click crafts anything you have materials for (shift-click crafts all).
 
@@ -132,7 +133,7 @@ See [LICENSE](LICENSE) and [CLA.md](CLA.md) for full details.
 
 Pick or create a world on the title screen, then click the game to lock the mouse and play.
 
-**On touch devices** the game shows on-screen controls: a left **joystick** to move; **touch the world** to look (drag), **place** a block (quick tap), or **mine** (press & hold); a **Jump** button (and **Down** while flying); and **Fly**, **Bag** (inventory), and **☰** (pause). A **FLYING** badge shows when flight is on. Tap a hotbar slot to select it.
+**On touch devices** the game shows on-screen controls: a left **joystick** to move; **touch the world** to look (drag), **place** a block (quick tap), or **mine** (press & hold); a **Jump** button (and **Down** while flying); and **Fly**, **Bag** (inventory), and **☰** (pause). A **FLYING** badge shows when flight is on. Tap a hotbar slot to select it. In inventory screens: **tap** to move a stack, **drag** to carry it (it follows your finger), **hold** to split.
 
 ---
 

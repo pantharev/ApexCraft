@@ -141,6 +141,19 @@ io.on('connection', (socket) => {
     io.to(String(m.to)).emit('hitPlayer', { dmg: +m.dmg || 0, kx: +m.kx || 0, kz: +m.kz || 0 });
   });
 
+  // Chess: actions route to the host (who owns the boards); authoritative
+  // state broadcasts from the host to the whole room.
+  socket.on('chess', (m) => {
+    const r = room();
+    if (!r || !m) return;
+    io.to(r.host).emit('chess', { ...m, from: socket.id });
+  });
+  socket.on('chessState', (v) => {
+    const r = room();
+    if (!r || r.host !== socket.id || !v) return;
+    socket.to(code).emit('chessState', v);
+  });
+
   // A guest hit a mob; route to the host who owns the simulation.
   socket.on('mobHit', (m) => {
     const r = room();

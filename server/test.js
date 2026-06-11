@@ -103,6 +103,15 @@ try {
   const mh = await mobHitP;
   ok(mh.i === 9 && mh.dmg === 5, 'guest mob hit routes to the host');
 
+  // --- chess routing: guest action -> host; host state -> room ---
+  const chessP = once(host, 'chess');
+  guest.emit('chess', { action: 'open', key: '1,64,2' });
+  const ch = await chessP;
+  ok(ch.action === 'open' && ch.from === guest.id, 'chess action routes to host with sender id');
+  const chessStateP = once(guest, 'chessState');
+  host.emit('chessState', { key: '1,64,2', turn: 'w' });
+  ok((await chessStateP).key === '1,64,2', 'chess state broadcasts from host');
+
   // --- time sync (host only) ---
   const timeP = once(guest, 'time');
   host.emit('time', 0.77);

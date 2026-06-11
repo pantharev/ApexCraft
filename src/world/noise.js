@@ -19,7 +19,11 @@ let terrainNoise, tempNoise, humidNoise, detailNoise, caveNoise, oreNoise, fores
   continentNoise, riverNoise, mountainNoise, ridgeNoise, erosionNoise, warpXNoise, warpZNoise,
   caveBNoise, cavernNoise, riftNoise, riftMaskNoise;
 
+let currentSeed = WORLD_SEED;
+export const getSeed = () => currentSeed;
+
 export function reseed(seed) {
+  currentSeed = seed;
   terrainNoise = createNoise2D(mulberry32(seed + 0));
   tempNoise = createNoise2D(mulberry32(seed + 101));
   humidNoise = createNoise2D(mulberry32(seed + 202));

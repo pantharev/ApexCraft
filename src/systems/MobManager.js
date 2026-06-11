@@ -2,11 +2,13 @@ import * as THREE from 'three';
 import { Mob } from '../entities/Mob.js';
 import { MOBS, PASSIVE, HOSTILE } from '../entities/mobTypes.js';
 import { getBlockId, isSolid } from '../blocks/BlockRegistry.js';
+import { villagesNear } from '../world/structures/VillagePlan.js';
 import { Sound } from './Sound.js';
 
 const GRASS = getBlockId('grass');
 const PASSIVE_CAP = 10;
 const HOSTILE_CAP = 14;
+const VILLAGER_CAP = 4; // per village
 const DESPAWN = 70;
 const SPAWN_MIN = 16;
 const SPAWN_MAX = 34;
@@ -21,6 +23,7 @@ export class MobManager {
     this.itemDrops = itemDrops;
     this.mobs = [];
     this.spawnTimer = 2;
+    this.villagerTimer = 3;
   }
 
   count(category) {
@@ -34,6 +37,32 @@ export class MobManager {
     mob.world = this.world;
     this.scene.add(mob.group);
     this.mobs.push(mob);
+    return mob;
+  }
+
+  // Villages repopulate while a player is nearby: a few villagers appear
+  // around the well (leashed to it) up to a small per-village cap.
+  _trySpawnVillagers(players) {
+    for (const pl of players) {
+      for (const v of villagesNear(pl.pos.x, pl.pos.z, 80)) {
+        let n = 0;
+        for (const m of this.mobs) {
+          if (m.type === 'villager' &&
+              Math.hypot(m.pos.x - v.x, m.pos.z - v.z) < 50) n++;
+        }
+        if (n >= VILLAGER_CAP) continue;
+        const a = Math.random() * Math.PI * 2;
+        const r = 4 + Math.random() * 7; // off the well pad, inside the ring
+        const wx = Math.floor(v.x + Math.cos(a) * r);
+        const wz = Math.floor(v.z + Math.sin(a) * r);
+        const surf = this.world.surfaceHeight(wx, wz);
+        if (!isSolid(this.world.getBlock(wx, surf, wz))) continue;
+        if (isSolid(this.world.getBlock(wx, surf + 1, wz)) ||
+            isSolid(this.world.getBlock(wx, surf + 2, wz))) continue;
+        const mob = this._spawn('villager', wx + 0.5, surf + 1, wz + 0.5);
+        mob.anchor = { x: v.x, z: v.z };
+      }
+    }
   }
 
   _trySpawn(ctx) {
@@ -70,6 +99,12 @@ export class MobManager {
       this.spawnTimer = 2;
       const anchor = players[Math.floor(Math.random() * players.length)];
       this._trySpawn({ ...ctx, playerPos: anchor.pos });
+    }
+
+    this.villagerTimer -= dt;
+    if (this.villagerTimer <= 0) {
+      this.villagerTimer = 4;
+      this._trySpawnVillagers(players);
     }
 
     const p = ctx.playerPos;

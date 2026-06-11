@@ -46,6 +46,7 @@ See [LICENSE](LICENSE) and [CLA.md](CLA.md) for full details.
 - **Oceans, lakes & rivers** — winding river channels whose width breathes along the course; varied sea floors (sand banks, gravel runs, clay pockets); beaches at the shore.
 - **A real underground**: winding **spaghetti tunnels** (two intersecting 3D fields) that surface as cave entrances, big **cheese caverns** at depth, and rare **rifts** — deep ravines that split the land open 15–40 blocks down. **Ore veins** (coal, iron, gold, redstone, lapis, diamond, emerald) placed by depth and rarity.
 - **Surface flora**: tall-grass meadows that thicken with humidity, rare **flower fields** of poppies and dandelions (pick + replant them), and **cacti** columns in the deserts.
+- **Villages** (about one per ~1,300 blocks of travel): a cobblestone **well** at the centre, 4–7 plank-and-log **houses** with doors facing the well, glass windows, gravel **paths**, and the odd crafting table or chest inside — all generated deterministically across chunk borders. **Villagers** in brown robes wander between the houses, watch you walk by, and never stray far from home.
 - **Trees** scattered only on grass, clumped by a *forest* noise field so you get dense woods and open plains both.
 - **Day/night cycle** with a moving sun and moon (sunrise in the east, set in the west), a **wheeling star dome** at night, glowing halos around the sun/moon, and **orange dawn/dusk skies** with warm horizon light.
 

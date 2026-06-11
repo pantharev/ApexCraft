@@ -53,6 +53,7 @@ export class Mob {
 
     this.grazeTimer = 0;    // passive: head-down grazing
     this.lookAt = null;     // world point the head tracks (or null)
+    this.anchor = null;     // {x, z} home point (villagers leash to their village)
 
     this.group = buildMobModel(type);
     this.legs = this.group.userData.legs || [];
@@ -112,7 +113,7 @@ export class Mob {
       this.vel.x += (dx / len) * 5;
       this.vel.z += (dz / len) * 5;
       this.vel.y = 5;
-      if (this.def.category === 'passive') {
+      if (this.def.category !== 'hostile') {
         this.fleeTimer = 5;
         this.heading = { x: dx / len, z: dz / len };
       }
@@ -205,8 +206,17 @@ export class Mob {
     } else {
       this.wanderTimer -= dt;
       if (this.wanderTimer <= 0) this._pickWander();
-      // Passive mobs glance at a nearby player out of curiosity.
-      if (def.category === 'passive' && distSq < 25 && this.grazeTimer <= 0) {
+      // Leashed mobs (villagers) head home when they stray too far.
+      if (this.anchor) {
+        const ax = this.anchor.x - this.pos.x, az = this.anchor.z - this.pos.z;
+        const ad = Math.hypot(ax, az);
+        if (ad > 20) {
+          this.heading = { x: ax / ad, z: az / ad };
+          this.wanderTimer = 2;
+        }
+      }
+      // Non-hostile mobs glance at a nearby player out of curiosity.
+      if (def.category !== 'hostile' && distSq < 25 && this.grazeTimer <= 0) {
         this.lookAt = player;
       }
     }

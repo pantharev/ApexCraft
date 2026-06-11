@@ -12,8 +12,8 @@ import { columnHeight } from '../generators/Height.js';
 // flattish, no mountains, no rifts). Layouts put a well at the centre and a
 // ring of houses facing it.
 
-const CELL = 288;
-const VILLAGE_CHANCE = 0.5;
+const CELL = 224;
+const VILLAGE_CHANCE = 0.8;
 
 // Integer hash of a cell, mixed with the world seed.
 function cellHash(cx, cz) {

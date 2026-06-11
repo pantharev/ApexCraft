@@ -302,6 +302,46 @@ function drawStick(ctx) {
   }
 }
 
+function drawDoor(ctx) {
+  // Tall panel with inset panes, a window, and a handle.
+  ctx.fillStyle = '#9c7a44'; ctx.fillRect(4, 1, 8, 14);
+  ctx.fillStyle = '#7a5e33'; ctx.fillRect(5, 8, 6, 3);
+  ctx.fillStyle = '#7a5e33'; ctx.fillRect(5, 12, 6, 2);
+  ctx.fillStyle = '#bfe6ee'; ctx.fillRect(6, 2, 4, 3); // window
+  ctx.fillStyle = '#5d4023'; ctx.fillRect(7, 2, 1, 3); ctx.fillRect(6, 3, 4, 1);
+  px(ctx, 11, 8, '#3a2a14'); px(ctx, 11, 9, '#d8b878'); // handle
+}
+
+function drawStairs(ctx) {
+  // Three-step profile in plank tones.
+  const body = '#b3884f', top = lighten(body, 0.35), side = shade(body, 0.72);
+  const steps = [[2, 10, 12, 4], [6, 6, 8, 4], [10, 2, 4, 4]]; // x, y, w, h
+  for (const [x, y, w, h] of steps) {
+    ctx.fillStyle = body; ctx.fillRect(x, y, w, h);
+    ctx.fillStyle = top; ctx.fillRect(x, y, w, 1);
+    ctx.fillStyle = side; ctx.fillRect(x, y + h - 1, w, 1);
+  }
+}
+
+function drawBed(ctx) {
+  // Side view: red blanket, white pillow, wooden frame + legs.
+  ctx.fillStyle = '#7a5733'; ctx.fillRect(2, 9, 12, 3);  // frame
+  ctx.fillStyle = '#5d4023'; ctx.fillRect(2, 12, 2, 2); ctx.fillRect(12, 12, 2, 2); // legs
+  ctx.fillStyle = '#b03028'; ctx.fillRect(2, 6, 12, 3);  // blanket
+  ctx.fillStyle = '#8a201a'; ctx.fillRect(2, 8, 12, 1);
+  ctx.fillStyle = '#eef1f5'; ctx.fillRect(2, 5, 4, 3);   // pillow
+}
+
+function drawFence(ctx) {
+  // Two posts with two rails.
+  ctx.fillStyle = '#7a5733';
+  ctx.fillRect(3, 3, 2, 11); ctx.fillRect(11, 3, 2, 11); // posts
+  ctx.fillStyle = '#b3884f';
+  ctx.fillRect(1, 5, 14, 2); ctx.fillRect(1, 10, 14, 2); // rails
+  ctx.fillStyle = '#5d4023';
+  ctx.fillRect(3, 13, 2, 1); ctx.fillRect(11, 13, 2, 1); // post feet
+}
+
 function drawNugget(ctx, color) {
   const dark = shade(color, 0.65);
   for (let y = 5; y <= 11; y++) for (let x = 4; x <= 11; x++) px(ctx, x, y, y > 8 ? dark : color);
@@ -319,6 +359,10 @@ function drawItem(def) {
   const name = def?.name || '';
 
   if (name === 'bow') drawBow(ctx);
+  else if (name === 'door') drawDoor(ctx);
+  else if (name === 'oak_stairs') drawStairs(ctx);
+  else if (name === 'bed') drawBed(ctx);
+  else if (name === 'fence') drawFence(ctx);
   else if (name === 'arrow') drawArrow(ctx);
   else if (name === 'stick') drawStick(ctx);
   else if (name === 'apple') drawApple(ctx, color);
@@ -344,12 +388,15 @@ function drawItem(def) {
   return c;
 }
 
+// Block items that look better with a hand-drawn icon than their block tile.
+const CUSTOM_BLOCK_ICONS = new Set(['door', 'oak_stairs', 'bed', 'fence']);
+
 // The icon as a canvas — also the source the 3D item models are extruded from.
 export function itemIconCanvas(name) {
   if (canvasCache.has(name)) return canvasCache.get(name);
   const def = getItem(name);
   let canvas;
-  if (def && def.placeBlock && FACE_TILES[def.placeBlock]) {
+  if (def && def.placeBlock && FACE_TILES[def.placeBlock] && !CUSTOM_BLOCK_ICONS.has(name)) {
     canvas = tileCanvas(FACE_TILES[def.placeBlock].side);
   } else {
     canvas = drawItem(def);

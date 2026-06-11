@@ -24,7 +24,8 @@ export class ItemDrops {
 
   _model(item) {
     if (item.placeBlock === 'torch') return buildTorchModel(0.7);
-    if (item.placeBlock && !getBlock(getBlockId(item.placeBlock)).plant) {
+    const blockDef = item.placeBlock ? getBlock(getBlockId(item.placeBlock)) : null;
+    if (blockDef && !blockDef.plant && !blockDef.door && !blockDef.stair && !blockDef.bed && !blockDef.fence) {
       return buildBlockCube(item.placeBlock, 0.26, true); // shared geo
     }
     return new THREE.Mesh(dropPlateGeometry(item.name, 0.4), plateMaterial());

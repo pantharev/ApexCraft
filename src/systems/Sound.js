@@ -167,6 +167,12 @@ class SoundEngine {
 
   arrowHit() { this.burst(1600, 1, 'bandpass', 0.12, 0.06); }
 
+  // Door creak: a slow saw sweep — rising to open, falling to close.
+  door(opening) {
+    this.tone(opening ? 160 : 240, 0.16, 'sawtooth', 0.14, opening ? 260 : 130);
+    this.burst(900, 1.2, 'bandpass', 0.1, 0.07, 0.05);
+  }
+
   hurt() {
     this.tone(260, 0.18, 'sawtooth', 0.28, 120);
     this.burst(400, 1, 'lowpass', 0.18, 0.12);

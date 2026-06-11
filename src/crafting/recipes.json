@@ -2,89 +2,545 @@
   {
     "id": "oak_planks",
     "type": "shapeless",
-    "ingredients": ["oak_log"],
-    "result": { "item": "oak_planks", "count": 4 }
+    "ingredients": [
+      "oak_log"
+    ],
+    "result": {
+      "item": "oak_planks",
+      "count": 4
+    }
   },
   {
     "id": "stick",
     "type": "shaped",
-    "pattern": ["P", "P"],
-    "key": { "P": "oak_planks" },
-    "result": { "item": "stick", "count": 4 }
+    "pattern": [
+      "P",
+      "P"
+    ],
+    "key": {
+      "P": "oak_planks"
+    },
+    "result": {
+      "item": "stick",
+      "count": 4
+    }
   },
   {
     "id": "crafting_table",
     "type": "shaped",
-    "pattern": ["PP", "PP"],
-    "key": { "P": "oak_planks" },
-    "result": { "item": "crafting_table", "count": 1 }
+    "pattern": [
+      "PP",
+      "PP"
+    ],
+    "key": {
+      "P": "oak_planks"
+    },
+    "result": {
+      "item": "crafting_table",
+      "count": 1
+    }
   },
   {
     "id": "furnace",
     "type": "shaped",
-    "pattern": ["CCC", "C C", "CCC"],
-    "key": { "C": "cobblestone" },
-    "result": { "item": "furnace", "count": 1 }
+    "pattern": [
+      "CCC",
+      "C C",
+      "CCC"
+    ],
+    "key": {
+      "C": "cobblestone"
+    },
+    "result": {
+      "item": "furnace",
+      "count": 1
+    }
   },
   {
     "id": "wooden_pickaxe",
     "type": "shaped",
-    "pattern": ["PPP", " S ", " S "],
-    "key": { "P": "oak_planks", "S": "stick" },
-    "result": { "item": "wooden_pickaxe", "count": 1 }
+    "pattern": [
+      "PPP",
+      " S ",
+      " S "
+    ],
+    "key": {
+      "P": "oak_planks",
+      "S": "stick"
+    },
+    "result": {
+      "item": "wooden_pickaxe",
+      "count": 1
+    }
   },
   {
     "id": "stone_pickaxe",
     "type": "shaped",
-    "pattern": ["CCC", " S ", " S "],
-    "key": { "C": "cobblestone", "S": "stick" },
-    "result": { "item": "stone_pickaxe", "count": 1 }
+    "pattern": [
+      "CCC",
+      " S ",
+      " S "
+    ],
+    "key": {
+      "C": "cobblestone",
+      "S": "stick"
+    },
+    "result": {
+      "item": "stone_pickaxe",
+      "count": 1
+    }
   },
   {
     "id": "iron_pickaxe",
     "type": "shaped",
-    "pattern": ["III", " S ", " S "],
-    "key": { "I": "iron_ingot", "S": "stick" },
-    "result": { "item": "iron_pickaxe", "count": 1 }
+    "pattern": [
+      "III",
+      " S ",
+      " S "
+    ],
+    "key": {
+      "I": "iron_ingot",
+      "S": "stick"
+    },
+    "result": {
+      "item": "iron_pickaxe",
+      "count": 1
+    }
   },
   {
     "id": "gold_pickaxe",
     "type": "shaped",
-    "pattern": ["GGG", " S ", " S "],
-    "key": { "G": "gold_ingot", "S": "stick" },
-    "result": { "item": "gold_pickaxe", "count": 1 }
+    "pattern": [
+      "GGG",
+      " S ",
+      " S "
+    ],
+    "key": {
+      "G": "gold_ingot",
+      "S": "stick"
+    },
+    "result": {
+      "item": "gold_pickaxe",
+      "count": 1
+    }
   },
   {
     "id": "diamond_pickaxe",
     "type": "shaped",
-    "pattern": ["DDD", " S ", " S "],
-    "key": { "D": "diamond", "S": "stick" },
-    "result": { "item": "diamond_pickaxe", "count": 1 }
+    "pattern": [
+      "DDD",
+      " S ",
+      " S "
+    ],
+    "key": {
+      "D": "diamond",
+      "S": "stick"
+    },
+    "result": {
+      "item": "diamond_pickaxe",
+      "count": 1
+    }
   },
-
-  { "id": "wooden_sword",  "type": "shaped", "pattern": ["M", "M", "S"], "key": { "M": "oak_planks", "S": "stick" }, "result": { "item": "wooden_sword", "count": 1 } },
-  { "id": "stone_sword",   "type": "shaped", "pattern": ["M", "M", "S"], "key": { "M": "cobblestone", "S": "stick" }, "result": { "item": "stone_sword", "count": 1 } },
-  { "id": "iron_sword",    "type": "shaped", "pattern": ["M", "M", "S"], "key": { "M": "iron_ingot", "S": "stick" }, "result": { "item": "iron_sword", "count": 1 } },
-  { "id": "gold_sword",    "type": "shaped", "pattern": ["M", "M", "S"], "key": { "M": "gold_ingot", "S": "stick" }, "result": { "item": "gold_sword", "count": 1 } },
-  { "id": "diamond_sword", "type": "shaped", "pattern": ["M", "M", "S"], "key": { "M": "diamond", "S": "stick" }, "result": { "item": "diamond_sword", "count": 1 } },
-
-  { "id": "wooden_axe",  "type": "shaped", "pattern": ["MM", "MS", " S"], "key": { "M": "oak_planks", "S": "stick" }, "result": { "item": "wooden_axe", "count": 1 } },
-  { "id": "stone_axe",   "type": "shaped", "pattern": ["MM", "MS", " S"], "key": { "M": "cobblestone", "S": "stick" }, "result": { "item": "stone_axe", "count": 1 } },
-  { "id": "iron_axe",    "type": "shaped", "pattern": ["MM", "MS", " S"], "key": { "M": "iron_ingot", "S": "stick" }, "result": { "item": "iron_axe", "count": 1 } },
-  { "id": "gold_axe",    "type": "shaped", "pattern": ["MM", "MS", " S"], "key": { "M": "gold_ingot", "S": "stick" }, "result": { "item": "gold_axe", "count": 1 } },
-  { "id": "diamond_axe", "type": "shaped", "pattern": ["MM", "MS", " S"], "key": { "M": "diamond", "S": "stick" }, "result": { "item": "diamond_axe", "count": 1 } },
-
-  { "id": "wooden_shovel",  "type": "shaped", "pattern": ["M", "S", "S"], "key": { "M": "oak_planks", "S": "stick" }, "result": { "item": "wooden_shovel", "count": 1 } },
-  { "id": "stone_shovel",   "type": "shaped", "pattern": ["M", "S", "S"], "key": { "M": "cobblestone", "S": "stick" }, "result": { "item": "stone_shovel", "count": 1 } },
-  { "id": "iron_shovel",    "type": "shaped", "pattern": ["M", "S", "S"], "key": { "M": "iron_ingot", "S": "stick" }, "result": { "item": "iron_shovel", "count": 1 } },
-  { "id": "gold_shovel",    "type": "shaped", "pattern": ["M", "S", "S"], "key": { "M": "gold_ingot", "S": "stick" }, "result": { "item": "gold_shovel", "count": 1 } },
-  { "id": "diamond_shovel", "type": "shaped", "pattern": ["M", "S", "S"], "key": { "M": "diamond", "S": "stick" }, "result": { "item": "diamond_shovel", "count": 1 } },
-
-  { "id": "torch_coal",     "type": "shaped", "pattern": ["C", "S"], "key": { "C": "coal", "S": "stick" }, "result": { "item": "torch", "count": 4 } },
-  { "id": "torch_charcoal", "type": "shaped", "pattern": ["C", "S"], "key": { "C": "charcoal", "S": "stick" }, "result": { "item": "torch", "count": 4 } },
-
-  { "id": "chest", "type": "shaped", "pattern": ["PPP", "P P", "PPP"], "key": { "P": "oak_planks" }, "result": { "item": "chest", "count": 1 } },
-
-  { "id": "bow", "type": "shaped", "pattern": [" SX", "S X", " SX"], "key": { "S": "stick", "X": "string" }, "result": { "item": "bow", "count": 1 } },
-  { "id": "arrow", "type": "shaped", "pattern": ["I", "S", "F"], "key": { "I": "iron_ingot", "S": "stick", "F": "feather" }, "result": { "item": "arrow", "count": 4 } }
+  {
+    "id": "wooden_sword",
+    "type": "shaped",
+    "pattern": [
+      "M",
+      "M",
+      "S"
+    ],
+    "key": {
+      "M": "oak_planks",
+      "S": "stick"
+    },
+    "result": {
+      "item": "wooden_sword",
+      "count": 1
+    }
+  },
+  {
+    "id": "stone_sword",
+    "type": "shaped",
+    "pattern": [
+      "M",
+      "M",
+      "S"
+    ],
+    "key": {
+      "M": "cobblestone",
+      "S": "stick"
+    },
+    "result": {
+      "item": "stone_sword",
+      "count": 1
+    }
+  },
+  {
+    "id": "iron_sword",
+    "type": "shaped",
+    "pattern": [
+      "M",
+      "M",
+      "S"
+    ],
+    "key": {
+      "M": "iron_ingot",
+      "S": "stick"
+    },
+    "result": {
+      "item": "iron_sword",
+      "count": 1
+    }
+  },
+  {
+    "id": "gold_sword",
+    "type": "shaped",
+    "pattern": [
+      "M",
+      "M",
+      "S"
+    ],
+    "key": {
+      "M": "gold_ingot",
+      "S": "stick"
+    },
+    "result": {
+      "item": "gold_sword",
+      "count": 1
+    }
+  },
+  {
+    "id": "diamond_sword",
+    "type": "shaped",
+    "pattern": [
+      "M",
+      "M",
+      "S"
+    ],
+    "key": {
+      "M": "diamond",
+      "S": "stick"
+    },
+    "result": {
+      "item": "diamond_sword",
+      "count": 1
+    }
+  },
+  {
+    "id": "wooden_axe",
+    "type": "shaped",
+    "pattern": [
+      "MM",
+      "MS",
+      " S"
+    ],
+    "key": {
+      "M": "oak_planks",
+      "S": "stick"
+    },
+    "result": {
+      "item": "wooden_axe",
+      "count": 1
+    }
+  },
+  {
+    "id": "stone_axe",
+    "type": "shaped",
+    "pattern": [
+      "MM",
+      "MS",
+      " S"
+    ],
+    "key": {
+      "M": "cobblestone",
+      "S": "stick"
+    },
+    "result": {
+      "item": "stone_axe",
+      "count": 1
+    }
+  },
+  {
+    "id": "iron_axe",
+    "type": "shaped",
+    "pattern": [
+      "MM",
+      "MS",
+      " S"
+    ],
+    "key": {
+      "M": "iron_ingot",
+      "S": "stick"
+    },
+    "result": {
+      "item": "iron_axe",
+      "count": 1
+    }
+  },
+  {
+    "id": "gold_axe",
+    "type": "shaped",
+    "pattern": [
+      "MM",
+      "MS",
+      " S"
+    ],
+    "key": {
+      "M": "gold_ingot",
+      "S": "stick"
+    },
+    "result": {
+      "item": "gold_axe",
+      "count": 1
+    }
+  },
+  {
+    "id": "diamond_axe",
+    "type": "shaped",
+    "pattern": [
+      "MM",
+      "MS",
+      " S"
+    ],
+    "key": {
+      "M": "diamond",
+      "S": "stick"
+    },
+    "result": {
+      "item": "diamond_axe",
+      "count": 1
+    }
+  },
+  {
+    "id": "wooden_shovel",
+    "type": "shaped",
+    "pattern": [
+      "M",
+      "S",
+      "S"
+    ],
+    "key": {
+      "M": "oak_planks",
+      "S": "stick"
+    },
+    "result": {
+      "item": "wooden_shovel",
+      "count": 1
+    }
+  },
+  {
+    "id": "stone_shovel",
+    "type": "shaped",
+    "pattern": [
+      "M",
+      "S",
+      "S"
+    ],
+    "key": {
+      "M": "cobblestone",
+      "S": "stick"
+    },
+    "result": {
+      "item": "stone_shovel",
+      "count": 1
+    }
+  },
+  {
+    "id": "iron_shovel",
+    "type": "shaped",
+    "pattern": [
+      "M",
+      "S",
+      "S"
+    ],
+    "key": {
+      "M": "iron_ingot",
+      "S": "stick"
+    },
+    "result": {
+      "item": "iron_shovel",
+      "count": 1
+    }
+  },
+  {
+    "id": "gold_shovel",
+    "type": "shaped",
+    "pattern": [
+      "M",
+      "S",
+      "S"
+    ],
+    "key": {
+      "M": "gold_ingot",
+      "S": "stick"
+    },
+    "result": {
+      "item": "gold_shovel",
+      "count": 1
+    }
+  },
+  {
+    "id": "diamond_shovel",
+    "type": "shaped",
+    "pattern": [
+      "M",
+      "S",
+      "S"
+    ],
+    "key": {
+      "M": "diamond",
+      "S": "stick"
+    },
+    "result": {
+      "item": "diamond_shovel",
+      "count": 1
+    }
+  },
+  {
+    "id": "torch_coal",
+    "type": "shaped",
+    "pattern": [
+      "C",
+      "S"
+    ],
+    "key": {
+      "C": "coal",
+      "S": "stick"
+    },
+    "result": {
+      "item": "torch",
+      "count": 4
+    }
+  },
+  {
+    "id": "torch_charcoal",
+    "type": "shaped",
+    "pattern": [
+      "C",
+      "S"
+    ],
+    "key": {
+      "C": "charcoal",
+      "S": "stick"
+    },
+    "result": {
+      "item": "torch",
+      "count": 4
+    }
+  },
+  {
+    "id": "chest",
+    "type": "shaped",
+    "pattern": [
+      "PPP",
+      "P P",
+      "PPP"
+    ],
+    "key": {
+      "P": "oak_planks"
+    },
+    "result": {
+      "item": "chest",
+      "count": 1
+    }
+  },
+  {
+    "id": "bow",
+    "type": "shaped",
+    "pattern": [
+      " SX",
+      "S X",
+      " SX"
+    ],
+    "key": {
+      "S": "stick",
+      "X": "string"
+    },
+    "result": {
+      "item": "bow",
+      "count": 1
+    }
+  },
+  {
+    "id": "arrow",
+    "type": "shaped",
+    "pattern": [
+      "I",
+      "S",
+      "F"
+    ],
+    "key": {
+      "I": "iron_ingot",
+      "S": "stick",
+      "F": "feather"
+    },
+    "result": {
+      "item": "arrow",
+      "count": 4
+    }
+  },
+  {
+    "id": "door",
+    "type": "shaped",
+    "pattern": [
+      "PP",
+      "PP",
+      "PP"
+    ],
+    "key": {
+      "P": "oak_planks"
+    },
+    "result": {
+      "item": "door",
+      "count": 3
+    }
+  },
+  {
+    "id": "oak_stairs",
+    "type": "shaped",
+    "pattern": [
+      "P  ",
+      "PP ",
+      "PPP"
+    ],
+    "key": {
+      "P": "oak_planks"
+    },
+    "result": {
+      "item": "oak_stairs",
+      "count": 4
+    }
+  },
+  {
+    "id": "bed",
+    "type": "shaped",
+    "pattern": [
+      "WWW",
+      "PPP"
+    ],
+    "key": {
+      "W": "wool",
+      "P": "oak_planks"
+    },
+    "result": {
+      "item": "bed",
+      "count": 1
+    }
+  },
+  {
+    "id": "fence",
+    "type": "shaped",
+    "pattern": [
+      "PSP",
+      "PSP"
+    ],
+    "key": {
+      "P": "oak_planks",
+      "S": "stick"
+    },
+    "result": {
+      "item": "fence",
+      "count": 3
+    }
+  }
 ]

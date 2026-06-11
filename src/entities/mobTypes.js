@@ -48,6 +48,21 @@ export const MOBS = {
     ],
   },
 
+  villager: {
+    // Own category: not in the random passive spawn pool — villagers spawn at
+    // their village (MobManager) and stay leashed to it.
+    category: 'villager', health: 20, speed: 1.0, hw: 0.35, h: 1.85,
+    drops: [],
+    parts: [
+      leg(-0.11, 0, 0.2, 0.4, 0.2, '#4a3826'), leg(0.11, 0, 0.2, 0.4, 0.2, '#4a3826'),
+      { size: [0.56, 0.9, 0.36], pos: [0, 0.84, 0], color: '#8a6d4a' },              // robe
+      { size: [0.62, 0.2, 0.44], pos: [0, 1.16, 0.06], color: '#73593b' },           // crossed arms
+      { size: [0.5, 0.52, 0.48], pos: [0, 1.56, 0], color: '#c8a17a', head: true },  // big head
+      { size: [0.12, 0.26, 0.12], pos: [0, 1.46, 0.3], color: '#b58e67', head: true }, // the nose
+      { size: [0.5, 0.1, 0.1], pos: [0, 1.74, 0.22], color: '#6d5639', head: true }, // unibrow
+    ],
+  },
+
   // ---- Hostile ----
   zombie: {
     category: 'hostile', health: 20, speed: 1.5, attack: 3, detect: 18, burns: true, hw: 0.4, h: 1.8,

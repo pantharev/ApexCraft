@@ -19,6 +19,7 @@ import { Sound } from '../systems/Sound.js';
 import { blockAverageColor } from '../textures/atlas.js';
 import { saveWorld } from '../systems/Storage.js';
 import { WORLD_SEED } from '../config.js';
+import { villageForCell, VILLAGE_CELL } from '../world/structures/VillagePlan.js';
 import { getBlockId } from '../blocks/BlockRegistry.js';
 import { getItem } from '../items/ItemRegistry.js';
 import { SEA_LEVEL } from '../config.js';
@@ -170,15 +171,21 @@ export class Game {
       this._timeNetT = 0; // clock sync accumulator (every 5 s)
     }
 
-    // Dev-only (localhost): press T to cycle day -> night -> auto.
+    // Dev-only (localhost): T cycles day/night, V teleports to the nearest
+    // village (again = next one), G toggles a 3x speed boost.
     if (this.dev) {
       window.addEventListener('keydown', (e) => {
-        if (e.code !== 'KeyT') return;
-        this._devTime = (this._devTime + 1) % 3;
-        if (this._devTime === 1) { this.dayNight.t = 0.25; this.dayNight.frozen = true; }
-        else if (this._devTime === 2) { this.dayNight.t = 0.78; this.dayNight.frozen = true; }
-        else { this.dayNight.frozen = false; }
-        this.dayNight.update(0);
+        if (e.code === 'KeyT') {
+          this._devTime = (this._devTime + 1) % 3;
+          if (this._devTime === 1) { this.dayNight.t = 0.25; this.dayNight.frozen = true; }
+          else if (this._devTime === 2) { this.dayNight.t = 0.78; this.dayNight.frozen = true; }
+          else { this.dayNight.frozen = false; }
+          this.dayNight.update(0);
+        } else if (e.code === 'KeyV') {
+          this._devTeleportVillage();
+        } else if (e.code === 'KeyG') {
+          this.player.speedBoost = this.player.speedBoost > 1 ? 1 : 3;
+        }
       });
     }
 
@@ -206,7 +213,7 @@ export class Game {
     if (this._save?.chests) this.chests.load(this._save.chests);
     this.activeChest = null;
 
-    // Right-clicking an interactive block opens its screen.
+    // Right-clicking an interactive block opens its screen (or starts sleep).
     this.interaction.onUseBlock = (name, pos) => {
       if (name === 'crafting_table') this.setScreen('crafting');
       else if (name === 'furnace') {
@@ -215,8 +222,13 @@ export class Game {
       } else if (name === 'chest') {
         this.activeChest = this.chests.open(this.world, pos.x, pos.y, pos.z);
         this.setScreen('chest');
+      } else if (name === 'bed' || name === 'bed_head') {
+        this._sleep();
       }
     };
+    this.onSleep = null; // React fade-to-black overlay
+    this.onToast = null; // React transient message
+    this._sleeping = false;
 
     // When a furnace/chest is mined, drop its contents and discard its state.
     this.interaction.onBlockBroken = (name, pos) => {
@@ -289,6 +301,37 @@ export class Game {
   // the host's simulation; hosts and single-player target the real mobs.
   _mobApi() {
     return this.net && !this.net.isHost ? this.ghostMobs : this.mobs;
+  }
+
+  // Dev (localhost, V key): jump to the nearest village; if already standing
+  // in one, jump to the next-nearest. Scans a wide cell ring so it finds
+  // villages well beyond the loaded area.
+  _devTeleportVillage() {
+    const p = this.player.pos;
+    const ccx = Math.floor(p.x / VILLAGE_CELL), ccz = Math.floor(p.z / VILLAGE_CELL);
+    const list = [];
+    for (let dx = -4; dx <= 4; dx++) {
+      for (let dz = -4; dz <= 4; dz++) {
+        const v = villageForCell(ccx + dx, ccz + dz);
+        if (v) list.push(v);
+      }
+    }
+    if (!list.length) return;
+    list.sort((a, b) =>
+      Math.hypot(a.x - p.x, a.z - p.z) - Math.hypot(b.x - p.x, b.z - p.z));
+    let target = list[0];
+    for (let i = 0; i < list.length; i++) {
+      if (Math.hypot(list[i].x - p.x, list[i].z - p.z) < 40) {
+        target = list[(i + 1) % list.length];
+        break;
+      }
+    }
+    // Pre-generate around the destination so the village is there on arrival.
+    this.world.update(target.x, target.z, 80);
+    const y = this.world.surfaceHeight(target.x, target.z);
+    this.player.pos.set(target.x + 0.5, y + 2, target.z + 0.5);
+    this.player.vel.set(0, 0, 0);
+    this.player._peakY = this.player.pos.y; // no fall damage from the jump
   }
 
   _onResize() {
@@ -397,6 +440,32 @@ export class Game {
     return ok;
   }
 
+  // Sleep in a bed: short fade to black, then wake at dawn. Night only; in
+  // multiplayer only the host owns the clock.
+  _sleep() {
+    if (this._sleeping) return;
+    if (this.net && !this.net.isHost) {
+      if (this.onToast) this.onToast('Only the host can skip the night');
+      return;
+    }
+    if (!this.dayNight.isNight) {
+      if (this.onToast) this.onToast('You can only sleep at night');
+      return;
+    }
+    this._sleeping = true;
+    this.player.enabled = false;
+    if (this.onSleep) this.onSleep(true);
+    setTimeout(() => {
+      this.dayNight.t = 0.02; // just after sunrise
+      this.dayNight.frozen = this._devTime !== 0 ? this.dayNight.frozen : false;
+      this.dayNight.update(0);
+      if (this.net && this.net.isHost) this.net.sendTime(this.dayNight.t);
+      this._sleeping = false;
+      this.player.enabled = this.openScreen === null;
+      if (this.onSleep) this.onSleep(false);
+    }, 1800);
+  }
+
   // Fire an arrow from the camera if the player has ammo.
   _shootBow() {
     if (this.inventory.count('arrow') <= 0) return;
@@ -432,6 +501,7 @@ export class Game {
 
     this.interaction.currentTool = item && item.toolType ? item : null;
     this.interaction.selectedBlock = item && item.placeBlock ? getBlockId(item.placeBlock) : 0;
+    this.interaction.heldItem = item;
     this.interaction.heldFood = item && item.food ? item.food : 0;
 
     if (name !== this._heldName) {
@@ -558,6 +628,7 @@ export class Game {
         mobs: this._mobApi().mobs.length,
         dev: this.dev,
         devTime: ['Auto', 'Day', 'Night'][this._devTime],
+        devBoost: this.player.speedBoost > 1,
         room: this.net ? this.net.code : null,
         peers: this.net ? this.net.peerCount + 1 : 0,
         hosting: this.net ? this.net.isHost : false,

@@ -29,6 +29,8 @@ export default function App() {
   const [portrait, setPortrait] = useState(false);
   const [netError, setNetError] = useState(null);
   const [netBusy, setNetBusy] = useState(false);
+  const [sleeping, setSleeping] = useState(false);
+  const [toast, setToast] = useState(null);
 
   const refreshWorlds = async () => setWorlds(await listWorlds());
   useEffect(() => { refreshWorlds(); }, []);
@@ -56,7 +58,10 @@ export default function App() {
     game.onScreenChange = setOpenScreen;
     game.onDead = setDead;
     game.onSaved = () => { setSaved(true); clearTimeout(savedTimer); savedTimer = setTimeout(() => setSaved(false), 1500); };
+    let toastTimer = null;
     game.onPlayerHurt = () => { setHurt(true); clearTimeout(hurtTimer); hurtTimer = setTimeout(() => setHurt(false), 250); };
+    game.onSleep = setSleeping;
+    game.onToast = (msg) => { setToast(msg); clearTimeout(toastTimer); toastTimer = setTimeout(() => setToast(null), 2200); };
     game.start();
 
     const onLock = () => setLocked(document.pointerLockElement === game.renderer.domElement);
@@ -65,6 +70,9 @@ export default function App() {
     return () => {
       clearTimeout(savedTimer);
       clearTimeout(hurtTimer);
+      clearTimeout(toastTimer);
+      setSleeping(false);
+      setToast(null);
       document.removeEventListener('pointerlockchange', onLock);
       game.dispose();
       current.net?.close();
@@ -240,6 +248,24 @@ export default function App() {
             <div style={{ position: 'absolute', bottom: 8, right: 10, color: '#cfe9c0', font: '12px monospace', textShadow: '1px 1px 2px #000', pointerEvents: 'none' }}>Saved</div>
           )}
 
+          {/* Toast messages (bed hints etc.) */}
+          {toast && (
+            <div style={{
+              position: 'absolute', bottom: 120, left: '50%', transform: 'translateX(-50%)',
+              color: '#fff', background: 'rgba(20,22,28,0.75)', padding: '6px 16px', borderRadius: 14,
+              font: '14px system-ui', pointerEvents: 'none', zIndex: 24, textShadow: '1px 1px 1px #000',
+            }}>{toast}</div>
+          )}
+
+          {/* Sleep: fade to black, then wake at dawn */}
+          <div style={{
+            position: 'absolute', inset: 0, background: '#000', pointerEvents: 'none', zIndex: 26,
+            opacity: sleeping ? 1 : 0, transition: 'opacity 1.4s ease',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+          }}>
+            {sleeping && <div style={{ color: '#cfd8ea', font: '20px system-ui', letterSpacing: 2 }}>Sleeping… 💤</div>}
+          </div>
+
           {stats && (
             <div style={{ position: 'absolute', top: 8, left: 8, color: '#fff', font: '13px monospace', textShadow: '1px 1px 2px #000', pointerEvents: 'none', lineHeight: 1.5 }}>
               <div>{current?.name}</div>
@@ -251,7 +277,11 @@ export default function App() {
                   Room {stats.room} · {stats.peers} player{stats.peers === 1 ? '' : 's'}{stats.hosting ? ' · hosting' : ''}
                 </div>
               )}
-              {stats.dev && <div style={{ color: '#9fe084' }}>[T] day/night: {stats.devTime}</div>}
+              {stats.dev && (
+                <div style={{ color: '#9fe084' }}>
+                  [T] day/night: {stats.devTime} · [V] tp village · [G] speed: {stats.devBoost ? '3x' : '1x'}
+                </div>
+              )}
             </div>
           )}
 

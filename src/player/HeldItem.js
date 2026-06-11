@@ -34,9 +34,11 @@ export function buildHeldModel(item) {
     return group;
   }
 
-  // Other block items: textured mini cube of the actual block. Cross-plants
-  // (flowers) fall through to the extruded plate — a flower cube looks wrong.
-  if (item.placeBlock && !getBlock(getBlockId(item.placeBlock)).plant) {
+  // Other block items: textured mini cube of the actual block. Cross-plants,
+  // doors, stairs, and beds fall through to the extruded icon plate — their
+  // icons read far better than a cube.
+  const blockDef = item.placeBlock ? getBlock(getBlockId(item.placeBlock)) : null;
+  if (blockDef && !blockDef.plant && !blockDef.door && !blockDef.stair && !blockDef.bed && !blockDef.fence) {
     const cube = buildBlockCube(item.placeBlock, 0.3);
     cube.rotation.y = 0.35; // show two faces
     group.add(cube);

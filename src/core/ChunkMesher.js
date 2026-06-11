@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { CHUNK_SIZE, WORLD_HEIGHT } from '../config.js';
-import { getBlock, isOpaque, getBlockId } from '../blocks/BlockRegistry.js';
+import { getBlock, isOpaque, isSolid, getBlockId } from '../blocks/BlockRegistry.js';
 import { faceMaterialIndex, WATER_MATERIAL_INDEX } from '../textures/atlas.js';
 import { Noise } from '../world/noise.js';
 
@@ -13,6 +13,18 @@ const LEAVES = getBlockId('oak_leaves');
 const TALL_GRASS = getBlockId('tall_grass');
 // Cross-plants render as two diagonal quads, not cubes.
 const PLANTS = new Set([TALL_GRASS, getBlockId('poppy'), getBlockId('dandelion')]);
+// Non-cube blocks drawn by the special pass below (skipped by greedy meshing).
+const DOOR = getBlockId('door');
+const DOOR_OPEN = getBlockId('door_open');
+const BED = getBlockId('bed');
+const BED_HEAD = getBlockId('bed_head');
+const FENCE = getBlockId('fence');
+const STAIR_DIR = {
+  [getBlockId('oak_stairs_px')]: 'px', [getBlockId('oak_stairs_nx')]: 'nx',
+  [getBlockId('oak_stairs_pz')]: 'pz', [getBlockId('oak_stairs_nz')]: 'nz',
+};
+const SPECIAL = new Set([...PLANTS, DOOR, DOOR_OPEN, BED, BED_HEAD, FENCE,
+  ...Object.keys(STAIR_DIR).map(Number)]);
 
 // Mask entries pack the block id with the face's 4-corner ambient-occlusion
 // pattern, so greedy merging only joins cells that shade identically (AO stays
@@ -149,7 +161,7 @@ export function buildChunkGeometry(chunk, worldGet) {
           for (let i = 0; i < du; i++) {
             cell[axis] = layer; cell[u] = i; cell[v] = j;
             const id = at(cell[0], cell[1], cell[2]);
-            if (id === 0 || id === TORCH || PLANTS.has(id)) continue; // torches/plants drawn separately
+            if (id === 0 || id === TORCH || SPECIAL.has(id)) continue; // non-cubes drawn separately
             const nb = [cell[0], cell[1], cell[2]]; nb[axis] += dir;
             const neighbor = at(nb[0], nb[1], nb[2]);
             const block = getBlock(id);
@@ -209,25 +221,106 @@ export function buildChunkGeometry(chunk, worldGet) {
     }
   }
 
-  // Cross-plant pass: every plant cell becomes two diagonal quads (an X),
-  // double-sided cutout material, lit like the ground (up normal). Tall grass
-  // picks up the same climate tint as the turf under it.
+  // Special pass: non-cube blocks. Plants become crossed quads; doors thin
+  // panels (orientation read from the wall they sit in); stairs two boxes;
+  // beds a low mattress slab.
+  const bufFor = (matIndex) => {
+    let buf = byMat.get(matIndex);
+    if (!buf) { buf = emptyBuf(); byMat.set(matIndex, buf); }
+    return buf;
+  };
   for (let lx = 0; lx < CHUNK_SIZE; lx++) {
     for (let lz = 0; lz < CHUNK_SIZE; lz++) {
       for (let y = 1; y < WORLD_HEIGHT - 1; y++) {
         const id = chunk.get(lx, y, lz);
-        if (!PLANTS.has(id)) continue;
-        const matIndex = faceMaterialIndex(id, 'side');
-        let buf = byMat.get(matIndex);
-        if (!buf) { buf = emptyBuf(); byMat.set(matIndex, buf); }
+        if (!SPECIAL.has(id)) continue;
         const wx = baseX + lx, wz = baseZ + lz;
-        const tint = id === TALL_GRASS ? climateTint(wx, wz) : [1, 1, 1];
-        pushCross(buf, wx, y, wz, tint);
+
+        if (PLANTS.has(id)) {
+          const tint = id === TALL_GRASS ? climateTint(wx, wz) : [1, 1, 1];
+          pushCross(bufFor(faceMaterialIndex(id, 'side')), wx, y, wz, tint);
+        } else if (id === DOOR || id === DOOR_OPEN) {
+          // Hinge orientation from the wall: solid x-neighbours = doorway runs
+          // along x (panel spans x); otherwise it spans z. The open panel
+          // swings to the cell edge so the passage is clear.
+          const wallX = isSolid(at(lx - 1, y, lz)) || isSolid(at(lx + 1, y, lz));
+          const isTop = chunk.get(lx, y - 1, lz) === DOOR || chunk.get(lx, y - 1, lz) === DOOR_OPEN;
+          const mat = faceMaterialIndex(DOOR, isTop ? 'top' : 'side');
+          let b; // panel bounds [x0,y0,z0,x1,y1,z1] within the cell
+          if (id === DOOR) {
+            b = wallX ? [0, 0, 0.42, 1, 1, 0.58] : [0.42, 0, 0, 0.58, 1, 1];
+          } else {
+            b = wallX ? [0.84, 0, 0, 1, 1, 1] : [0, 0, 0.84, 1, 1, 1];
+          }
+          pushBox(bufFor, wx + b[0], y + b[1], wz + b[2], wx + b[3], y + b[4], wz + b[5], mat, mat, mat);
+        } else if (STAIR_DIR[id]) {
+          const matT = faceMaterialIndex(id, 'top');
+          const matS = faceMaterialIndex(id, 'side');
+          const matB = faceMaterialIndex(id, 'bottom');
+          // Bottom slab + the high half on the ascending side.
+          pushBox(bufFor, wx, y, wz, wx + 1, y + 0.5, wz + 1, matT, matS, matB);
+          const d = STAIR_DIR[id];
+          const u = d === 'px' ? [0.5, 0, 1, 1] : d === 'nx' ? [0, 0, 0.5, 1]
+            : d === 'pz' ? [0, 0.5, 1, 1] : [0, 0, 1, 0.5]; // [x0,z0,x1,z1]
+          pushBox(bufFor, wx + u[0], y + 0.5, wz + u[1], wx + u[2], y + 1, wz + u[3], matT, matS, matB);
+        } else if (id === BED || id === BED_HEAD) {
+          // Mattress slab; halves extend to meet their partner cell flush.
+          let bx0 = 0.03, bx1 = 0.97, bz0 = 0.03, bz1 = 0.97;
+          const partner = id === BED ? BED_HEAD : BED;
+          if (at(lx + 1, y, lz) === partner) bx1 = 1;
+          if (at(lx - 1, y, lz) === partner) bx0 = 0;
+          if (at(lx, y, lz + 1) === partner) bz1 = 1;
+          if (at(lx, y, lz - 1) === partner) bz0 = 0;
+          pushBox(bufFor,
+            wx + bx0, y, wz + bz0, wx + bx1, y + 0.55, wz + bz1,
+            faceMaterialIndex(id, 'top'), faceMaterialIndex(id, 'side'), faceMaterialIndex(id, 'bottom'));
+        } else if (id === FENCE) {
+          const mat = faceMaterialIndex(FENCE, 'side');
+          // Centre post...
+          pushBox(bufFor, wx + 0.36, y, wz + 0.36, wx + 0.64, y + 1, wz + 0.64, mat, mat, mat);
+          // ...with two rails toward each solid/fence neighbour.
+          const rails = [
+            [1, 0, wx + 0.64, wx + 1, wz + 0.42, wz + 0.58],
+            [-1, 0, wx, wx + 0.36, wz + 0.42, wz + 0.58],
+            [0, 1, wx + 0.42, wx + 0.58, wz + 0.64, wz + 1],
+            [0, -1, wx + 0.42, wx + 0.58, wz, wz + 0.36],
+          ];
+          for (const [dx, dz, rx0, rx1, rz0, rz1] of rails) {
+            if (!isSolid(at(lx + dx, y, lz + dz))) continue;
+            pushBox(bufFor, rx0, y + 0.3, rz0, rx1, y + 0.45, rz1, mat, mat, mat);
+            pushBox(bufFor, rx0, y + 0.72, rz0, rx1, y + 0.87, rz1, mat, mat, mat);
+          }
+        }
       }
     }
   }
 
   return { opaque: assembleGrouped(byMat), water: assembleSingle(water) };
+}
+
+// Push an axis-aligned box with per-face materials, face shading, and UVs
+// scaled to each face's size. Used by the special (non-cube) block pass.
+function pushBox(bufFor, x0, y0, z0, x1, y1, z1, matTop, matSide, matBottom) {
+  const faces = [
+    [matSide, [1, 0, 0], [[x1, y0, z1], [x1, y0, z0], [x1, y1, z0], [x1, y1, z1]], SHADE.side, z1 - z0, y1 - y0],
+    [matSide, [-1, 0, 0], [[x0, y0, z0], [x0, y0, z1], [x0, y1, z1], [x0, y1, z0]], SHADE.side, z1 - z0, y1 - y0],
+    [matTop, [0, 1, 0], [[x0, y1, z1], [x1, y1, z1], [x1, y1, z0], [x0, y1, z0]], SHADE.top, x1 - x0, z1 - z0],
+    [matBottom, [0, -1, 0], [[x0, y0, z0], [x1, y0, z0], [x1, y0, z1], [x0, y0, z1]], SHADE.bottom, x1 - x0, z1 - z0],
+    [matSide, [0, 0, 1], [[x0, y0, z1], [x1, y0, z1], [x1, y1, z1], [x0, y1, z1]], SHADE.side, x1 - x0, y1 - y0],
+    [matSide, [0, 0, -1], [[x1, y0, z0], [x0, y0, z0], [x0, y1, z0], [x1, y1, z0]], SHADE.side, x1 - x0, y1 - y0],
+  ];
+  for (const [mat, n, c, shade, su, sv] of faces) {
+    const buf = bufFor(mat);
+    const vi = buf.positions.length / 3;
+    const uvs = [[0, 0], [su, 0], [su, sv], [0, sv]];
+    for (let k = 0; k < 4; k++) {
+      buf.positions.push(c[k][0], c[k][1], c[k][2]);
+      buf.normals.push(n[0], n[1], n[2]);
+      buf.uvs.push(uvs[k][0], uvs[k][1]);
+      buf.colors.push(shade, shade, shade);
+    }
+    buf.indices.push(vi, vi + 1, vi + 2, vi, vi + 2, vi + 3);
+  }
 }
 
 // Two crossed quads spanning a cell's diagonals (slightly inset).

@@ -297,6 +297,56 @@ const DRAW = {
     c.fillStyle = '#9aa0a8'; c.fillRect(7, 4, 2, 3);   // clasp
     c.fillStyle = '#3a2a14'; c.fillRect(7, 6, 2, 1);   // keyhole
   },
+  // Door panels (rendered as thin slabs by the mesher's special pass).
+  door_bottom: (c, r) => {
+    const vn = valueNoise(r, 5);
+    paint(c, '#9c7a44', (x, y) => (vn(x, y) - 0.5) * 14 + Math.sin(x * 1.5) * 4, 5, r);
+    c.strokeStyle = 'rgba(70,50,26,0.95)';
+    c.strokeRect(0.5, 0.5, 15, 15);
+    c.strokeRect(2.5, 1.5, 11, 6);          // upper inset panel
+    c.strokeRect(2.5, 9.5, 11, 5);          // lower inset panel
+    c.fillStyle = '#3a2a14'; c.fillRect(12, 7, 2, 2); // handle
+    c.fillStyle = '#d8b878'; c.fillRect(12, 7, 1, 1);
+  },
+  door_top: (c, r) => {
+    const vn = valueNoise(r, 5);
+    paint(c, '#9c7a44', (x, y) => (vn(x, y) - 0.5) * 14 + Math.sin(x * 1.5) * 4, 5, r);
+    c.strokeStyle = 'rgba(70,50,26,0.95)';
+    c.strokeRect(0.5, 0.5, 15, 15);
+    c.strokeRect(2.5, 8.5, 11, 6);          // lower inset panel
+    // Window: 2x2 holes with a cross frame.
+    c.clearRect(4, 2, 8, 5);
+    c.fillStyle = '#5d4023';
+    c.fillRect(3, 1, 10, 1); c.fillRect(3, 7, 10, 1);
+    c.fillRect(3, 1, 1, 7); c.fillRect(12, 1, 1, 7);
+    c.fillRect(7, 1, 2, 7); c.fillRect(3, 4, 10, 1);
+  },
+  bed_top: (c, r) => {
+    // Foot half: red blanket with a fold stripe.
+    const vn = valueNoise(r, 4);
+    paint(c, '#b03028', (x, y) => (vn(x, y) - 0.5) * 16 + (y % 4 === 0 ? -8 : 0), 5, r);
+    for (let x = 1; x < 15; x++) setPx(c, x, 3, '#d8554a', 1, 8, r); // fold
+    c.strokeStyle = 'rgba(90,20,16,0.8)'; c.strokeRect(0.5, 0.5, 15, 15);
+  },
+  bed_top_head: (c, r) => {
+    // Head half: blanket edge with a big centred pillow.
+    const vn = valueNoise(r, 4);
+    paint(c, '#b03028', (x, y) => (vn(x, y) - 0.5) * 16, 5, r);
+    for (let y = 3; y <= 12; y++) {
+      for (let x = 3; x <= 12; x++) {
+        setPx(c, x, y, y > 10 || x > 11 ? '#cfd4da' : '#eef1f5', 1, 5, r);
+      }
+    }
+    c.strokeStyle = 'rgba(90,20,16,0.8)'; c.strokeRect(0.5, 0.5, 15, 15);
+  },
+  bed_side: (c, r) => {
+    const vn = valueNoise(r, 4);
+    paint(c, '#7a5733', (x, y) => (vn(x, y) - 0.5) * 14, 6, r); // wooden frame
+    for (let y = 0; y < 7; y++) for (let x = 0; x < 16; x++) {
+      setPx(c, x, y, '#a82c24', 1, 10, r); // blanket overhang
+    }
+    c.strokeStyle = 'rgba(60,40,20,0.85)'; c.strokeRect(0.5, 0.5, 15, 15);
+  },
   // Cross-plants (transparent background; rendered as X-quads in the world).
   tall_grass: (c, r) => {
     c.clearRect(0, 0, TILE, TILE);
@@ -379,10 +429,18 @@ const FACE_TILES = {
   torch: t('torch'),
   chest: { top: 'chest_top', side: 'chest_side', bottom: 'chest_top' },
   tall_grass: t('tall_grass'), poppy: t('poppy'), dandelion: t('dandelion'),
+  // Doors: 'top' face = upper half tile (window), 'side' = lower half tile.
+  door: { top: 'door_top', side: 'door_bottom', bottom: 'door_bottom' },
+  door_open: { top: 'door_top', side: 'door_bottom', bottom: 'door_bottom' },
+  oak_stairs_px: t('planks'), oak_stairs_nx: t('planks'),
+  oak_stairs_pz: t('planks'), oak_stairs_nz: t('planks'),
+  bed: { top: 'bed_top', side: 'bed_side', bottom: 'planks' },
+  bed_head: { top: 'bed_top_head', side: 'bed_side', bottom: 'planks' },
+  fence: t('planks'),
 };
 for (const name of Object.keys(ORE_COLORS)) FACE_TILES[name] = t(name);
 
-const CUTOUT = new Set(['leaves', 'glass', 'tall_grass', 'poppy', 'dandelion']);
+const CUTOUT = new Set(['leaves', 'glass', 'tall_grass', 'poppy', 'dandelion', 'door_top']);
 const TRANSPARENT = new Set(['water']);
 
 // --- Build textures + materials once ---

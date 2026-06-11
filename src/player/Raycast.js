@@ -31,7 +31,8 @@ export function raycastVoxel(world, origin, dir, maxDist = 6) {
   let t = 0;
   while (t <= maxDist) {
     const id = world.getBlock(x, y, z);
-    if (isSolid(id) || getBlock(id).plant) {
+    const def = getBlock(id);
+    if (isSolid(id) || def.plant || def.door) {
       return {
         block: { x, y, z },
         place: { x: x + face[0], y: y + face[1], z: z + face[2] },

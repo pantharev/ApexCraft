@@ -56,7 +56,8 @@ See [LICENSE](LICENSE) and [CLA.md](CLA.md) for full details.
 - **Swimming** — buoyant water physics: plunge in, sink slowly, hold jump to swim up. Water cancels fall damage.
 - **Mobs**
   - *Passive* (day): pig, cow, sheep, chicken — wander, **graze**, watch you walk by (heads track), and flee when hit.
-  - *Hostile* (night): zombie & spider chase and melee (spiders **climb walls**); **skeletons keep their distance and shoot arrows** at you. Zombies and skeletons **burn in daylight**. Bodies turn smoothly, keep eye contact while hunting, and **slump over and fade** when slain.
+  - *Hostile* (night): zombie & spider chase and melee (spiders **climb walls**); **skeletons keep their distance and shoot arrows**; **creepers** close in, hiss, swell… and **explode**. Zombies and skeletons **burn in daylight**. Bodies turn smoothly, keep eye contact while hunting, and **slump over and fade** when slain.
+  - **Village sieges**: zombies hunt villagers at night; villagers flee in a panic; each village fields an **iron golem** that batters any monster on sight (and drops iron when it falls).
   - Craft a **bow** + arrows for your own ranged attacks.
   - Mobs drop loot (meats, leather, bone, string, feather, wool, …). Cook meat in a furnace for more nourishment.
 
@@ -64,7 +65,9 @@ See [LICENSE](LICENSE) and [CLA.md](CLA.md) for full details.
 - **Mining** with staged **crack textures** as the block breaks, tool-tier gating (wrong tier = no drop), and item-drop entities that you walk over to collect.
 - **Inventory** — 36 slots + hotbar, drag/stack/split with a cursor, item tooltips.
 - **Crafting** — 2×2 pocket grid plus a 3×3 crafting table (right-click a placed table). Shaped & shapeless recipes; shift-click to craft a full stack.
-- **Doors, stairs & beds** — craft **doors** (right-click to swing them open/shut), **stairs** that orient to face you when placed, and **beds**: right-click one at night for a short sleep fade that skips straight to sunrise.
+- **Doors, stairs & beds** — craft **doors** (right-click to swing them open/shut), **stairs** that orient to face you when placed (and that you **walk up** without jumping), and **beds**: right-click one at night for a short sleep fade that skips straight to sunrise.
+- **TNT** — craft it from gunpowder + sand, place it, right-click to light the fuse… and stand back. Chain reactions included.
+- **More to build with** — wool, sandstone (and natural sandstone under deserts), mossy cobblestone, **slabs** (half-steps you walk up), **ladders** you can climb, glass panes, fences, pumpkins, melons, and hay bales.
 - **Smelting** — place a furnace, add fuel + input; smelt ores into ingots, sand into glass, and raw meat into cooked food.
 - **Recipe book** — a "Recipes" tab in the inventory, crafting table, and furnace screens lists every recipe with its ingredients (have/need), and one-click crafts anything you have materials for (shift-click crafts all).
 

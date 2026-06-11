@@ -86,6 +86,12 @@ try {
   guest.emit('projectile', { x: 0, y: 70, z: 0, dx: 1, dy: 0, dz: 0, speed: 30, dmg: 0, target: 'none' });
   ok((await projP).speed === 30, 'projectile spawn relays');
 
+  // --- explosions relay ---
+  const boomP = once(guest, 'boom');
+  host.emit('boom', { x: 10, y: 65, z: -4, r: 3.4 });
+  const bm = await boomP;
+  ok(bm.x === 10 && bm.r === 3.4, 'explosion event relays to the room');
+
   // --- hit routing: host -> specific player, guest -> host ---
   const hitP = once(guest, 'hitPlayer');
   host.emit('hitPlayer', { to: guest.id, dmg: 3, kx: 0.6, kz: -0.8 });

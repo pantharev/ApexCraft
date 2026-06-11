@@ -622,5 +622,190 @@
         ]
       }
     ]
+  },
+  {
+    "id": 39,
+    "name": "tnt",
+    "solid": true,
+    "transparent": false,
+    "interactive": true,
+    "hardness": 0,
+    "drops": [
+      {
+        "item": "tnt",
+        "count": [
+          1,
+          1
+        ]
+      }
+    ]
+  },
+  {
+    "id": 40,
+    "name": "wool",
+    "solid": true,
+    "hardness": 0.8,
+    "drops": [
+      {
+        "item": "wool",
+        "count": [
+          1,
+          1
+        ]
+      }
+    ]
+  },
+  {
+    "id": 41,
+    "name": "pumpkin",
+    "solid": true,
+    "hardness": 1.0,
+    "preferredTool": "axe",
+    "drops": [
+      {
+        "item": "pumpkin",
+        "count": [
+          1,
+          1
+        ]
+      }
+    ]
+  },
+  {
+    "id": 42,
+    "name": "melon",
+    "solid": true,
+    "hardness": 1.0,
+    "preferredTool": "axe",
+    "drops": [
+      {
+        "item": "melon",
+        "count": [
+          1,
+          1
+        ]
+      }
+    ]
+  },
+  {
+    "id": 43,
+    "name": "hay_bale",
+    "solid": true,
+    "hardness": 0.5,
+    "drops": [
+      {
+        "item": "hay_bale",
+        "count": [
+          1,
+          1
+        ]
+      }
+    ]
+  },
+  {
+    "id": 44,
+    "name": "sandstone",
+    "solid": true,
+    "hardness": 1.2,
+    "requiresTool": "pickaxe",
+    "minToolTier": 1,
+    "drops": [
+      {
+        "item": "sandstone",
+        "count": [
+          1,
+          1
+        ]
+      }
+    ]
+  },
+  {
+    "id": 45,
+    "name": "mossy_cobblestone",
+    "solid": true,
+    "hardness": 2.0,
+    "requiresTool": "pickaxe",
+    "minToolTier": 1,
+    "drops": [
+      {
+        "item": "mossy_cobblestone",
+        "count": [
+          1,
+          1
+        ]
+      }
+    ]
+  },
+  {
+    "id": 46,
+    "name": "oak_slab",
+    "solid": true,
+    "transparent": true,
+    "slab": true,
+    "hardness": 2.0,
+    "preferredTool": "axe",
+    "drops": [
+      {
+        "item": "oak_slab",
+        "count": [
+          1,
+          1
+        ]
+      }
+    ]
+  },
+  {
+    "id": 47,
+    "name": "stone_slab",
+    "solid": true,
+    "transparent": true,
+    "slab": true,
+    "hardness": 2.0,
+    "requiresTool": "pickaxe",
+    "minToolTier": 1,
+    "drops": [
+      {
+        "item": "stone_slab",
+        "count": [
+          1,
+          1
+        ]
+      }
+    ]
+  },
+  {
+    "id": 48,
+    "name": "ladder",
+    "solid": false,
+    "transparent": true,
+    "climbable": true,
+    "hardness": 0.4,
+    "preferredTool": "axe",
+    "drops": [
+      {
+        "item": "ladder",
+        "count": [
+          1,
+          1
+        ]
+      }
+    ]
+  },
+  {
+    "id": 49,
+    "name": "glass_pane",
+    "solid": true,
+    "transparent": true,
+    "pane": true,
+    "hardness": 0.3,
+    "drops": [
+      {
+        "item": "glass_pane",
+        "count": [
+          1,
+          1
+        ]
+      }
+    ]
   }
 ]

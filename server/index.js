@@ -119,6 +119,12 @@ io.on('connection', (socket) => {
     if (code && p) socket.to(code).emit('projectile', p);
   });
 
+  // Explosions: the originator applies block edits (synced separately);
+  // receivers replay the blast for visuals and their own damage.
+  socket.on('boom', (b) => {
+    if (code && b) socket.to(code).emit('boom', { x: +b.x, y: +b.y, z: +b.z, r: +b.r || 3 });
+  });
+
   // World clock from the host so day/night stays in sync.
   socket.on('time', (t) => {
     const r = room();

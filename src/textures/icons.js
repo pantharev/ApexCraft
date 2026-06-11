@@ -350,7 +350,7 @@ function drawNugget(ctx, color) {
 
 const MEATS = new Set(['raw_porkchop', 'cooked_porkchop', 'raw_beef', 'cooked_beef', 'raw_mutton', 'cooked_mutton', 'rotten_flesh']);
 const GEMS = new Set(['diamond', 'emerald', 'lapis', 'redstone']);
-const LUMPS = new Set(['coal', 'charcoal', 'raw_iron', 'raw_gold', 'clay_ball']);
+const LUMPS = new Set(['coal', 'charcoal', 'raw_iron', 'raw_gold', 'clay_ball', 'gunpowder']);
 
 function drawItem(def) {
   const c = newCanvas();

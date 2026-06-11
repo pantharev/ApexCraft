@@ -542,5 +542,108 @@
       "item": "fence",
       "count": 3
     }
+  },
+  {
+    "id": "tnt",
+    "type": "shaped",
+    "pattern": [
+      "GSG",
+      "SGS",
+      "GSG"
+    ],
+    "key": {
+      "G": "gunpowder",
+      "S": "sand"
+    },
+    "result": {
+      "item": "tnt",
+      "count": 1
+    }
+  },
+  {
+    "id": "sandstone",
+    "type": "shaped",
+    "pattern": [
+      "SS",
+      "SS"
+    ],
+    "key": {
+      "S": "sand"
+    },
+    "result": {
+      "item": "sandstone",
+      "count": 1
+    }
+  },
+  {
+    "id": "mossy_cobblestone",
+    "type": "shapeless",
+    "ingredients": [
+      "cobblestone",
+      "oak_leaves"
+    ],
+    "result": {
+      "item": "mossy_cobblestone",
+      "count": 1
+    }
+  },
+  {
+    "id": "oak_slab",
+    "type": "shaped",
+    "pattern": [
+      "PPP"
+    ],
+    "key": {
+      "P": "oak_planks"
+    },
+    "result": {
+      "item": "oak_slab",
+      "count": 6
+    }
+  },
+  {
+    "id": "stone_slab",
+    "type": "shaped",
+    "pattern": [
+      "CCC"
+    ],
+    "key": {
+      "C": "cobblestone"
+    },
+    "result": {
+      "item": "stone_slab",
+      "count": 6
+    }
+  },
+  {
+    "id": "ladder",
+    "type": "shaped",
+    "pattern": [
+      "S S",
+      "SSS",
+      "S S"
+    ],
+    "key": {
+      "S": "stick"
+    },
+    "result": {
+      "item": "ladder",
+      "count": 3
+    }
+  },
+  {
+    "id": "glass_pane",
+    "type": "shaped",
+    "pattern": [
+      "GGG",
+      "GGG"
+    ],
+    "key": {
+      "G": "glass"
+    },
+    "result": {
+      "item": "glass_pane",
+      "count": 16
+    }
   }
 ]

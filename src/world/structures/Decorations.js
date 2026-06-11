@@ -8,6 +8,8 @@ const TALL_GRASS = getBlockId('tall_grass');
 const POPPY = getBlockId('poppy');
 const DANDELION = getBlockId('dandelion');
 const CACTUS = getBlockId('cactus');
+const PUMPKIN = getBlockId('pumpkin');
+const MELON = getBlockId('melon');
 
 const SCAN_TOP = 100; // decorations only on lowland surfaces
 
@@ -57,6 +59,10 @@ export function generateDecorations(chunk) {
           chunk.set(lx, surf + 1, lz, rand() < 0.8 ? species : (species === POPPY ? DANDELION : POPPY));
         } else if (roll < flowerP + grassP) {
           chunk.set(lx, surf + 1, lz, TALL_GRASS);
+        } else if (roll < flowerP + grassP + 0.0012) {
+          // The odd wild pumpkin (or melon where it's hot and humid).
+          const hot = Noise.temperature(wx, wz) > 0.3 && humid > 0.6;
+          chunk.set(lx, surf + 1, lz, hot ? MELON : PUMPKIN);
         }
       } else if (
         ground === SAND && surf > SEA_LEVEL + 2 &&

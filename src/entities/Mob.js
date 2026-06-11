@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { isSolid } from '../blocks/BlockRegistry.js';
 import { MOBS } from './mobTypes.js';
 import { buildMobModel } from './MobModels.js';
+import { Sound } from '../systems/Sound.js';
 
 const GRAVITY = 26;
 const JUMP = 7;
@@ -172,11 +173,37 @@ export class Mob {
     if (this.fleeTimer > 0) {
       this.fleeTimer -= dt;
       speed *= 1.6;
-    } else if (def.category === 'hostile' && distSq < def.detect * def.detect) {
+    } else if (
+      (def.category === 'hostile' || (def.category === 'golem' && ctx.hasTarget)) &&
+      distSq < def.detect * def.detect
+    ) {
       const d = Math.sqrt(distSq) || 1;
       this.lookAt = player; // hunters keep eye contact
 
-      if (def.ranged) {
+      if (def.exploder) {
+        // Creeper: close in, then stand still, hiss, swell... and detonate.
+        if (d < 2.8) {
+          this.heading = null;
+          this.targetYaw = Math.atan2(dx, dz);
+          if (this._fuse == null) { this._fuse = 1.3; Sound.fuse(); }
+        } else if (this._fuse != null && d > 5) {
+          this._fuse = null; // target escaped — stand down
+          this.group.scale.setScalar(1);
+        } else {
+          this.heading = { x: dx / d, z: dz / d };
+        }
+        if (this._fuse != null) {
+          this._fuse -= dt;
+          this.group.scale.setScalar(1 + Math.max(0, 1.3 - this._fuse) * 0.22);
+          if (this._fuse <= 0 && ctx.explode) {
+            ctx.explode(this);
+            this.dead = true;
+            this.deathHandled = true; // no loot from self-detonation
+            this.removed = true;
+            return;
+          }
+        }
+      } else if (def.ranged) {
         // Archer: keep mid-range and fire arrows.
         if (d < 5) this.heading = { x: -dx / d, z: -dz / d };       // too close, back off
         else if (d > 11) this.heading = { x: dx / d, z: dz / d };   // far, close in
@@ -207,6 +234,20 @@ export class Mob {
     } else {
       this.wanderTimer -= dt;
       if (this.wanderTimer <= 0) this._pickWander();
+      // Out of range: a wound-up creeper stands down.
+      if (this._fuse != null) {
+        this._fuse = null;
+        this.group.scale.setScalar(1);
+      }
+      // A villager who sees a monster runs for it (overrides everything).
+      if (def.category === 'villager' && ctx.threat) {
+        const tx = this.pos.x - ctx.threat.x, tz = this.pos.z - ctx.threat.z;
+        const td = Math.hypot(tx, tz) || 1;
+        this.heading = { x: tx / td, z: tz / td };
+        speed *= 1.7;
+        this.wanderTimer = 0.5;
+        this.grazeTimer = 0;
+      }
       // Leashed mobs (villagers) head home when they stray too far.
       if (this.anchor) {
         const ax = this.anchor.x - this.pos.x, az = this.anchor.z - this.pos.z;
@@ -216,8 +257,9 @@ export class Mob {
           this.wanderTimer = 2;
         }
       }
-      // Night: villagers hurry to their house and wait out the dark inside.
-      if (def.category === 'villager' && this.home && ctx.isNight) {
+      // Night: villagers hurry to their house and wait out the dark inside
+      // (unless actively fleeing a monster — survival first).
+      if (def.category === 'villager' && this.home && ctx.isNight && !ctx.threat) {
         const hx = this.home.x - this.pos.x, hz = this.home.z - this.pos.z;
         const hd = Math.hypot(hx, hz);
         if (hd > 1.4) {

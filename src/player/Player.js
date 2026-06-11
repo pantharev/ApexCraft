@@ -81,7 +81,8 @@ export class Player {
     });
   }
 
-  // Is the AABB at position p intersecting any solid block?
+  // Is the AABB at position p intersecting any solid block? Slabs only fill
+  // the lower half of their cell, so you can stand on them at half height.
   _collides(p) {
     const minX = Math.floor(p.x - WIDTH / 2);
     const maxX = Math.floor(p.x + WIDTH / 2);
@@ -92,7 +93,13 @@ export class Player {
     for (let x = minX; x <= maxX; x++) {
       for (let y = minY; y <= maxY; y++) {
         for (let z = minZ; z <= maxZ; z++) {
-          if (isSolid(this.world.getBlock(x, y, z))) return true;
+          const id = this.world.getBlock(x, y, z);
+          if (!isSolid(id)) continue;
+          if (getBlock(id).slab) {
+            if (p.y < y + 0.5 && p.y + HEIGHT > y) return true;
+            continue;
+          }
+          return true;
         }
       }
     }
@@ -108,30 +115,37 @@ export class Player {
       this.pos[axis] = next[axis];
       return false;
     }
-    if (axis !== 'y' && this.onGround && !this.flying && this._stairAhead(next)) {
-      const up = next.clone();
-      up.y = this.pos.y + 1.001;
-      if (!this._collides(up)) {
-        this.pos[axis] = next[axis];
-        this.pos.y = up.y;
-        this._peakY = Math.max(this._peakY, this.pos.y); // no fall credit
-        return false;
+    if (axis !== 'y' && this.onGround && !this.flying) {
+      const rise = this._stepRise(next);
+      if (rise > 0) {
+        const up = next.clone();
+        up.y = this.pos.y + rise;
+        if (!this._collides(up)) {
+          this.pos[axis] = next[axis];
+          this.pos.y = up.y;
+          this._peakY = Math.max(this._peakY, this.pos.y); // no fall credit
+          return false;
+        }
       }
     }
     return true; // blocked
   }
 
-  // Is any cell blocking the foot layer of the AABB at p a stair block?
-  _stairAhead(p) {
+  // Step height granted by whatever blocks the foot layer of the AABB at p:
+  // stairs allow a full-block step, slabs a half step, anything else none.
+  _stepRise(p) {
     const y = Math.floor(p.y + 0.01);
     const minX = Math.floor(p.x - WIDTH / 2), maxX = Math.floor(p.x + WIDTH / 2);
     const minZ = Math.floor(p.z - WIDTH / 2), maxZ = Math.floor(p.z + WIDTH / 2);
+    let rise = 0;
     for (let x = minX; x <= maxX; x++) {
       for (let z = minZ; z <= maxZ; z++) {
-        if (getBlock(this.world.getBlock(x, y, z)).stair) return true;
+        const def = getBlock(this.world.getBlock(x, y, z));
+        if (def.stair) rise = Math.max(rise, 1.001);
+        else if (def.slab) rise = Math.max(rise, 0.501);
       }
     }
-    return false;
+    return rise;
   }
 
   update(dt) {
@@ -185,7 +199,19 @@ export class Player {
       this.impulse.z *= decay;
       if (Math.abs(this.impulse.x) + Math.abs(this.impulse.z) < 0.05) this.impulse.set(0, 0, 0);
 
-      if (this.inWater) {
+      // Ladders: grab on when the body overlaps one — climb with W/Space,
+      // descend with S/Shift, otherwise slide down slowly. No gravity.
+      const midBlock = this.world.getBlock(
+        Math.floor(this.pos.x), Math.floor(this.pos.y + 0.6), Math.floor(this.pos.z)
+      );
+      const onLadder = !this.inWater && getBlock(midBlock).climbable;
+
+      if (onLadder) {
+        if (this.enabled && (this.keys['KeyW'] || this.keys['Space'])) this.vel.y = 3.6;
+        else if (this.enabled && (this.keys['KeyS'] || this.keys['ShiftLeft'])) this.vel.y = -3.2;
+        else this.vel.y = Math.max(this.vel.y - GRAVITY * dt, -1.4); // gentle slide
+        this._peakY = this.pos.y; // ladders cancel fall damage
+      } else if (this.inWater) {
         // Sink under gravity with gradual drag, so an incoming fall carries you
         // down a bit before settling to a slow sink. Space swims up.
         if (this.enabled && this.keys['Space']) {

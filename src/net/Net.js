@@ -53,6 +53,7 @@ export class Net {
     this.onPlayerLeft = null;   // ({id})
     this.onMobs = null;         // (snapshot)
     this.onProjectile = null;   // ({x,y,z,dx,dy,dz,speed,dmg,target})
+    this.onBoom = null;         // ({x,y,z,r}) — explosion visuals + self-damage
     this.onHitPlayer = null;    // (dmg)
     this.onMobHit = null;       // ({i, dmg, x, y, z}) — host only
     this.onBecomeHost = null;   // ()
@@ -77,6 +78,7 @@ export class Net {
     });
     this.socket.on('mobs', (snap) => this.onMobs && this.onMobs(snap));
     this.socket.on('projectile', (p) => this.onProjectile && this.onProjectile(p));
+    this.socket.on('boom', (b) => this.onBoom && this.onBoom(b));
     this.socket.on('hitPlayer', (m) => this.onHitPlayer && this.onHitPlayer(m.dmg, m.kx || 0, m.kz || 0));
     this.socket.on('mobHit', (m) => this.onMobHit && this.onMobHit(m));
     this.socket.on('time', (t) => this.onTime && this.onTime(t));
@@ -124,6 +126,7 @@ export class Net {
 
   sendMobs(snap) { this.socket.volatile.emit('mobs', snap); }
   sendProjectile(p) { this.socket.emit('projectile', p); }
+  sendBoom(x, y, z, r) { this.socket.emit('boom', { x, y, z, r }); }
   sendTime(t) { this.socket.emit('time', t); }
   sendHitPlayer(to, dmg, kdir = null) {
     this.socket.emit('hitPlayer', { to, dmg, kx: kdir ? kdir.x : 0, kz: kdir ? kdir.z : 0 });

@@ -13,6 +13,7 @@ import { MobManager } from '../systems/MobManager.js';
 import { TorchLights } from '../systems/TorchLights.js';
 import { Projectiles } from '../systems/Projectiles.js';
 import { Particles } from '../systems/Particles.js';
+import { Explosions } from '../systems/Explosions.js';
 import { RemotePlayers } from '../net/RemotePlayers.js';
 import { GhostMobs } from '../net/GhostMobs.js';
 import { Sound } from '../systems/Sound.js';
@@ -125,6 +126,7 @@ export class Game {
     this.torchLights = new TorchLights(this.scene, this.world);
     this.projectiles = new Projectiles(this.world, this.scene);
     this.particles = new Particles(this.scene);
+    this.explosions = new Explosions(this.world, this.scene, this.particles);
     this._waterT = 0; // water texture scroll clock
 
     // Every block edit: spray break particles (local AND remote breaks), and
@@ -156,6 +158,8 @@ export class Game {
         this.projectiles.spawn(p.x, p.y, p.z, new THREE.Vector3(p.dx, p.dy, p.dz), p.speed, p.dmg || 0, p.target);
         Sound.shoot();
       };
+      // Remote explosion: visuals + own damage only (edits arrive separately).
+      net.onBoom = (b) => this.explosions.boom(b.x, b.y, b.z, b.r, this._boomCtx(), false);
       net.onHitPlayer = (dmg, kx, kz) => {
         this.vitals.damage(dmg);
         if (kx || kz) this.player.knockback(kx, kz);
@@ -224,6 +228,10 @@ export class Game {
         this.setScreen('chest');
       } else if (name === 'bed' || name === 'bed_head') {
         this._sleep();
+      } else if (name === 'tnt') {
+        // Light it: the block becomes a primed, flashing entity.
+        this.world.setBlock(pos.x, pos.y, pos.z, 0);
+        this.explosions.prime(pos.x, pos.y, pos.z);
       }
     };
     this.onSleep = null; // React fade-to-black overlay
@@ -301,6 +309,20 @@ export class Game {
   // the host's simulation; hosts and single-player target the real mobs.
   _mobApi() {
     return this.net && !this.net.isHost ? this.ghostMobs : this.mobs;
+  }
+
+  // Shared context for explosions (TNT fuses, creepers, remote booms).
+  _boomCtx() {
+    return {
+      playerPos: this.player.pos,
+      damagePlayer: (dmg, kx, kz) => {
+        this.vitals.damage(dmg);
+        this.player.knockback(kx, kz, 9);
+      },
+      // Only the simulation owner damages real mobs.
+      mobs: this.net && !this.net.isHost ? null : this.mobs,
+      broadcast: this.net ? (x, y, z, r) => this.net.sendBoom(x, y, z, r) : null,
+    };
   }
 
   // Dev (localhost, V key): jump to the nearest village; if already standing
@@ -560,6 +582,11 @@ export class Game {
           // Guests simulate the same arrow locally so it can hit *them*.
           if (this.net) this.net.sendProjectile({ x: sx, y: sy, z: sz, dx, dy, dz, speed: 22, dmg, target: 'player' });
         },
+        explode: (mob) => {
+          const c = this._boomCtx();
+          this.explosions.boom(mob.pos.x, mob.pos.y + 0.8, mob.pos.z, 2.6, c, true);
+          if (c.broadcast) c.broadcast(mob.pos.x, mob.pos.y + 0.8, mob.pos.z, 2.6);
+        },
       });
     }
     this.projectiles.update(dt, {
@@ -592,6 +619,7 @@ export class Game {
       }
     }
     this.particles.update(dt);
+    this.explosions.update(dt, this._boomCtx());
     // Drift the shared water texture for a gentle current.
     this._waterT += dt;
     const waterMap = this.world.waterMaterial.map;

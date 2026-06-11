@@ -12,6 +12,7 @@ import { generateDecorations } from '../structures/Decorations.js';
 const STONE = getBlockId('stone');
 const DIRT = getBlockId('dirt');
 const SAND = getBlockId('sand');
+const SANDSTONE = getBlockId('sandstone');
 const GRAVEL = getBlockId('gravel');
 const SNOW = getBlockId('snow');
 const CLAY = getBlockId('clay');
@@ -50,8 +51,9 @@ export function generateChunk(chunk) {
         } else if (y < height - dirtDepth) {
           id = y > 105 + dith ? ANDESITE : STONE;
         } else if (y < height) {
-          // Sub-surface: sand under beaches/deserts, stone under bare peaks.
-          id = sandy ? SAND : rocky ? STONE : DIRT;
+          // Sub-surface: sand (then sandstone deeper) under beaches/deserts,
+          // stone under bare peaks, dirt elsewhere.
+          id = sandy ? (y < height - 2 ? SANDSTONE : SAND) : rocky ? STONE : DIRT;
         } else if (y === height) {
           if (snowy) id = SNOW;
           else if (rocky) id = Noise.detail(wx, wz, 0.11) > 0.45 ? GRAVEL : STONE;

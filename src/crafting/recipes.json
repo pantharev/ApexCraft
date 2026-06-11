@@ -526,5 +526,21 @@
       "item": "bed",
       "count": 1
     }
+  },
+  {
+    "id": "fence",
+    "type": "shaped",
+    "pattern": [
+      "PSP",
+      "PSP"
+    ],
+    "key": {
+      "P": "oak_planks",
+      "S": "stick"
+    },
+    "result": {
+      "item": "fence",
+      "count": 3
+    }
   }
 ]

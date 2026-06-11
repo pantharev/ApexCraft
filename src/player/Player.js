@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { isSolid, getBlockId } from '../blocks/BlockRegistry.js';
+import { isSolid, getBlock, getBlockId } from '../blocks/BlockRegistry.js';
 import { Sound, soundCategory } from '../systems/Sound.js';
 
 const WATER = getBlockId('water');
@@ -99,7 +99,8 @@ export class Player {
     return false;
   }
 
-  // Move along one axis, stopping at the first collision.
+  // Move along one axis, stopping at the first collision. Horizontal moves
+  // blocked by a stair block auto-step up onto it (walls still need a jump).
   _moveAxis(axis, amount) {
     const next = this.pos.clone();
     next[axis] += amount;
@@ -107,7 +108,30 @@ export class Player {
       this.pos[axis] = next[axis];
       return false;
     }
+    if (axis !== 'y' && this.onGround && !this.flying && this._stairAhead(next)) {
+      const up = next.clone();
+      up.y = this.pos.y + 1.001;
+      if (!this._collides(up)) {
+        this.pos[axis] = next[axis];
+        this.pos.y = up.y;
+        this._peakY = Math.max(this._peakY, this.pos.y); // no fall credit
+        return false;
+      }
+    }
     return true; // blocked
+  }
+
+  // Is any cell blocking the foot layer of the AABB at p a stair block?
+  _stairAhead(p) {
+    const y = Math.floor(p.y + 0.01);
+    const minX = Math.floor(p.x - WIDTH / 2), maxX = Math.floor(p.x + WIDTH / 2);
+    const minZ = Math.floor(p.z - WIDTH / 2), maxZ = Math.floor(p.z + WIDTH / 2);
+    for (let x = minX; x <= maxX; x++) {
+      for (let z = minZ; z <= maxZ; z++) {
+        if (getBlock(this.world.getBlock(x, y, z)).stair) return true;
+      }
+    }
+    return false;
   }
 
   update(dt) {

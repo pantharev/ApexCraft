@@ -593,9 +593,29 @@
     "bed": true,
     "interactive": true,
     "hardness": 0.4,
+    "drops": []
+  },
+  {
+    "id": 37,
+    "name": "bed_head",
+    "solid": true,
+    "transparent": true,
+    "bed": true,
+    "interactive": true,
+    "hardness": 0.4,
+    "drops": []
+  },
+  {
+    "id": 38,
+    "name": "fence",
+    "solid": true,
+    "transparent": true,
+    "fence": true,
+    "hardness": 2.0,
+    "preferredTool": "axe",
     "drops": [
       {
-        "item": "bed",
+        "item": "fence",
         "count": [
           1,
           1

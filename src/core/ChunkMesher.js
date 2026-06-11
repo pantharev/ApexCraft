@@ -17,11 +17,13 @@ const PLANTS = new Set([TALL_GRASS, getBlockId('poppy'), getBlockId('dandelion')
 const DOOR = getBlockId('door');
 const DOOR_OPEN = getBlockId('door_open');
 const BED = getBlockId('bed');
+const BED_HEAD = getBlockId('bed_head');
+const FENCE = getBlockId('fence');
 const STAIR_DIR = {
   [getBlockId('oak_stairs_px')]: 'px', [getBlockId('oak_stairs_nx')]: 'nx',
   [getBlockId('oak_stairs_pz')]: 'pz', [getBlockId('oak_stairs_nz')]: 'nz',
 };
-const SPECIAL = new Set([...PLANTS, DOOR, DOOR_OPEN, BED,
+const SPECIAL = new Set([...PLANTS, DOOR, DOOR_OPEN, BED, BED_HEAD, FENCE,
   ...Object.keys(STAIR_DIR).map(Number)]);
 
 // Mask entries pack the block id with the face's 4-corner ambient-occlusion
@@ -261,10 +263,33 @@ export function buildChunkGeometry(chunk, worldGet) {
           const u = d === 'px' ? [0.5, 0, 1, 1] : d === 'nx' ? [0, 0, 0.5, 1]
             : d === 'pz' ? [0, 0.5, 1, 1] : [0, 0, 1, 0.5]; // [x0,z0,x1,z1]
           pushBox(bufFor, wx + u[0], y + 0.5, wz + u[1], wx + u[2], y + 1, wz + u[3], matT, matS, matB);
-        } else if (id === BED) {
+        } else if (id === BED || id === BED_HEAD) {
+          // Mattress slab; halves extend to meet their partner cell flush.
+          let bx0 = 0.03, bx1 = 0.97, bz0 = 0.03, bz1 = 0.97;
+          const partner = id === BED ? BED_HEAD : BED;
+          if (at(lx + 1, y, lz) === partner) bx1 = 1;
+          if (at(lx - 1, y, lz) === partner) bx0 = 0;
+          if (at(lx, y, lz + 1) === partner) bz1 = 1;
+          if (at(lx, y, lz - 1) === partner) bz0 = 0;
           pushBox(bufFor,
-            wx + 0.03, y, wz + 0.03, wx + 0.97, y + 0.55, wz + 0.97,
-            faceMaterialIndex(BED, 'top'), faceMaterialIndex(BED, 'side'), faceMaterialIndex(BED, 'bottom'));
+            wx + bx0, y, wz + bz0, wx + bx1, y + 0.55, wz + bz1,
+            faceMaterialIndex(id, 'top'), faceMaterialIndex(id, 'side'), faceMaterialIndex(id, 'bottom'));
+        } else if (id === FENCE) {
+          const mat = faceMaterialIndex(FENCE, 'side');
+          // Centre post...
+          pushBox(bufFor, wx + 0.36, y, wz + 0.36, wx + 0.64, y + 1, wz + 0.64, mat, mat, mat);
+          // ...with two rails toward each solid/fence neighbour.
+          const rails = [
+            [1, 0, wx + 0.64, wx + 1, wz + 0.42, wz + 0.58],
+            [-1, 0, wx, wx + 0.36, wz + 0.42, wz + 0.58],
+            [0, 1, wx + 0.42, wx + 0.58, wz + 0.64, wz + 1],
+            [0, -1, wx + 0.42, wx + 0.58, wz, wz + 0.36],
+          ];
+          for (const [dx, dz, rx0, rx1, rz0, rz1] of rails) {
+            if (!isSolid(at(lx + dx, y, lz + dz))) continue;
+            pushBox(bufFor, rx0, y + 0.3, rz0, rx1, y + 0.45, rz1, mat, mat, mat);
+            pushBox(bufFor, rx0, y + 0.72, rz0, rx1, y + 0.87, rz1, mat, mat, mat);
+          }
         }
       }
     }

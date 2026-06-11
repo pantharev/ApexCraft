@@ -322,11 +322,20 @@ const DRAW = {
     c.fillRect(7, 1, 2, 7); c.fillRect(3, 4, 10, 1);
   },
   bed_top: (c, r) => {
+    // Foot half: red blanket with a fold stripe.
     const vn = valueNoise(r, 4);
-    // Red blanket with a white pillow band at the head end.
     paint(c, '#b03028', (x, y) => (vn(x, y) - 0.5) * 16 + (y % 4 === 0 ? -8 : 0), 5, r);
-    for (let y = 0; y < 4; y++) for (let x = 1; x < 15; x++) {
-      setPx(c, x, y, y === 3 ? '#cfd4da' : '#eef1f5', 1, 6, r);
+    for (let x = 1; x < 15; x++) setPx(c, x, 3, '#d8554a', 1, 8, r); // fold
+    c.strokeStyle = 'rgba(90,20,16,0.8)'; c.strokeRect(0.5, 0.5, 15, 15);
+  },
+  bed_top_head: (c, r) => {
+    // Head half: blanket edge with a big centred pillow.
+    const vn = valueNoise(r, 4);
+    paint(c, '#b03028', (x, y) => (vn(x, y) - 0.5) * 16, 5, r);
+    for (let y = 3; y <= 12; y++) {
+      for (let x = 3; x <= 12; x++) {
+        setPx(c, x, y, y > 10 || x > 11 ? '#cfd4da' : '#eef1f5', 1, 5, r);
+      }
     }
     c.strokeStyle = 'rgba(90,20,16,0.8)'; c.strokeRect(0.5, 0.5, 15, 15);
   },
@@ -426,6 +435,8 @@ const FACE_TILES = {
   oak_stairs_px: t('planks'), oak_stairs_nx: t('planks'),
   oak_stairs_pz: t('planks'), oak_stairs_nz: t('planks'),
   bed: { top: 'bed_top', side: 'bed_side', bottom: 'planks' },
+  bed_head: { top: 'bed_top_head', side: 'bed_side', bottom: 'planks' },
+  fence: t('planks'),
 };
 for (const name of Object.keys(ORE_COLORS)) FACE_TILES[name] = t(name);
 

@@ -332,6 +332,16 @@ function drawBed(ctx) {
   ctx.fillStyle = '#eef1f5'; ctx.fillRect(2, 5, 4, 3);   // pillow
 }
 
+function drawFence(ctx) {
+  // Two posts with two rails.
+  ctx.fillStyle = '#7a5733';
+  ctx.fillRect(3, 3, 2, 11); ctx.fillRect(11, 3, 2, 11); // posts
+  ctx.fillStyle = '#b3884f';
+  ctx.fillRect(1, 5, 14, 2); ctx.fillRect(1, 10, 14, 2); // rails
+  ctx.fillStyle = '#5d4023';
+  ctx.fillRect(3, 13, 2, 1); ctx.fillRect(11, 13, 2, 1); // post feet
+}
+
 function drawNugget(ctx, color) {
   const dark = shade(color, 0.65);
   for (let y = 5; y <= 11; y++) for (let x = 4; x <= 11; x++) px(ctx, x, y, y > 8 ? dark : color);
@@ -352,6 +362,7 @@ function drawItem(def) {
   else if (name === 'door') drawDoor(ctx);
   else if (name === 'oak_stairs') drawStairs(ctx);
   else if (name === 'bed') drawBed(ctx);
+  else if (name === 'fence') drawFence(ctx);
   else if (name === 'arrow') drawArrow(ctx);
   else if (name === 'stick') drawStick(ctx);
   else if (name === 'apple') drawApple(ctx, color);
@@ -378,7 +389,7 @@ function drawItem(def) {
 }
 
 // Block items that look better with a hand-drawn icon than their block tile.
-const CUSTOM_BLOCK_ICONS = new Set(['door', 'oak_stairs', 'bed']);
+const CUSTOM_BLOCK_ICONS = new Set(['door', 'oak_stairs', 'bed', 'fence']);
 
 // The icon as a canvas — also the source the 3D item models are extruded from.
 export function itemIconCanvas(name) {

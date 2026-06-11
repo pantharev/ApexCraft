@@ -38,7 +38,7 @@ export function buildHeldModel(item) {
   // doors, stairs, and beds fall through to the extruded icon plate — their
   // icons read far better than a cube.
   const blockDef = item.placeBlock ? getBlock(getBlockId(item.placeBlock)) : null;
-  if (blockDef && !blockDef.plant && !blockDef.door && !blockDef.stair && !blockDef.bed) {
+  if (blockDef && !blockDef.plant && !blockDef.door && !blockDef.stair && !blockDef.bed && !blockDef.fence) {
     const cube = buildBlockCube(item.placeBlock, 0.3);
     cube.rotation.y = 0.35; // show two faces
     group.add(cube);

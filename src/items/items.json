@@ -139,7 +139,15 @@
     "display": "Bed",
     "color": "#c0392b",
     "placeBlock": "bed",
-    "maxStack": 1
+    "maxStack": 1,
+    "bed": true
+  },
+  {
+    "name": "fence",
+    "display": "Oak Fence",
+    "color": "#b3884f",
+    "placeBlock": "fence",
+    "maxStack": 64
   },
   {
     "name": "stick",

@@ -222,7 +222,7 @@ export class Game {
       } else if (name === 'chest') {
         this.activeChest = this.chests.open(this.world, pos.x, pos.y, pos.z);
         this.setScreen('chest');
-      } else if (name === 'bed') {
+      } else if (name === 'bed' || name === 'bed_head') {
         this._sleep();
       }
     };

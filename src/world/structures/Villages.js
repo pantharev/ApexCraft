@@ -17,6 +17,8 @@ const TABLE = getBlockId('crafting_table');
 const CHEST = getBlockId('chest');
 const DOOR_OPEN = getBlockId('door_open');
 const BED = getBlockId('bed');
+const BED_HEAD = getBlockId('bed_head');
+const FENCE = getBlockId('fence');
 
 // Surfaces a path is allowed to pave over.
 const PAVEABLE = new Set([GRASS, DIRT, SAND, SNOW, GRAVEL]);
@@ -94,11 +96,13 @@ function emitHouse(chunk, h, baseX, baseZ) {
       chunk.set(lx, fy + 4, lz, perim ? LOG : PLANKS);
       for (let y = fy + 5; y <= fy + 8; y++) chunk.set(lx, y, lz, 0);
 
-      // Furniture on the floor inside (every home has a bed by the far wall).
+      // Furniture on the floor inside (every home has a two-block bed by the
+      // far wall: foot + pillowed head).
       if (!perim) {
         if (h.table && wx === tableX && wz === tableZ) chunk.set(lx, fy + 1, lz, TABLE);
         else if (h.chest && wx === chestX && wz === chestZ) chunk.set(lx, fy + 1, lz, CHEST);
         else if (wx === x0 + 1 && wz === z1 - 1) chunk.set(lx, fy + 1, lz, BED);
+        else if (wx === x0 + 2 && wz === z1 - 1) chunk.set(lx, fy + 1, lz, BED_HEAD);
       }
     }
   }
@@ -123,8 +127,8 @@ function emitWell(chunk, well, baseX, baseZ) {
       if (ring) {
         chunk.set(lx, y - 2, lz, COBBLE);
         chunk.set(lx, y - 1, lz, COBBLE);
-        chunk.set(lx, y, lz, COBBLE);     // rim
-        chunk.set(lx, y + 1, lz, COBBLE); // waist-high wall closes the basin in
+        chunk.set(lx, y, lz, COBBLE);                      // rim
+        chunk.set(lx, y + 1, lz, post ? COBBLE : FENCE);   // fence closes the basin in
         chunk.set(lx, y + 2, lz, post ? COBBLE : 0);
       } else {
         // Basin: cobble bottom, two of water, open above.

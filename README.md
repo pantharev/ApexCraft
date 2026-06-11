@@ -46,7 +46,7 @@ See [LICENSE](LICENSE) and [CLA.md](CLA.md) for full details.
 - **Oceans, lakes & rivers** — winding river channels whose width breathes along the course; varied sea floors (sand banks, gravel runs, clay pockets); beaches at the shore.
 - **A real underground**: winding **spaghetti tunnels** (two intersecting 3D fields) that surface as cave entrances, big **cheese caverns** at depth, and rare **rifts** — deep ravines that split the land open 15–40 blocks down. **Ore veins** (coal, iron, gold, redstone, lapis, diamond, emerald) placed by depth and rarity.
 - **Surface flora**: tall-grass meadows that thicken with humidity, rare **flower fields** of poppies and dandelions (pick + replant them), and **cacti** columns in the deserts.
-- **Villages** (about one per ~1,300 blocks of travel): a cobblestone **well** at the centre, 4–7 plank-and-log **houses** with doors facing the well, glass windows, gravel **paths**, and the odd crafting table or chest inside — all generated deterministically across chunk borders. **Villagers** in brown robes wander between the houses, watch you walk by, and never stray far from home.
+- **Villages** (about one per ~1,300 blocks of travel): a walled cobblestone **well** at the centre, 4–7 plank-and-log **houses** with real openable doors facing the well, glass windows, beds inside, gravel **paths**, and the odd crafting table or chest — all generated deterministically across chunk borders. **Villagers** in brown robes wander between the houses, watch you walk by — and **run home at nightfall**.
 - **Trees** scattered only on grass, clumped by a *forest* noise field so you get dense woods and open plains both.
 - **Day/night cycle** with a moving sun and moon (sunrise in the east, set in the west), a **wheeling star dome** at night, glowing halos around the sun/moon, and **orange dawn/dusk skies** with warm horizon light.
 
@@ -64,6 +64,7 @@ See [LICENSE](LICENSE) and [CLA.md](CLA.md) for full details.
 - **Mining** with staged **crack textures** as the block breaks, tool-tier gating (wrong tier = no drop), and item-drop entities that you walk over to collect.
 - **Inventory** — 36 slots + hotbar, drag/stack/split with a cursor, item tooltips.
 - **Crafting** — 2×2 pocket grid plus a 3×3 crafting table (right-click a placed table). Shaped & shapeless recipes; shift-click to craft a full stack.
+- **Doors, stairs & beds** — craft **doors** (right-click to swing them open/shut), **stairs** that orient to face you when placed, and **beds**: right-click one at night for a short sleep fade that skips straight to sunrise.
 - **Smelting** — place a furnace, add fuel + input; smelt ores into ingots, sand into glass, and raw meat into cooked food.
 - **Recipe book** — a "Recipes" tab in the inventory, crafting table, and furnace screens lists every recipe with its ingredients (have/need), and one-click crafts anything you have materials for (shift-click crafts all).
 

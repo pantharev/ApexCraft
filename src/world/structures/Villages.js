@@ -15,6 +15,8 @@ const SAND = getBlockId('sand');
 const SNOW = getBlockId('snow');
 const TABLE = getBlockId('crafting_table');
 const CHEST = getBlockId('chest');
+const DOOR_OPEN = getBlockId('door_open');
+const BED = getBlockId('bed');
 
 // Surfaces a path is allowed to pave over.
 const PAVEABLE = new Set([GRASS, DIRT, SAND, SNOW, GRAVEL]);
@@ -77,10 +79,11 @@ function emitHouse(chunk, h, baseX, baseZ) {
         let id = 0;
         if (perim) {
           id = corner ? LOG : PLANKS;
+          // Doorway gets a real door, placed open so villagers can wander in.
           const isDoor = wx === doorX && wz === doorZ && y <= fy + 2;
           const isWindow = y === fy + 2 && !corner &&
             (onX ? wz === h.z : wx === h.x) && !(wx === doorX && wz === doorZ);
-          if (isDoor) id = 0;
+          if (isDoor) id = DOOR_OPEN;
           else if (isWindow) id = GLASS;
         }
         chunk.set(lx, y, lz, id);
@@ -91,10 +94,11 @@ function emitHouse(chunk, h, baseX, baseZ) {
       chunk.set(lx, fy + 4, lz, perim ? LOG : PLANKS);
       for (let y = fy + 5; y <= fy + 8; y++) chunk.set(lx, y, lz, 0);
 
-      // Furniture on the floor inside.
+      // Furniture on the floor inside (every home has a bed by the far wall).
       if (!perim) {
         if (h.table && wx === tableX && wz === tableZ) chunk.set(lx, fy + 1, lz, TABLE);
         else if (h.chest && wx === chestX && wz === chestZ) chunk.set(lx, fy + 1, lz, CHEST);
+        else if (wx === x0 + 1 && wz === z1 - 1) chunk.set(lx, fy + 1, lz, BED);
       }
     }
   }
@@ -119,8 +123,9 @@ function emitWell(chunk, well, baseX, baseZ) {
       if (ring) {
         chunk.set(lx, y - 2, lz, COBBLE);
         chunk.set(lx, y - 1, lz, COBBLE);
-        chunk.set(lx, y, lz, COBBLE); // rim
-        for (let yy = y + 1; yy <= y + 2; yy++) chunk.set(lx, yy, lz, post ? COBBLE : 0);
+        chunk.set(lx, y, lz, COBBLE);     // rim
+        chunk.set(lx, y + 1, lz, COBBLE); // waist-high wall closes the basin in
+        chunk.set(lx, y + 2, lz, post ? COBBLE : 0);
       } else {
         // Basin: cobble bottom, two of water, open above.
         chunk.set(lx, y - 2, lz, COBBLE);

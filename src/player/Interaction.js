@@ -20,6 +20,7 @@ export class Interaction {
     this.itemDrops = itemDrops;
 
     this.selectedBlock = 0; // block id to place (0 = nothing placeable held)
+    this.heldItem = null;   // full item def (doors/stairs place specially)
     this.currentTool = null; // null = bare hand (tier 0, speed 1)
     this.onPlaced = null; // called after a successful placement
     this.onUseBlock = null; // called when right-clicking an interactive block
@@ -93,12 +94,16 @@ export class Interaction {
     this.breaking = true;
   }
 
-  // Right-click: use an interactive block (e.g. crafting table) if targeted,
-  // otherwise place the held block.
+  // Right-click: toggle a door, use an interactive block (crafting table,
+  // furnace, chest, bed), or place the held block.
   _rightClick() {
     if (this.target) {
       const b = this.target.block;
       const block = getBlock(this.world.getBlock(b.x, b.y, b.z));
+      if (block.door) {
+        this._toggleDoor(b, block);
+        return;
+      }
       if (block.interactive && this.onUseBlock) {
         this.onUseBlock(block.name, b);
         return;
@@ -111,12 +116,43 @@ export class Interaction {
     }
   }
 
+  // Swing a door (both halves) between closed and open.
+  _toggleDoor(b, block) {
+    const newId = getBlockId(block.name === 'door' ? 'door_open' : 'door');
+    this.world.setBlock(b.x, b.y, b.z, newId);
+    if (getBlock(this.world.getBlock(b.x, b.y + 1, b.z)).door) {
+      this.world.setBlock(b.x, b.y + 1, b.z, newId);
+    }
+    if (getBlock(this.world.getBlock(b.x, b.y - 1, b.z)).door) {
+      this.world.setBlock(b.x, b.y - 1, b.z, newId);
+    }
+    Sound.door(block.name === 'door');
+  }
+
   _place() {
     if (!this.target || !this.selectedBlock) return; // nothing placeable held
     const p = this.target.place;
     if (isSolid(this.world.getBlock(p.x, p.y, p.z))) return;
     if (this._overlapsPlayer(p.x, p.y, p.z)) return;
-    this.world.setBlock(p.x, p.y, p.z, this.selectedBlock);
+
+    const item = this.heldItem;
+    if (item && item.door) {
+      // Doors are two blocks tall — both cells must be free.
+      if (isSolid(this.world.getBlock(p.x, p.y + 1, p.z))) return;
+      if (this._overlapsPlayer(p.x, p.y + 1, p.z)) return;
+      const id = getBlockId('door');
+      this.world.setBlock(p.x, p.y, p.z, id);
+      this.world.setBlock(p.x, p.y + 1, p.z, id);
+    } else if (item && item.stairs) {
+      // Stairs ascend away from the player (in the look direction).
+      const fx = -Math.sin(this.player.yaw), fz = -Math.cos(this.player.yaw);
+      const name = Math.abs(fx) > Math.abs(fz)
+        ? (fx > 0 ? 'oak_stairs_px' : 'oak_stairs_nx')
+        : (fz > 0 ? 'oak_stairs_pz' : 'oak_stairs_nz');
+      this.world.setBlock(p.x, p.y, p.z, getBlockId(name));
+    } else {
+      this.world.setBlock(p.x, p.y, p.z, this.selectedBlock);
+    }
     Sound.place(soundCategory(this.selectedBlock));
     if (this.onPlaced) this.onPlaced();
   }
@@ -124,6 +160,17 @@ export class Interaction {
   // Remove a block and spawn its drops. If the block requires a tool the
   // player lacks (wrong type or too low a tier), it breaks with no drop.
   _breakBlock(block, b) {
+    // Doors: breaking either half removes both, dropping one door item.
+    if (block.door) {
+      this.world.setBlock(b.x, b.y, b.z, 0);
+      if (getBlock(this.world.getBlock(b.x, b.y + 1, b.z)).door) this.world.setBlock(b.x, b.y + 1, b.z, 0);
+      if (getBlock(this.world.getBlock(b.x, b.y - 1, b.z)).door) this.world.setBlock(b.x, b.y - 1, b.z, 0);
+      Sound.dig(soundCategory(getBlockId('oak_planks')), 1);
+      if (this.onBlockBroken) this.onBlockBroken(block.name, b);
+      if (this.itemDrops) this.itemDrops.spawn('door', 1, b.x, b.y, b.z);
+      return;
+    }
+
     this.world.setBlock(b.x, b.y, b.z, 0);
     Sound.dig(soundCategory(getBlockId(block.name)), 1); // break sound
     if (this.onBlockBroken) this.onBlockBroken(block.name, b);

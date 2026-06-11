@@ -213,7 +213,7 @@ export class Game {
     if (this._save?.chests) this.chests.load(this._save.chests);
     this.activeChest = null;
 
-    // Right-clicking an interactive block opens its screen.
+    // Right-clicking an interactive block opens its screen (or starts sleep).
     this.interaction.onUseBlock = (name, pos) => {
       if (name === 'crafting_table') this.setScreen('crafting');
       else if (name === 'furnace') {
@@ -222,8 +222,13 @@ export class Game {
       } else if (name === 'chest') {
         this.activeChest = this.chests.open(this.world, pos.x, pos.y, pos.z);
         this.setScreen('chest');
+      } else if (name === 'bed') {
+        this._sleep();
       }
     };
+    this.onSleep = null; // React fade-to-black overlay
+    this.onToast = null; // React transient message
+    this._sleeping = false;
 
     // When a furnace/chest is mined, drop its contents and discard its state.
     this.interaction.onBlockBroken = (name, pos) => {
@@ -435,6 +440,32 @@ export class Game {
     return ok;
   }
 
+  // Sleep in a bed: short fade to black, then wake at dawn. Night only; in
+  // multiplayer only the host owns the clock.
+  _sleep() {
+    if (this._sleeping) return;
+    if (this.net && !this.net.isHost) {
+      if (this.onToast) this.onToast('Only the host can skip the night');
+      return;
+    }
+    if (!this.dayNight.isNight) {
+      if (this.onToast) this.onToast('You can only sleep at night');
+      return;
+    }
+    this._sleeping = true;
+    this.player.enabled = false;
+    if (this.onSleep) this.onSleep(true);
+    setTimeout(() => {
+      this.dayNight.t = 0.02; // just after sunrise
+      this.dayNight.frozen = this._devTime !== 0 ? this.dayNight.frozen : false;
+      this.dayNight.update(0);
+      if (this.net && this.net.isHost) this.net.sendTime(this.dayNight.t);
+      this._sleeping = false;
+      this.player.enabled = this.openScreen === null;
+      if (this.onSleep) this.onSleep(false);
+    }, 1800);
+  }
+
   // Fire an arrow from the camera if the player has ammo.
   _shootBow() {
     if (this.inventory.count('arrow') <= 0) return;
@@ -470,6 +501,7 @@ export class Game {
 
     this.interaction.currentTool = item && item.toolType ? item : null;
     this.interaction.selectedBlock = item && item.placeBlock ? getBlockId(item.placeBlock) : 0;
+    this.interaction.heldItem = item;
     this.interaction.heldFood = item && item.food ? item.food : 0;
 
     if (name !== this._heldName) {

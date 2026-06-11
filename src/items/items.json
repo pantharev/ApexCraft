@@ -119,6 +119,29 @@
     "maxStack": 64
   },
   {
+    "name": "door",
+    "display": "Oak Door",
+    "color": "#9c7a44",
+    "placeBlock": "door",
+    "door": true,
+    "maxStack": 16
+  },
+  {
+    "name": "oak_stairs",
+    "display": "Oak Stairs",
+    "color": "#b3884f",
+    "placeBlock": "oak_stairs_pz",
+    "stairs": true,
+    "maxStack": 64
+  },
+  {
+    "name": "bed",
+    "display": "Bed",
+    "color": "#c0392b",
+    "placeBlock": "bed",
+    "maxStack": 1
+  },
+  {
     "name": "stick",
     "display": "Stick",
     "color": "#8a6d3b",

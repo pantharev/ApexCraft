@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { Mob } from '../entities/Mob.js';
 import { MOBS, PASSIVE, HOSTILE } from '../entities/mobTypes.js';
 import { getBlockId, isSolid } from '../blocks/BlockRegistry.js';
-import { villagesNear } from '../world/structures/VillagePlan.js';
+import { villagesNear, villageLayout } from '../world/structures/VillagePlan.js';
 import { Sound } from './Sound.js';
 
 const GRASS = getBlockId('grass');
@@ -61,6 +61,11 @@ export class MobManager {
             isSolid(this.world.getBlock(wx, surf + 2, wz))) continue;
         const mob = this._spawn('villager', wx + 0.5, surf + 1, wz + 0.5);
         mob.anchor = { x: v.x, z: v.z };
+        // Each villager claims a house to run to at night.
+        const houses = villageLayout(v).houses;
+        mob.home = houses.length
+          ? (() => { const h = houses[Math.floor(Math.random() * houses.length)]; return { x: h.x, z: h.z }; })()
+          : { x: v.x, z: v.z };
       }
     }
   }

@@ -48,6 +48,7 @@ export class Player {
     this.keys = {};
     this.locked = false;
     this.enabled = true; // false while a UI (inventory) is open
+    this.speedBoost = 1; // dev: walk/fly speed multiplier (G on localhost)
 
     this._bindEvents();
   }
@@ -138,7 +139,7 @@ export class Player {
     }
 
     if (this.flying) {
-      const speed = FLY_SPEED;
+      const speed = FLY_SPEED * this.speedBoost;
       this.pos.x += dir.x * speed * dt;
       this.pos.z += dir.z * speed * dt;
       if (this.enabled && this.keys['Space']) this.pos.y += speed * dt;
@@ -151,7 +152,7 @@ export class Player {
       ) === WATER;
       if (this.inWater && !this._wasInWater) Sound.splash(); // entered water
 
-      const speed = this.inWater ? SWIM_SPEED : WALK_SPEED;
+      const speed = (this.inWater ? SWIM_SPEED : WALK_SPEED) * this.speedBoost;
       // Input velocity plus any knockback impulse still in flight.
       this.vel.x = dir.x * speed + this.impulse.x;
       this.vel.z = dir.z * speed + this.impulse.z;

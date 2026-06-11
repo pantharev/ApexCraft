@@ -251,7 +251,11 @@ export default function App() {
                   Room {stats.room} · {stats.peers} player{stats.peers === 1 ? '' : 's'}{stats.hosting ? ' · hosting' : ''}
                 </div>
               )}
-              {stats.dev && <div style={{ color: '#9fe084' }}>[T] day/night: {stats.devTime}</div>}
+              {stats.dev && (
+                <div style={{ color: '#9fe084' }}>
+                  [T] day/night: {stats.devTime} · [V] tp village · [G] speed: {stats.devBoost ? '3x' : '1x'}
+                </div>
+              )}
             </div>
           )}
 

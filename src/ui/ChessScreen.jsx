@@ -1,15 +1,20 @@
 import React, { useEffect, useState } from 'react';
+import { BOT_LEVELS, BOT_NAMES } from '../chess/ChessBot.js';
 
 // The chess table screen: a lichess-style 2D board floating over the world
 // (the backdrop stays mostly transparent on purpose). Click/tap a piece to
 // see its legal moves, click a target to play. First two openers hold the
-// seats; everyone else spectates live.
+// seats; everyone else spectates live — or seat a bot (Easy/Medium/Hard).
 
 const GLYPH = { P: '♟', N: '♞', B: '♝', R: '♜', Q: '♛', K: '♚' };
 const LIGHT = '#f0d9b5', DARK = '#b58863';
 const SEL = 'rgba(106,170,100,0.75)', LAST = 'rgba(205,210,106,0.6)';
 
+const isBot = (id) => typeof id === 'string' && id.startsWith('#bot:');
+const botName = (id) => BOT_NAMES[BOT_LEVELS[id]] || 'Bot';
+
 function seatLabel(view, myId) {
+  if (isBot(view.black) && view.white === myId) return `You play White vs ${botName(view.black)}`;
   if (view.white === myId && view.black === myId) return 'Hotseat — you play both sides';
   if (view.white === myId) return 'You play White';
   if (view.black === myId) return 'You play Black';
@@ -22,17 +27,21 @@ function statusLabel(view) {
   if (view.status === 'stalemate') return 'Stalemate — draw';
   if (view.status === 'draw') return 'Draw (50-move rule)';
   if (view.status === 'check') return `${side} to move — check!`;
+  if (view.turn === 'b' && isBot(view.black)) return 'Bot is thinking…';
   return `${side} to move`;
 }
 
 export function ChessScreen({ game }) {
-  const [view, setView] = useState(null);
+  // The first view is pushed before this screen mounts, so read it directly
+  // (waiting only for the callback was the "setting up the board…" hang).
+  const [view, setView] = useState(game.chessView);
   const [selected, setSelected] = useState(-1);
   const [targets, setTargets] = useState([]);
 
   useEffect(() => {
     game.onChess = setView;
-    return () => { game.onChess = null; game.activeChessKey = null; };
+    setView(game.chessView); // catch anything pushed between render and mount
+    return () => { game.onChess = null; game.activeChessKey = null; game.chessView = null; };
   }, [game]);
 
   if (!view) {
@@ -134,9 +143,25 @@ export function ChessScreen({ game }) {
           })}
         </div>
 
+        {/* Opponent picker: a friend takes the open seat, or seat a bot. */}
+        {mySeat && (
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 10, flexWrap: 'wrap' }}>
+            <span style={{ color: '#8a7d6c', font: '12px system-ui' }}>Opponent:</span>
+            <button onClick={() => game.chessBot(0)} style={btn(isBot(view.black) ? '#444' : '#3c6b3c', 12)}>
+              👤 Player
+            </button>
+            {[1, 2, 3].map((lv) => (
+              <button key={lv} onClick={() => game.chessBot(lv)}
+                style={btn(view.black === `#bot:${lv}` ? '#3c6b3c' : '#444', 12)}>
+                🤖 {['', 'Easy', 'Medium', 'Hard'][lv]}
+              </button>
+            ))}
+          </div>
+        )}
+
         <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 10, gap: 10 }}>
           <span style={{ color: '#8a7d6c', font: '12px system-ui', alignSelf: 'center' }}>
-            ♙ {view.white ? 'seated' : 'open seat'} · ♟ {view.black ? 'seated' : 'open seat'}
+            ♙ {view.white ? 'seated' : 'open seat'} · ♟ {isBot(view.black) ? botName(view.black) : view.black ? 'seated' : 'open seat'}
           </span>
           <div style={{ display: 'flex', gap: 8 }}>
             {(mySeat || over) && (
@@ -152,7 +177,7 @@ export function ChessScreen({ game }) {
   );
 }
 
-const btn = (bg) => ({
-  font: 'bold 13px system-ui', padding: '8px 14px', cursor: 'pointer',
+const btn = (bg, size = 13) => ({
+  font: `bold ${size}px system-ui`, padding: size < 13 ? '6px 10px' : '8px 14px', cursor: 'pointer',
   background: bg, color: '#fff', border: '1px solid rgba(0,0,0,0.4)', borderRadius: 5,
 });

@@ -168,6 +168,7 @@ export class Game {
         if (m.action === 'open') view = this.chessGames.open(m.key, m.from);
         else if (m.action === 'move') view = this.chessGames.move(m.key, m.from, m.a, m.b);
         else if (m.action === 'reset') view = this.chessGames.reset(m.key, m.from);
+        else if (m.action === 'bot') view = this.chessGames.setBot(m.key, m.from, m.level ? `#bot:${m.level}` : null);
         if (view) this._pushChess(view);
       };
       net.onChessState = (view) => {
@@ -227,7 +228,9 @@ export class Game {
     this.chessGames = new ChessGames({ hotseat: !net });
     if (this._save?.chess && (!net || net.isOrigin)) this.chessGames.load(this._save.chess);
     this.activeChessKey = null;
-    this.onChess = null; // React: receives the current table view
+    this.onChess = null;   // React: receives table views once the screen mounts
+    this.chessView = null; // latest view — the screen reads this on mount
+    this._botTag = null;   // dedupe guard so a position triggers one bot move
 
     // Per-position furnace + chest state.
     this.furnaces = new Furnaces();
@@ -494,10 +497,42 @@ export class Game {
     return this.net.isHost ? 'host' : this.net.id;
   }
 
-  // Render locally and, as host, broadcast the authoritative view.
+  // Render locally and, as host, broadcast the authoritative view. The view is
+  // also stored so the chess screen can read it when it mounts — the first
+  // push happens before React mounts the screen (this was the "setting up the
+  // board…" hang). Bots get scheduled here too.
   _pushChess(view) {
+    this.chessView = view;
     if (view.key === this.activeChessKey && this.onChess) this.onChess(view);
     if (this.net && this.net.isHost) this.net.sendChessState(view);
+    this._maybeBotMove(view);
+  }
+
+  // If the seat to move is a bot (and we own the simulation), play its move
+  // after a short think-pause. Tagged by position so each triggers once.
+  _maybeBotMove(view) {
+    if (this.net && !this.net.isHost) return;
+    const seat = view.turn === 'w' ? view.white : view.black;
+    if (!seat || typeof seat !== 'string' || !seat.startsWith('#bot:')) return;
+    if (view.status === 'checkmate' || view.status === 'stalemate' || view.status === 'draw') return;
+    const tag = `${view.key}:${view.turn}:${view.last ? view.last.join('-') : 'start'}`;
+    if (this._botTag === tag) return;
+    this._botTag = tag;
+    setTimeout(() => {
+      const v = this.chessGames.botMove(view.key);
+      if (v) this._pushChess(v);
+    }, 550);
+  }
+
+  // Seat (or dismiss, level 0) a bot opponent at the open table.
+  chessBot(level) {
+    if (!this.activeChessKey) return;
+    if (!this.net || this.net.isHost) {
+      const view = this.chessGames.setBot(this.activeChessKey, this._chessId(), level ? `#bot:${level}` : null);
+      if (view) this._pushChess(view);
+    } else {
+      this.net.sendChess({ action: 'bot', key: this.activeChessKey, level });
+    }
   }
 
   _openChess(pos) {

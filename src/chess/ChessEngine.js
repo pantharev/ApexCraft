@@ -217,5 +217,11 @@ export function makeMove(state, from, to) {
   return applyRaw(state, from, to);
 }
 
+// Unchecked apply for search engines that already iterate legalMoves()
+// (skips the redundant re-validation makeMove would do per node).
+export function applyMoveUnchecked(state, from, to) {
+  return applyRaw(state, from, to);
+}
+
 // "e4"-style square name for UI labels.
 export const squareName = (i) => 'abcdefgh'[FILE(i)] + (RANK(i) + 1);

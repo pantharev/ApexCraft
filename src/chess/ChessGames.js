@@ -1,4 +1,5 @@
 import { initialState, legalMoves, makeMove, status } from './ChessEngine.js';
+import { pickMove, BOT_LEVELS } from './ChessBot.js';
 
 // Per-table chess sessions, keyed by the chess table block's "x,y,z". Owns
 // seats (first opener = white, second = black, everyone else spectates) and
@@ -44,6 +45,37 @@ export class ChessGames {
     if (!next) return null;
     g.state = next;
     g.last = [from, to];
+    return this.view(key);
+  }
+
+  // Seat a bot opponent (the requester takes white), or null to go back to
+  // two-player / hotseat. Resets nothing — the board carries on.
+  setBot(key, id, botId) {
+    const g = this._get(key);
+    if (g.white !== id && g.black !== id && g.white !== null) return null;
+    if (botId) {
+      g.white = id;
+      g.black = botId;
+    } else {
+      g.black = this.hotseat ? id : null;
+    }
+    return this.view(key);
+  }
+
+  // If it's a bot's turn at this table, compute and play its move.
+  botMove(key) {
+    const g = this._get(key);
+    const seat = g.state.turn === 'w' ? g.white : g.black;
+    const level = BOT_LEVELS[seat];
+    if (!level) return null;
+    const st = status(g.state);
+    if (st === 'checkmate' || st === 'stalemate' || st === 'draw') return null;
+    const mv = pickMove(g.state, level);
+    if (!mv) return null;
+    const next = makeMove(g.state, mv.from, mv.to);
+    if (!next) return null;
+    g.state = next;
+    g.last = [mv.from, mv.to];
     return this.view(key);
   }
 

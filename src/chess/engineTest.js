@@ -1,7 +1,9 @@
 // Chess engine correctness tests (run in CI: node src/chess/engineTest.js).
 // perft node counts verify move generation exhaustively to depth 3; the
 // vectors cover mate, castling, en passant, promotion, and stalemate.
+// The bot is checked for legality, mate-finding, and speed.
 import { initialState, legalMoves, makeMove, status } from './ChessEngine.js';
+import { pickMove } from './ChessBot.js';
 
 let pass = 0, fail = 0;
 const ok = (c, m) => { if (c) { pass++; console.log('  ok -', m); } else { fail++; console.error('  FAIL -', m); } };
@@ -50,6 +52,28 @@ ok(s && s.board[sq('a8')] === 'wQ', 'promotion auto-queens');
 s = { board: new Array(64).fill(null), turn: 'b', castle: { wK: false, wQ: false, bK: false, bQ: false }, ep: -1, half: 0, full: 1 };
 s.board[sq('a8')] = 'bK'; s.board[sq('b6')] = 'wK'; s.board[sq('c7')] = 'wQ';
 ok(status(s) === 'stalemate', 'stalemate detected');
+
+// --- Bot ---
+// Always returns a legal move from the initial position, at every level.
+for (const lv of [1, 2, 3]) {
+  const st = initialState();
+  const mv = pickMove(st, lv);
+  ok(mv && makeMove(st, mv.from, mv.to) !== null, `bot level ${lv} plays a legal opening move`);
+}
+
+// Hard bot finds mate in 1: back-rank with Ra1-a8#.
+s = { board: new Array(64).fill(null), turn: 'w', castle: { wK: false, wQ: false, bK: false, bQ: false }, ep: -1, half: 0, full: 1 };
+s.board[sq('g8')] = 'bK'; s.board[sq('f7')] = 'bP'; s.board[sq('g7')] = 'bP'; s.board[sq('h7')] = 'bP';
+s.board[sq('a1')] = 'wR'; s.board[sq('g1')] = 'wK';
+const mate = pickMove(s, 3);
+const after = makeMove(s, mate.from, mate.to);
+ok(after && status(after) === 'checkmate', 'hard bot plays the mate in 1');
+
+// Speed: hard bot from the initial position stays interactive.
+const t0 = Date.now();
+pickMove(initialState(), 3);
+const ms = Date.now() - t0;
+ok(ms < 3000, `hard bot opening move under 3s (${ms}ms)`);
 
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);

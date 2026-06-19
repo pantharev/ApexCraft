@@ -16,6 +16,7 @@ export class Vitals {
     this.world = world;
     this.onDeath = null;
     this.onDamage = null; // called when the player takes damage
+    this.godMode = false; // creative mode: no damage, no hunger/air drain
     this.reset();
   }
 
@@ -43,7 +44,7 @@ export class Vitals {
   }
 
   damage(n) {
-    if (this.dead || n <= 0) return;
+    if (this.godMode || this.dead || n <= 0) return;
     this.health = Math.max(0, this.health - n);
     if (this.onDamage) this.onDamage(n);
     if (this.health > 0) Sound.hurt(); // death sound handled separately
@@ -65,6 +66,8 @@ export class Vitals {
 
   update(dt) {
     if (this.dead) return;
+    // Creative: stats stay pinned full; no air/hunger/starve/regen logic.
+    if (this.godMode) { this.submerged = false; return; }
     const p = this.player.pos;
 
     // Air: head submerged depletes the bubble bar, then drowns.

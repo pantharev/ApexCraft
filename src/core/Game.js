@@ -23,7 +23,7 @@ import { saveWorld } from '../systems/Storage.js';
 import { WORLD_SEED } from '../config.js';
 import { villageForCell, VILLAGE_CELL } from '../world/structures/VillagePlan.js';
 import { getBlockId } from '../blocks/BlockRegistry.js';
-import { getItem } from '../items/ItemRegistry.js';
+import { getItem, ALL_ITEMS } from '../items/ItemRegistry.js';
 import { SEA_LEVEL } from '../config.js';
 
 // A small starter kit so placement and tools are usable before crafting exists
@@ -43,6 +43,15 @@ const STARTER_KIT = [
   ['arrow', 32],
 ];
 
+// Creative loadout: one of every placeable block (so the whole palette is at
+// hand) plus the top tools — placement never consumes, so these never run out.
+// Capped to the 36 inventory slots; blocks come first.
+const CREATIVE_KIT = (() => {
+  const blocks = ALL_ITEMS.filter((it) => it.placeBlock).map((it) => it.name);
+  const tools = ['diamond_pickaxe', 'diamond_sword', 'diamond_axe'];
+  return [...blocks, ...tools].slice(0, 36).map((name) => [name, 1]);
+})();
+
 // Owns the Three.js renderer/scene/camera, the World, and the Player, plus the
 // requestAnimationFrame loop. Mounted by the React <App/> into a container div.
 export class Game {
@@ -55,6 +64,10 @@ export class Game {
     this.worldId = save?.id || 'default';
     this.worldName = save?.name || 'World';
     this.seed = save?.seed ?? WORLD_SEED;
+    // Game mode (survival = default, with mobs + mining; creative = infinite
+    // blocks, no mobs, no damage). A per-world setting, fixed at creation.
+    this.mode = save?.mode === 'creative' ? 'creative' : 'survival';
+    this.creative = this.mode === 'creative';
     this.dev = typeof location !== 'undefined' && ['localhost', '127.0.0.1'].includes(location.hostname);
     this._devTime = 0; // 0 = auto, 1 = day, 2 = night
 
@@ -94,14 +107,19 @@ export class Game {
     // Inventory: mined drops flow in here; leftover (full) stays in the world.
     this.inventory = new Inventory();
     if (this._save?.inventory) this.inventory.load(this._save.inventory);
-    else for (const [name, count] of STARTER_KIT) this.inventory.addItem(name, count);
+    else for (const [name, count] of (this.creative ? CREATIVE_KIT : STARTER_KIT)) this.inventory.addItem(name, count);
     this.itemDrops.onCollect = (name, count) => this.inventory.addItem(name, count);
 
-    // Placing a block consumes one of the selected stack.
-    this.interaction.onPlaced = () => this.inventory.consumeSelected(1);
+    // Placing a block consumes one of the selected stack — except in creative,
+    // where blocks are infinite.
+    this.interaction.creative = this.creative;
+    this.interaction.onPlaced = () => { if (!this.creative) this.inventory.consumeSelected(1); };
 
-    // Survival stats + the damage/eat/death hooks.
+    // Survival stats + the damage/eat/death hooks. Creative = invulnerable,
+    // no hunger, and start in flight for building.
     this.vitals = new Vitals(this.player, this.world);
+    this.vitals.godMode = this.creative;
+    if (this.creative) this.player.flying = true;
     this.onDead = null; // React setter for the death overlay
     this.player.onLand = (fall) => this.vitals.applyFall(fall);
     this.interaction.onEat = () => {
@@ -469,6 +487,7 @@ export class Game {
       name: this.worldName,
       seed: this.seed,
       lastPlayed: Date.now(),
+      mode: this.mode,
       edits: this.world.serializeEdits(),
       player: { x: p.x, y: p.y, z: p.z, yaw: this.player.yaw, pitch: this.player.pitch },
       vitals: this.vitals.serialize(),
@@ -668,7 +687,8 @@ export class Game {
     if (isGuest) {
       // Guests mirror the host's mob simulation instead of running their own.
       this.ghostMobs.update(dt);
-    } else {
+    } else if (!this.creative) {
+      // Creative worlds have no mobs at all, so the simulation is skipped.
       this.mobs.update(dt, {
         playerPos: this.player.pos,
         // Host: mobs hunt every player in the room.
@@ -763,6 +783,7 @@ export class Game {
         clock: this.dayNight.clock(),
         night: this.dayNight.isNight,
         mobs: this._mobApi().mobs.length,
+        creative: this.creative,
         dev: this.dev,
         devTime: ['Auto', 'Day', 'Night'][this._devTime],
         devBoost: this.player.speedBoost > 1,

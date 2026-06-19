@@ -22,6 +22,7 @@ export class Interaction {
     this.selectedBlock = 0; // block id to place (0 = nothing placeable held)
     this.heldItem = null;   // full item def (doors/stairs place specially)
     this.currentTool = null; // null = bare hand (tier 0, speed 1)
+    this.creative = false;  // creative mode: instant break, no drops
     this.onPlaced = null; // called after a successful placement
     this.onUseBlock = null; // called when right-clicking an interactive block
     this.onBlockBroken = null; // called after a block is removed (name, coords)
@@ -182,7 +183,7 @@ export class Interaction {
       }
       Sound.dig(soundCategory(getBlockId('oak_planks')), 1);
       if (this.onBlockBroken) this.onBlockBroken(block.name, b);
-      if (this.itemDrops) this.itemDrops.spawn('bed', 1, b.x, b.y, b.z);
+      if (this.itemDrops && !this.creative) this.itemDrops.spawn('bed', 1, b.x, b.y, b.z);
       return;
     }
 
@@ -193,7 +194,7 @@ export class Interaction {
       if (getBlock(this.world.getBlock(b.x, b.y - 1, b.z)).door) this.world.setBlock(b.x, b.y - 1, b.z, 0);
       Sound.dig(soundCategory(getBlockId('oak_planks')), 1);
       if (this.onBlockBroken) this.onBlockBroken(block.name, b);
-      if (this.itemDrops) this.itemDrops.spawn('door', 1, b.x, b.y, b.z);
+      if (this.itemDrops && !this.creative) this.itemDrops.spawn('door', 1, b.x, b.y, b.z);
       return;
     }
 
@@ -212,6 +213,7 @@ export class Interaction {
   }
 
   _spawnDrops(block, b, ignoreTool) {
+    if (this.creative) return; // creative breaks yield nothing
     const drops = block.drops || [];
     if (drops.length === 0) return;
 
@@ -271,6 +273,15 @@ export class Interaction {
     if (key !== this._breakKey) {
       this.breakProgress = 0;
       this._breakKey = key;
+    }
+
+    if (this.breaking && this.creative && id !== BEDROCK && block.hardness >= 0) {
+      // Creative: blocks shatter instantly (the raycast retargets next frame).
+      this._breakBlock(block, b);
+      this.breakProgress = 0;
+      this._breakKey = null;
+      this.crack.visible = false;
+      return;
     }
 
     if (this.breaking && id !== BEDROCK && block.hardness >= 0) {

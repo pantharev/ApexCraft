@@ -42,7 +42,7 @@ try {
   const guest = io(URL);
 
   // --- host a room ---
-  const h = await ack(host, 'host', { name: 'Hosty', seed: 12345, time: 0.4, edits: { '0,0': { 7: 3 } } });
+  const h = await ack(host, 'host', { name: 'Hosty', seed: 12345, time: 0.4, mode: 'creative', edits: { '0,0': { 7: 3 } } });
   ok(/^[A-Z2-9]{5}$/.test(h.code || ''), `host gets a 5-char room code (${h.code})`);
 
   // --- join: bad code rejected, good code returns world state ---
@@ -52,6 +52,7 @@ try {
   const j = await ack(guest, 'join', { code: h.code, name: 'Guesty' });
   ok(j.seed === 12345, 'guest receives the world seed');
   ok(j.time === 0.4, 'guest receives the world clock');
+  ok(j.mode === 'creative', 'guest receives the world game mode');
   ok(j.edits && j.edits['0,0'] && j.edits['0,0'][7] === 3, 'guest receives existing edits');
   ok(j.players.length === 1 && j.players[0].name === 'Hosty', 'guest receives the player list');
   const jn = await joinedNotify;

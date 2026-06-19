@@ -50,6 +50,10 @@ See [LICENSE](LICENSE) and [CLA.md](CLA.md) for full details.
 - **Trees** scattered only on grass, clumped by a *forest* noise field so you get dense woods and open plains both.
 - **Day/night cycle** with a moving sun and moon (sunrise in the east, set in the west), a **wheeling star dome** at night, glowing halos around the sun/moon, and **orange dawn/dusk skies** with warm horizon light.
 
+### Game modes
+- **Survival** (default) — the full loop: mobs, mining, hunger, fall/drown damage, and gathering resources to craft.
+- **Creative** — pick it when creating a world: an **infinite palette of every block** (placing never depletes), **no mobs**, **no damage or hunger**, **instant block breaking**, and you **start flying**. Build freely. The mode is fixed per world and shown with a badge on the title screen (and a **CREATIVE** indicator in-game).
+
 ### Survival & combat
 - **Health, hunger, and air** — hunger drains with activity, health regenerates when well-fed, and you starve at empty. Head underwater drains the air bar, then you drown.
 - **Damage** from falls (scales with distance), drowning, and mob attacks — hits **knock you back** away from the attacker (arrows shove you along their flight). Death drops your inventory and shows a respawn screen.

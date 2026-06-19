@@ -30,6 +30,7 @@ const btnBlue = { ...btn, background: '#2e5d8e', border: '2px solid #1c3a59' };
 // hosted for friends (multiplayer), or you can join a friend's room by code.
 export function MainMenu({ worlds, onPlay, onCreate, onDelete, onHome, onHost, onJoin, netError, netBusy }) {
   const [name, setName] = useState('');
+  const [mode, setMode] = useState('survival');
   const [joinCode, setJoinCode] = useState('');
   const [playerName, setPlayerName] = useState(
     () => (typeof localStorage !== 'undefined' && localStorage.getItem('apex_player_name')) || ''
@@ -56,7 +57,12 @@ export function MainMenu({ worlds, onPlay, onCreate, onDelete, onHome, onHost, o
           {worlds.map((w) => (
             <div key={w.id} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 0', borderBottom: '1px solid #2a2d33' }}>
               <div style={{ flex: 1 }}>
-                <div style={{ fontWeight: 600 }}>{w.name}</div>
+                <div style={{ fontWeight: 600 }}>
+                  {w.name}
+                  {w.mode === 'creative' && (
+                    <span style={{ marginLeft: 6, fontSize: 10, fontWeight: 700, color: '#d7c6ff', background: 'rgba(80,50,130,0.5)', padding: '1px 6px', borderRadius: 8, letterSpacing: 0.5 }}>CREATIVE</span>
+                  )}
+                </div>
                 <div style={{ fontSize: 12, opacity: 0.55 }}>seed {w.seed} · {fmtDate(w.lastPlayed)}</div>
               </div>
               <button style={btn} onClick={() => onPlay(w)}>Play</button>
@@ -75,9 +81,27 @@ export function MainMenu({ worlds, onPlay, onCreate, onDelete, onHome, onHost, o
             onChange={(e) => setName(e.target.value)}
             placeholder="New world name"
             style={{ ...input, flex: 1 }}
-            onKeyDown={(e) => { if (e.key === 'Enter' && name.trim()) { onCreate(name.trim()); setName(''); } }}
+            onKeyDown={(e) => { if (e.key === 'Enter' && name.trim()) { onCreate(name.trim(), mode); setName(''); } }}
           />
-          <button style={btn} onClick={() => { if (name.trim()) { onCreate(name.trim()); setName(''); } }}>Create</button>
+          <button style={btn} onClick={() => { if (name.trim()) { onCreate(name.trim(), mode); setName(''); } }}>Create</button>
+        </div>
+        {/* Game mode picker for the new world. */}
+        <div style={{ display: 'flex', gap: 6, marginTop: 8 }}>
+          {[
+            ['survival', 'Survival', 'Mobs, mining, hunger & health'],
+            ['creative', 'Creative', 'Infinite blocks, flight, no mobs'],
+          ].map(([val, label, desc]) => (
+            <button key={val} onClick={() => setMode(val)} title={desc}
+              style={{
+                flex: 1, font: '13px system-ui', padding: '7px 8px', cursor: 'pointer', borderRadius: 4,
+                background: mode === val ? (val === 'creative' ? '#5a3c8a' : '#3c6b3c') : '#2a2d33',
+                color: mode === val ? '#fff' : '#9aa', textAlign: 'center',
+                border: mode === val ? '2px solid #fff5' : '2px solid #3a3d44',
+              }}>
+              <div style={{ fontWeight: 700 }}>{label}</div>
+              <div style={{ fontSize: 10, opacity: 0.75 }}>{desc}</div>
+            </button>
+          ))}
         </div>
 
         {onJoin && (

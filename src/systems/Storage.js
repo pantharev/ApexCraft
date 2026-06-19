@@ -67,7 +67,7 @@ export async function saveWorld(id, data) {
     await withStore('readwrite', async (s) => {
       s.put(data, id);
       const index = (await idbGet(s, INDEX)) || [];
-      const meta = { id, name: data.name, seed: data.seed, lastPlayed: data.lastPlayed || 0 };
+      const meta = { id, name: data.name, seed: data.seed, mode: data.mode || 'survival', lastPlayed: data.lastPlayed || 0 };
       const i = index.findIndex((w) => w.id === id);
       if (i >= 0) index[i] = meta; else index.push(meta);
       s.put(index, INDEX);

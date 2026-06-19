@@ -65,6 +65,7 @@ io.on('connection', (socket) => {
     rooms.set(c, {
       seed: data?.seed ?? 0,
       time: data?.time ?? 0.3,
+      mode: data?.mode === 'creative' ? 'creative' : 'survival',
       edits: data?.edits && typeof data.edits === 'object' ? data.edits : {},
       host: socket.id,
       players: new Map([[socket.id, { name: cleanName(data?.name) }]]),
@@ -86,7 +87,7 @@ io.on('connection', (socket) => {
     socket.to(c).emit('playerJoined', { id: socket.id, name });
     const players = [...r.players].map(([id, p]) => ({ id, name: p.name }));
     r.players.set(socket.id, { name });
-    ack({ code: c, seed: r.seed, time: r.time, edits: r.edits, players });
+    ack({ code: c, seed: r.seed, time: r.time, mode: r.mode, edits: r.edits, players });
   });
 
   // Player transform at ~15 Hz. Volatile: drop frames rather than queue them.

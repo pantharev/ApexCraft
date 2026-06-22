@@ -2,6 +2,7 @@ import { getBlockId } from '../blocks/BlockRegistry.js';
 import { Sound } from '../systems/Sound.js';
 
 const WATER = getBlockId('water');
+const LAVA = getBlockId('lava');
 
 export const MAX_HEALTH = 20;
 export const MAX_HUNGER = 20;
@@ -28,6 +29,7 @@ export class Vitals {
     this.regenTimer = 0;
     this.starveTimer = 0;
     this.drownTimer = 0;
+    this.lavaTimer = 0;
     this.dead = false;
     this.submerged = false;
   }
@@ -83,6 +85,16 @@ export class Vitals {
     } else {
       this.air = Math.min(MAX_AIR, this.air + dt * 5);
       this.drownTimer = 0;
+    }
+
+    // Lava burns: standing in lava sears 3 HP every half second. (godMode
+    // returned above, so creative players never reach this.)
+    const bodyBlock = this.world.getBlock(Math.floor(p.x), Math.floor(p.y + 0.5), Math.floor(p.z));
+    if (bodyBlock === LAVA) {
+      this.lavaTimer += dt;
+      if (this.lavaTimer >= 0.5) { this.damage(3); this.lavaTimer = 0; }
+    } else {
+      this.lavaTimer = 0;
     }
 
     // Hunger: passive drain plus extra while moving on the ground.

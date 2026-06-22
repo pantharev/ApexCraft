@@ -4,6 +4,14 @@ import { isSolid } from '../../blocks/BlockRegistry.js';
 import { getBlockId } from '../../blocks/BlockRegistry.js';
 
 const WATER = getBlockId('water');
+const LAVA = getBlockId('lava');
+
+// Depth bands for cave liquids: lava pools at the bottom of the world, water at
+// moderate cave depth. Both stay well under SEA_LEVEL so they can never reach an
+// open ocean column and drain it.
+const LAVA_MAX_Y = 12;   // lava dominates below this
+const WATER_MAX_Y = 30;  // water above lava, up to here
+const POOL_DEPTH = 4;    // how many blocks of liquid stack above a floor
 
 const smoothstep = (a, b, x) => {
   const t = Math.max(0, Math.min(1, (x - a) / (b - a)));
@@ -87,6 +95,51 @@ export function carveCaves(chunk) {
           const cv = Noise.cavern(wx * 0.008, y * 0.013, wz * 0.008);
           if (cv > 0.66 - (42 - y) * 0.003) chunk.set(x, y, z, 0);
         }
+      }
+    }
+  }
+
+  fillLiquids(chunk);
+}
+
+// Second pass (after carving): settle static liquids onto cave floors. Lava
+// pools deep, water at moderate depth. A low-frequency noise mask gates pools so
+// they're occasional and atmospheric, not everywhere — and bottom-up filling on
+// a solid (or same-liquid) floor means liquids rest on the ground and stack a
+// few blocks deep, never hang as floating sheets. Deterministic (Noise only),
+// so every client generates identical pools with no network sync.
+function fillLiquids(chunk) {
+  const baseX = chunk.cx * CHUNK_SIZE;
+  const baseZ = chunk.cz * CHUNK_SIZE;
+
+  for (let x = 0; x < CHUNK_SIZE; x++) {
+    for (let z = 0; z < CHUNK_SIZE; z++) {
+      const wx = baseX + x;
+      const wz = baseZ + z;
+
+      // Per-column pool mask: only columns over a high-noise region get liquid,
+      // so pools cluster into occasional lakes instead of coating every cave.
+      const pool = Noise.cavern(wx * 0.012 + 500, 0, wz * 0.012 + 500);
+      if (pool < 0.35) continue;
+
+      // Bottom-up so a liquid cell can rest on the liquid it just placed below
+      // (a settled pool), as well as on solid ground.
+      for (let y = 1; y < WATER_MAX_Y; y++) {
+        if (chunk.get(x, y, z) !== 0) continue; // only fill carved/open air
+        const below = chunk.get(x, y - 1, z);
+        const onFloor = isSolid(below) || below === WATER || below === LAVA;
+        if (!onFloor) continue; // no floating sheets
+
+        // Limit each pool to a few blocks above its true (solid) floor.
+        let floorDist = 0;
+        for (let d = 1; d <= POOL_DEPTH; d++) {
+          if (isSolid(chunk.get(x, y - d, z))) break;
+          floorDist = d;
+        }
+        if (floorDist >= POOL_DEPTH) continue; // too far above the rock floor
+
+        const liquid = y < LAVA_MAX_Y ? LAVA : WATER;
+        chunk.set(x, y, z, liquid);
       }
     }
   }

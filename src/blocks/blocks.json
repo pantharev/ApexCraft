@@ -824,5 +824,13 @@
         ]
       }
     ]
+  },
+  {
+    "id": 51,
+    "name": "lava",
+    "solid": false,
+    "color": "#e2530f",
+    "liquid": true,
+    "luminance": 15
   }
 ]

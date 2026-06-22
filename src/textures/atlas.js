@@ -248,6 +248,29 @@ const DRAW = {
     for (let i = 0; i < TILE * TILE; i++) img.data[i * 4 + 3] = 205;
     c.putImageData(img, 0, 0);
   },
+  lava: (c, r) => {
+    // Molten rock: dark crust veins broken by glowing cracks and hot pools.
+    const vn = valueNoise(r, 3);
+    paint(c, '#d8480c', (x, y) => Math.sin((x + vn(x, y) * 7) * 0.9) * 22 + (vn(x, y) - 0.5) * 40, 8, r);
+    const img = c.getImageData(0, 0, TILE, TILE);
+    const vn2 = valueNoise(r, 5);
+    for (let y = 0; y < TILE; y++) for (let x = 0; x < TILE; x++) {
+      const i = (y * TILE + x) * 4;
+      const n = vn2(x, y);
+      if (n < 0.34) { // cooled crust patches go dark
+        img.data[i] = clamp(img.data[i] * 0.4);
+        img.data[i + 1] = clamp(img.data[i + 1] * 0.3);
+        img.data[i + 2] = clamp(img.data[i + 2] * 0.3);
+      }
+    }
+    c.putImageData(img, 0, 0);
+    // Bright bubbling hot spots punched through the crust.
+    for (let i = 0; i < 7; i++) {
+      const x = (r() * TILE) | 0, y = (r() * TILE) | 0;
+      setPx(c, x, y, '#ffd23a', 1, 12, r);
+      if (r() < 0.6) setPx(c, (x + 1) % TILE, y, '#ff8a1e', 0.9, 12, r);
+    }
+  },
   glass: (c) => {
     c.clearRect(0, 0, TILE, TILE);
     c.fillStyle = 'rgba(215,240,250,0.10)'; c.fillRect(0, 0, TILE, TILE);
@@ -502,7 +525,7 @@ const FACE_TILES = {
   snow: t('snow'), bedrock: t('bedrock'), andesite: t('andesite'),
   oak_log: { top: 'log_top', side: 'log_side', bottom: 'log_top' },
   oak_leaves: t('leaves'), cactus: t('cactus'), clay: t('clay'),
-  water: t('water'), oak_planks: t('planks'), glass: t('glass'),
+  water: t('water'), lava: t('lava'), oak_planks: t('planks'), glass: t('glass'),
   crafting_table: { top: 'crafting_top', side: 'crafting_side', bottom: 'planks' },
   furnace: { top: 'furnace_side', side: 'furnace_front', bottom: 'furnace_side' },
   torch: t('torch'),
@@ -554,6 +577,7 @@ tileNames.forEach((name, i) => {
   if (CUTOUT.has(name)) { opts.transparent = true; opts.alphaTest = 0.5; opts.side = THREE.DoubleSide; }
   else if (TRANSPARENT.has(name)) { opts.transparent = true; opts.opacity = 0.85; opts.depthWrite = false; opts.side = THREE.DoubleSide; }
   else if (name === 'torch') { opts.emissive = new THREE.Color('#ffaa33'); opts.emissiveIntensity = 0.9; } // self-glow
+  else if (name === 'lava') { opts.emissive = new THREE.Color('#ff6a14'); opts.emissiveIntensity = 0.85; } // molten glow
   materials.push(new THREE.MeshLambertMaterial(opts));
 });
 
@@ -571,6 +595,7 @@ for (const def of blockData) {
 
 export const BLOCK_MATERIALS = materials; // index = material index used in geometry groups
 export const WATER_MATERIAL_INDEX = tileIndex.water;
+export const LAVA_MATERIAL_INDEX = tileIndex.lava; // exported for optional texture animation later
 
 export function faceMaterialIndex(blockId, face) {
   const m = faceMat[blockId];

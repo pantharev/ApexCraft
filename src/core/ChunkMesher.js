@@ -7,6 +7,7 @@ import { Noise } from '../world/noise.js';
 const SHADE = { top: 1.0, bottom: 0.5, side: 0.8 };
 const DIMS = [CHUNK_SIZE, WORLD_HEIGHT, CHUNK_SIZE];
 const WATER = getBlockId('water');
+const LAVA = getBlockId('lava'); // opaque glowing liquid; culls its own internal faces like water
 const TORCH = getBlockId('torch'); // rendered as a separate stick mesh, not in the chunk
 const GRASS = getBlockId('grass');
 const LEAVES = getBlockId('oak_leaves');
@@ -169,11 +170,13 @@ export function buildChunkGeometry(chunk, worldGet) {
             const neighbor = at(nb[0], nb[1], nb[2]);
             const block = getBlock(id);
             if (isOpaque(neighbor)) continue;
-            if (block.transparent && neighbor === id) continue;
+            // Skip faces between two cells of the same non-cube liquid (lava is
+            // opaque but still merges its surface like water).
+            if ((block.transparent || id === LAVA) && neighbor === id) continue;
 
-            // 4-corner AO for this face (water skips it to merge maximally).
+            // 4-corner AO for this face (liquids skip it to merge maximally).
             let aoBits = AO_UNIFORM;
-            if (id !== WATER) {
+            if (id !== WATER && id !== LAVA) {
               aoBits = 0;
               for (let ci = 0; ci < 4; ci++) {
                 const [su, sv] = AO_CORNERS[ci];

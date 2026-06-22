@@ -3,6 +3,7 @@ import { isSolid, getBlock, getBlockId } from '../blocks/BlockRegistry.js';
 import { Sound, soundCategory } from '../systems/Sound.js';
 
 const WATER = getBlockId('water');
+const LAVA = getBlockId('lava');
 
 // Player physics + first-person controls. Uses an AABB swept against the voxel
 // grid for collision. Pointer lock drives camera look; WASD drives movement.
@@ -18,6 +19,12 @@ const SWIM_SPEED = 4;
 const WATER_GRAVITY = 20; // still weaker than air, but enough to plunge in
 const WATER_DRAG = 0.91;  // gradual drag (closer to 1 = momentum carries on entry)
 const SWIM_UP = 6;        // velocity when holding Space underwater
+// Lava is thick and sticky: you wade slowly and sink slowly, with a weak
+// struggle upward — enough time to claw out before it burns you to death.
+const LAVA_SPEED = 2.2;
+const LAVA_GRAVITY = 9;
+const LAVA_DRAG = 0.78;   // heavier drag than water -> slow, sluggish sink
+const LAVA_UP = 4;        // weaker than water's swim-up
 const SENSITIVITY = 0.0014; // radians per pixel of mouse movement
 const TOUCH_SENSITIVITY = 0.004; // radians per pixel of touch drag
 const LOOK_SMOOTH = 18; // higher = snappier; lower = floatier
@@ -40,6 +47,7 @@ export class Player {
     this._peakY = this.pos.y; // highest point since last on ground (fall damage)
     this.onLand = null; // (fallDistance) => void
     this.inWater = false;
+    this.inLava = false;
     this._wasInWater = false;
     this._stepT = 0; // footstep cadence accumulator
     this._swimT = 0; // swim-stroke cadence accumulator
@@ -184,13 +192,15 @@ export class Player {
       if (this.enabled && this.keys['ShiftLeft']) this.pos.y -= speed * dt;
       this.vel.set(0, 0, 0);
     } else {
-      // In water if the lower body is in a water block (enables swimming).
-      this.inWater = this.world.getBlock(
+      // Fluid the lower body sits in: water enables swimming, lava wades slowly.
+      const bodyBlock = this.world.getBlock(
         Math.floor(this.pos.x), Math.floor(this.pos.y + 0.5), Math.floor(this.pos.z)
-      ) === WATER;
+      );
+      this.inWater = bodyBlock === WATER;
+      this.inLava = bodyBlock === LAVA;
       if (this.inWater && !this._wasInWater) Sound.splash(); // entered water
 
-      const speed = (this.inWater ? SWIM_SPEED : WALK_SPEED) * this.speedBoost;
+      const speed = (this.inWater ? SWIM_SPEED : this.inLava ? LAVA_SPEED : WALK_SPEED) * this.speedBoost;
       // Input velocity plus any knockback impulse still in flight.
       this.vel.x = dir.x * speed + this.impulse.x;
       this.vel.z = dir.z * speed + this.impulse.z;
@@ -204,7 +214,7 @@ export class Player {
       const midBlock = this.world.getBlock(
         Math.floor(this.pos.x), Math.floor(this.pos.y + 0.6), Math.floor(this.pos.z)
       );
-      const onLadder = !this.inWater && getBlock(midBlock).climbable;
+      const onLadder = !this.inWater && !this.inLava && getBlock(midBlock).climbable;
 
       if (onLadder) {
         if (this.enabled && (this.keys['KeyW'] || this.keys['Space'])) this.vel.y = 3.6;
@@ -219,6 +229,14 @@ export class Player {
         } else {
           this.vel.y -= WATER_GRAVITY * dt;
           this.vel.y *= WATER_DRAG;
+        }
+      } else if (this.inLava) {
+        // Thick and sticky: sink slowly under heavy drag; Space struggles up.
+        if (this.enabled && this.keys['Space']) {
+          this.vel.y = LAVA_UP;
+        } else {
+          this.vel.y -= LAVA_GRAVITY * dt;
+          this.vel.y *= LAVA_DRAG;
         }
       } else {
         this.vel.y -= GRAVITY * dt;
@@ -235,7 +253,7 @@ export class Player {
       if (blockedY) {
         if (this.vel.y < 0) {
           // Just landed: report the fall distance from the tracked apex.
-          if (!this.onGround && !this.inWater) {
+          if (!this.onGround && !this.inWater && !this.inLava) {
             const fall = this._peakY - this.pos.y;
             if (fall > 0 && this.onLand) this.onLand(fall);
             Sound.land(this._belowCategory());
@@ -250,7 +268,7 @@ export class Player {
 
     // Footsteps while walking on the ground.
     const movingFlat = Math.hypot(this.vel.x, this.vel.z) > 0.5;
-    if (this.onGround && !this.flying && !this.inWater && movingFlat) {
+    if (this.onGround && !this.flying && !this.inWater && !this.inLava && movingFlat) {
       this._stepT += dt;
       if (this._stepT >= 0.34) { Sound.step(this._belowCategory()); this._stepT = 0; }
     } else {
@@ -267,8 +285,8 @@ export class Player {
     this._wasInWater = this.inWater;
 
     // Track the apex of a fall/jump so we can measure landing distance. Water
-    // cancels fall damage, so keep the apex pinned while swimming.
-    if (this.flying || this.onGround || this.inWater) this._peakY = this.pos.y;
+    // and lava cancel fall damage, so keep the apex pinned while wading.
+    if (this.flying || this.onGround || this.inWater || this.inLava) this._peakY = this.pos.y;
     else this._peakY = Math.max(this._peakY, this.pos.y);
 
     // Sync camera.

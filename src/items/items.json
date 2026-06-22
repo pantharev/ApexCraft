@@ -610,5 +610,12 @@
     "tier": 5,
     "miningSpeed": 8,
     "attackDamage": 5
+  },
+  {
+    "name": "glow_mushroom",
+    "display": "Glow Mushroom",
+    "color": "#40e8c8",
+    "maxStack": 64,
+    "placeBlock": "glow_mushroom"
   }
 ]

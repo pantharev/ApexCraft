@@ -817,6 +817,7 @@ export class Game {
     window.removeEventListener('resize', this._onResize);
     window.removeEventListener('beforeunload', this._onUnload);
     if (this._resizeObserver) this._resizeObserver.disconnect();
+    this.torchLights.dispose();
     this.renderer.dispose();
     if (this.renderer.domElement.parentNode) {
       this.renderer.domElement.parentNode.removeChild(this.renderer.domElement);

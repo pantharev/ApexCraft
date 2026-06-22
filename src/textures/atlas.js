@@ -489,6 +489,40 @@ const DRAW = {
     }
     setPx(c, 8, 5, '#fff2a8'); // bright core
   },
+  // Glow mushroom: a bioluminescent cave fungus. Thin pale-green stalk with a
+  // cyan-teal domed cap rimmed in bright aqua. The emissive material in atlas.js
+  // makes it self-illuminate regardless of cave darkness. Cap pixels are bright
+  // so the texture reads even at the DARK_FLOOR vertex colour multiplier.
+  glow_mushroom: (c, r) => {
+    c.clearRect(0, 0, TILE, TILE);
+    // Stalk: pale seafoam, slightly translucent-looking.
+    for (let y = 10; y <= 15; y++) {
+      setPx(c, 7, y, '#a0e8d8', 1, 8, r);
+      setPx(c, 8, y, '#b8f0e4', 1, 8, r);
+      setPx(c, 9, y, '#a0e8d8', 1, 8, r);
+    }
+    // Root flare at the base.
+    setPx(c, 6, 15, '#88ccbc'); setPx(c, 10, 15, '#88ccbc');
+    // Cap underside (gills): rows of alternating teal/dark-teal below the dome.
+    for (let x = 5; x <= 11; x++) {
+      for (let y = 7; y <= 9; y++) {
+        setPx(c, x, y, (x + y) % 2 === 0 ? '#28b4a0' : '#1c8a78', 1, 6, r);
+      }
+    }
+    // Cap dome: bright cyan-teal, brighter at the crown, with a glint spot.
+    for (const [x, y] of [[8,3],[7,4],[8,4],[9,4],[6,5],[7,5],[8,5],[9,5],[10,5],
+                            [5,6],[6,6],[7,6],[8,6],[9,6],[10,6],[11,6],[5,7],[11,7]]) {
+      const dist = Math.abs(x - 8) + Math.abs(y - 4.5);
+      const col = dist < 2 ? '#78ffee' : '#40d8be';
+      setPx(c, x, y, col, 1, 10, r);
+    }
+    // Crown hotspot: near-white so the emissive glow reads even when vertex-dark.
+    setPx(c, 8, 3, '#c0fff8'); setPx(c, 7, 4, '#a8f8f0'); setPx(c, 9, 4, '#a8f8f0');
+    // Cap rim: slightly darker teal ring.
+    for (const [x, y] of [[5,7],[6,7],[7,7],[8,7],[9,7],[10,7],[11,7]]) {
+      setPx(c, x, y, '#2aaa96', 1, 8, r);
+    }
+  },
 };
 
 // Ores: stone base + crystal clusters with a bright facet and dark outline.
@@ -549,10 +583,12 @@ const FACE_TILES = {
   oak_slab: t('planks'), stone_slab: t('stone'),
   ladder: t('ladder'), glass_pane: t('glass'),
   chess_table: { top: 'chess_top', side: 'crafting_side', bottom: 'planks' },
+  // Cave flora: rendered as crossed quads (PLANTS set in ChunkMesher).
+  glow_mushroom: t('glow_mushroom'),
 };
 for (const name of Object.keys(ORE_COLORS)) FACE_TILES[name] = t(name);
 
-const CUTOUT = new Set(['leaves', 'glass', 'tall_grass', 'poppy', 'dandelion', 'door_top', 'ladder']);
+const CUTOUT = new Set(['leaves', 'glass', 'tall_grass', 'poppy', 'dandelion', 'door_top', 'ladder', 'glow_mushroom']);
 const TRANSPARENT = new Set(['water']);
 
 // --- Build textures + materials once ---
@@ -574,8 +610,13 @@ tileNames.forEach((name, i) => {
   textures.push(tex);
 
   const opts = { map: tex, vertexColors: true };
-  if (CUTOUT.has(name)) { opts.transparent = true; opts.alphaTest = 0.5; opts.side = THREE.DoubleSide; }
-  else if (TRANSPARENT.has(name)) { opts.transparent = true; opts.opacity = 0.85; opts.depthWrite = false; opts.side = THREE.DoubleSide; }
+  if (CUTOUT.has(name)) {
+    opts.transparent = true; opts.alphaTest = 0.5; opts.side = THREE.DoubleSide;
+    // Glow mushroom self-illuminates so it reads in dark caves even though its
+    // vertex colours are darkened by the skylight pass.  The emissive colour
+    // matches its cap (cyan-teal) to reinforce the bioluminescent feel.
+    if (name === 'glow_mushroom') { opts.emissive = new THREE.Color('#20c8b0'); opts.emissiveIntensity = 0.85; }
+  } else if (TRANSPARENT.has(name)) { opts.transparent = true; opts.opacity = 0.85; opts.depthWrite = false; opts.side = THREE.DoubleSide; }
   else if (name === 'torch') { opts.emissive = new THREE.Color('#ffaa33'); opts.emissiveIntensity = 0.9; } // self-glow
   else if (name === 'lava') { opts.emissive = new THREE.Color('#ff6a14'); opts.emissiveIntensity = 0.85; } // molten glow
   materials.push(new THREE.MeshLambertMaterial(opts));

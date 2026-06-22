@@ -2,9 +2,11 @@ import { CHUNK_SIZE, WORLD_HEIGHT, SEA_LEVEL } from '../../config.js';
 import { Noise } from '../noise.js';
 import { isSolid } from '../../blocks/BlockRegistry.js';
 import { getBlockId } from '../../blocks/BlockRegistry.js';
+import { mulberry32 } from '../noise.js';
 
 const WATER = getBlockId('water');
 const LAVA = getBlockId('lava');
+const GLOW_MUSHROOM = getBlockId('glow_mushroom');
 
 // Depth bands for cave liquids: lava pools at the bottom of the world, water at
 // moderate cave depth. Both stay well under SEA_LEVEL so they can never reach an
@@ -13,12 +15,21 @@ const LAVA_MAX_Y = 12;   // lava dominates below this
 const WATER_MAX_Y = 30;  // water above lava, up to here
 const POOL_DEPTH = 4;    // how many blocks of liquid stack above a floor
 
+// Landmark cavern thresholds: rarer, larger chambers than the normal cheese
+// caverns.  A very low-frequency noise (0.004 XZ, 0.006 Y) gates large rooms
+// only where its value exceeds 0.78, keeping them to roughly one per 8–12
+// chunks.  They appear in the same 4-to-56 y band as the cheese caverns, biased
+// toward depth.
+const LANDMARK_FREQ_XZ = 0.004;
+const LANDMARK_FREQ_Y  = 0.006;
+const LANDMARK_THRESH  = 0.78;
+
 const smoothstep = (a, b, x) => {
   const t = Math.max(0, Math.min(1, (x - a) / (b - a)));
   return t * t * (3 - 2 * t);
 };
 
-// Underground carving pass, run after surface generation. Three systems:
+// Underground carving pass, run after surface generation. Four systems:
 //
 //   • Spaghetti tunnels — air where TWO independent 3D fields are both near
 //     zero: each field's zero-set is a surface, their intersection is a long
@@ -29,6 +40,8 @@ const smoothstep = (a, b, x) => {
 //   • Rifts — rare, deep ravines: inside high regions of a low-frequency mask,
 //     columns near a 2D centre line are cut from the surface down ~15-40
 //     blocks, deepest and widest at the centre line.
+//   • Landmark caverns — very rare, very large chambers gated by an extra
+//     low-frequency noise layer; a real destination when found.
 //
 // Tuned in node across seeds: tunnels carve ~3% of underground volume,
 // caverns ~5-8%, rifts touch ~2% of land columns. Ocean floors are left
@@ -93,13 +106,28 @@ export function carveCaves(chunk) {
         // Cheese caverns: big rooms, increasingly common with depth.
         if (y < 42) {
           const cv = Noise.cavern(wx * 0.008, y * 0.013, wz * 0.008);
-          if (cv > 0.66 - (42 - y) * 0.003) chunk.set(x, y, z, 0);
+          if (cv > 0.66 - (42 - y) * 0.003) { chunk.set(x, y, z, 0); continue; }
+        }
+
+        // Landmark caverns: very rare, very large chambers.  A separate
+        // low-frequency noise layer triggers them independently of the regular
+        // cheese caverns so they feel like genuine discoveries.  Their threshold
+        // is deliberately tighter (0.78 vs 0.66) so they're rarer; y-weighting
+        // bias pushes them to depth 8–56 where they're darkest.
+        if (y >= 8 && y < 56) {
+          const lv = Noise.cavern(
+            wx * LANDMARK_FREQ_XZ + 200,
+            y  * LANDMARK_FREQ_Y  + 200,
+            wz * LANDMARK_FREQ_XZ + 200,
+          );
+          if (lv > LANDMARK_THRESH) { chunk.set(x, y, z, 0); continue; }
         }
       }
     }
   }
 
   fillLiquids(chunk);
+  placeGlowMushrooms(chunk);
 }
 
 // Second pass (after carving): settle static liquids onto cave floors. Lava
@@ -140,6 +168,72 @@ function fillLiquids(chunk) {
 
         const liquid = y < LAVA_MAX_Y ? LAVA : WATER;
         chunk.set(x, y, z, liquid);
+      }
+    }
+  }
+}
+
+// Third pass (after liquids): scatter glow mushrooms onto solid cave floors and
+// on stone/andesite surfaces adjacent to cave air. They cluster near water pools
+// and in landmark caverns, using seeded Noise so placement is identical on every
+// client. Each placed block is recorded in chunk.lights so the dynamic light
+// pool (TorchLights) can include them without scanning block data per-frame.
+//
+// Design choices:
+//   • Two independent noise layers gate placement: a low-frequency "biome" mask
+//     (where mushrooms cluster) and a per-cell Perlin check (which exact cells
+//     within the cluster actually sprout). Both seeded, no Math.random().
+//   • Only placed on solid floors with exactly 1+ cells of air headroom and
+//     below y=SEA_LEVEL to stay underground.
+//   • Proximity to water: columns with a pool mask > 0.35 (same threshold as
+//     fillLiquids) get twice the cluster density so pools visually glow.
+function placeGlowMushrooms(chunk) {
+  const baseX = chunk.cx * CHUNK_SIZE;
+  const baseZ = chunk.cz * CHUNK_SIZE;
+
+  // chunk.lights is a lightweight list of world positions for luminous generated
+  // blocks; the dynamic light pool (TorchLights / extended World.lightsNear)
+  // picks from this to assign PointLights each frame.
+  if (!chunk.lights) chunk.lights = [];
+
+  // Per-chunk seeded RNG for the rarity jitter (avoids Math.random()).
+  const rand = mulberry32(((chunk.cx & 0xffff) << 16) ^ (chunk.cz & 0xffff) ^ 0x4c3a1f);
+
+  for (let x = 0; x < CHUNK_SIZE; x++) {
+    for (let z = 0; z < CHUNK_SIZE; z++) {
+      const wx = baseX + x;
+      const wz = baseZ + z;
+
+      // Low-frequency cluster mask: only grow mushrooms in warm-to-high regions.
+      const clusterMask = Noise.cavern(wx * 0.018 + 300, 0, wz * 0.018 + 300);
+      if (clusterMask < 0.30) continue; // outside a cluster
+
+      // Proximity bonus: near water pools → denser clusters (pool threshold 0.35).
+      const poolMask = Noise.cavern(wx * 0.012 + 500, 0, wz * 0.012 + 500);
+      const densityBoost = poolMask > 0.35 ? 1.5 : 1.0;
+
+      // Scan underground column for valid floor positions.
+      for (let y = 4; y < SEA_LEVEL - 2; y++) {
+        if (chunk.get(x, y, z) !== 0) continue; // must be open air
+        const below = chunk.get(x, y - 1, z);
+        if (!isSolid(below)) continue;           // must rest on solid ground
+        // 1-block headroom: the mushroom occupies y, so y+1 must be air too.
+        const above = chunk.get(x, y + 1, z);
+        if (above !== 0 && above !== WATER) continue; // not enough headroom
+
+        // Per-cell density noise: only some cells within the cluster sprout.
+        const cellNoise = Noise.ore(wx * 0.12, y * 0.15, wz * 0.12);
+        // Base threshold 0.62; pulled down by density boost near water.
+        const thresh = 0.62 - (densityBoost - 1.0) * 0.12;
+        if (cellNoise < thresh) continue;
+
+        // Final rarity jitter (seeded): ~60% of threshold-passing cells actually grow.
+        if (rand() > 0.60) continue;
+
+        chunk.set(x, y, z, GLOW_MUSHROOM);
+        // Record light position for the dynamic pool (world coords, light at
+        // slightly above the mushroom cap ~ y + 0.7).
+        chunk.lights.push([wx, y, wz]);
       }
     }
   }

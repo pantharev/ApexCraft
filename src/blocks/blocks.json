@@ -832,5 +832,21 @@
     "color": "#e2530f",
     "liquid": true,
     "luminance": 15
+  },
+  {
+    "id": 52,
+    "name": "glow_mushroom",
+    "solid": false,
+    "plant": true,
+    "transparent": true,
+    "color": "#40e8c8",
+    "hardness": 0,
+    "luminance": 10,
+    "drops": [
+      {
+        "item": "glow_mushroom",
+        "count": [1, 1]
+      }
+    ]
   }
 ]

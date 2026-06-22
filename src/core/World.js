@@ -8,6 +8,7 @@ import { getBlockId, isSolid } from '../blocks/BlockRegistry.js';
 
 const key = (cx, cz) => `${cx},${cz}`;
 const TORCH = getBlockId('torch');
+const GLOW = getBlockId('glow_mushroom');
 
 export class World {
   constructor(scene) {
@@ -93,6 +94,17 @@ export class World {
     if (id === TORCH) this.torches.add(tkey);
     else this.torches.delete(tkey);
     if (this.torches.has(tkey) !== had) this.torchVersion++;
+
+    // Keep the chunk's glow-source list (used by the dynamic light pool) in sync
+    // when a glow block is placed or broken. Generated glow mushrooms are added
+    // to chunk.lights at gen time; this handles player edits so placing one lights
+    // the area and breaking one doesn't leave a phantom light behind.
+    if (id === GLOW || prevId === GLOW) {
+      if (!chunk.lights) chunk.lights = [];
+      const li = chunk.lights.findIndex((p) => p[0] === wx && p[1] === wy && p[2] === wz);
+      if (id === GLOW && li < 0) chunk.lights.push([wx, wy, wz]);
+      else if (id !== GLOW && li >= 0) chunk.lights.splice(li, 1);
+    }
 
     // Neighbouring chunk may need remesh if we touched a boundary block.
     if (lx === 0) this.markDirty(cx - 1, cz);

@@ -13,7 +13,8 @@ const GRASS = getBlockId('grass');
 const LEAVES = getBlockId('oak_leaves');
 const TALL_GRASS = getBlockId('tall_grass');
 // Cross-plants render as two diagonal quads, not cubes.
-const PLANTS = new Set([TALL_GRASS, getBlockId('poppy'), getBlockId('dandelion')]);
+// GLOW_MUSHROOM (id 52) is added here so it renders as crossed quads underground.
+const PLANTS = new Set([TALL_GRASS, getBlockId('poppy'), getBlockId('dandelion'), getBlockId('glow_mushroom')]);
 // Non-cube blocks drawn by the special pass below (skipped by greedy meshing).
 const DOOR = getBlockId('door');
 const DOOR_OPEN = getBlockId('door_open');
@@ -29,6 +30,67 @@ const STAIR_DIR = {
 };
 const SPECIAL = new Set([...PLANTS, DOOR, DOOR_OPEN, BED, BED_HEAD, FENCE, LADDER, PANE,
   ...SLABS, ...Object.keys(STAIR_DIR).map(Number)]);
+
+// ---------------------------------------------------------------------------
+// Skylight system — gives caves genuine darkness while leaving the surface
+// unchanged.  A cell is "fully sky-lit" (skylight = 1.0) when no opaque block
+// sits above it in its column.  Below the first opaque roof the light falls off
+// with depth over a soft FADE_BLOCKS gradient, reaching DARK_FLOOR at the bottom.
+//
+// DARK_FLOOR (0.15): chosen so a placed torch / glow mushroom point-light
+// still registers visibly on cave walls.  Near-zero would black out dynamic
+// lights; near 0.5 would make caves feel merely "dim."  0.15 is the sweet spot:
+// visibly dark, torch-readable, tunable.
+//
+// The precompute is O(CHUNK_SIZE² × WORLD_HEIGHT) per chunk mesh and runs once
+// per buildChunkGeometry call — well within the existing chunk-budget structure.
+// ---------------------------------------------------------------------------
+const DARK_FLOOR   = 0.15;  // minimum vertex brightness deep underground
+const FADE_BLOCKS  = 6;     // blocks below the roof over which light transitions
+
+// Per-column sky-roof heights for the chunk: skyHeight[lz*CHUNK_SIZE+lx] = y of
+// the first opaque block scanned top-down (the roof that blocks the sky). The
+// WORLD_HEIGHT sentinel means the column is fully open to the sky; skylightAt
+// treats roofY >= WORLD_HEIGHT as fully lit. WORLD_HEIGHT (128) fits a Uint8Array.
+function buildSkyHeightMap(chunk) {
+  const skyHeight = new Uint8Array(CHUNK_SIZE * CHUNK_SIZE).fill(WORLD_HEIGHT);
+  for (let lx = 0; lx < CHUNK_SIZE; lx++) {
+    for (let lz = 0; lz < CHUNK_SIZE; lz++) {
+      for (let y = WORLD_HEIGHT - 1; y >= 0; y--) {
+        if (isOpaque(chunk.get(lx, y, lz))) {
+          skyHeight[lz * CHUNK_SIZE + lx] = y;
+          break;
+        }
+      }
+    }
+  }
+  return skyHeight;
+}
+
+// Skylight value for a single voxel cell given its column's sky roof.
+//
+// roofY = y of the first opaque block when scanning top-down.
+// WORLD_HEIGHT (128) is the sentinel for "no opaque block found = open sky."
+//
+// Behaviour:
+//   • roofY >= WORLD_HEIGHT  → fully open sky column, every cell = 1.0.
+//   • y >= roofY             → at or above the solid roof = 1.0 (surface block
+//                              itself, or blocks level with / above the roof
+//                              in an overhanging section).
+//   • depth in [1, FADE_BLOCKS] → soft gradient so cave mouths fade naturally.
+//   • depth > FADE_BLOCKS    → fully enclosed cave = DARK_FLOOR (0.15).
+function skylightAt(y, roofY) {
+  if (roofY >= WORLD_HEIGHT) return 1.0; // open-sky column — no roof at all
+  if (y >= roofY) return 1.0;            // at or above the roof (surface)
+  const depth = roofY - y;              // how far below the first solid roof
+  if (depth <= FADE_BLOCKS) {
+    // Soft gradient just under the roof: cave mouths feel like shade, not
+    // instant blackness.  t = 0 at the roof, 1 at FADE_BLOCKS below it.
+    const t = depth / FADE_BLOCKS;
+    return 1.0 - t * (1.0 - DARK_FLOOR);
+  }
+  return DARK_FLOOR; // deep enclosed cave — visibly dark, torch-readable
+}
 
 // Mask entries pack the block id with the face's 4-corner ambient-occlusion
 // pattern, so greedy merging only joins cells that shade identically (AO stays
@@ -51,8 +113,15 @@ function climateTint(wx, wz) {
 
 // Push one quad (4 verts) into a buffer. uvLocal tiles 0..w / 0..h so the tile
 // repeats across a greedy-merged quad (textures use RepeatWrapping).
+//
+// q.skylight: per-quad skylight factor (0..1).  For greedy-merged quads spanning
+// a uniform AO + uniform skylight bucket the factor is the same for all four
+// corners; this keeps the merge-key valid (see buildChunkGeometry).  The slight
+// loss of per-vertex gradient within a merged quad is imperceptible at the coarse
+// bucket granularity we use (4-bucket: 0.0/0.33/0.67/1.0).
 function pushQuad(buf, q) {
   const shade = SHADE[q.faceType];
+  const sl = (q.skylight !== undefined) ? q.skylight : 1.0; // skylight factor
   const corner = (uu, vv) => {
     const a = [0, 0, 0];
     a[q.axis] = q.faceCoord; a[q.u] = uu; a[q.v] = vv;
@@ -72,12 +141,15 @@ function pushQuad(buf, q) {
     buf.normals.push(q.normal[0], q.normal[1], q.normal[2]);
     buf.uvs.push(u, v);
     // Corners tucked against neighbouring blocks darken (soft contact shadow).
+    // Skylight (sl) multiplied in so underground faces are genuinely dark while
+    // surface faces (sl=1.0) are unchanged from the previous behaviour.
     const aoF = 0.6 + 0.4 * (q.ao[k] / 3);
+    const bright = shade * aoF * sl;
     if (tinted) {
       const t = climateTint(c[0], c[2]);
-      buf.colors.push(shade * aoF * t[0], shade * aoF * t[1], shade * aoF * t[2]);
+      buf.colors.push(bright * t[0], bright * t[1], bright * t[2]);
     } else {
-      buf.colors.push(shade * aoF, shade * aoF, shade * aoF);
+      buf.colors.push(bright, bright, bright);
     }
   }
   // Split the quad across the brighter diagonal so AO interpolates smoothly
@@ -137,6 +209,32 @@ const decodeAO = (bits) => bits === AO_UNIFORM
   ? [3, 3, 3, 3]
   : [bits & 3, (bits >> 2) & 3, (bits >> 4) & 3, (bits >> 6) & 3];
 
+// Mask entries pack: block id (9 bits) | AO bits (8 bits) | skylight bucket (2 bits).
+// The skylight bucket keeps greedy merging correct: quads spanning a light
+// discontinuity stay split so each merged quad has a single uniform brightness.
+// 4 buckets: 0=DARK_FLOOR, 1=low, 2=mid, 3=full (≈1.0). This is a deliberate
+// coarse quantisation — fine enough for smooth caves, coarse enough to keep the
+// bucket simple and not shatter every face into tiny quads.
+const SL_BITS = 2;
+const SL_SHIFT = ID_BITS + 8; // sits above the AO byte
+const SL_MASK = (1 << SL_BITS) - 1; // 0b11
+const SL_BUCKETS = 4; // 0..3
+
+// Quantise a 0..1 skylight value to a 0..3 bucket index.
+function slBucket(sl) {
+  return Math.min(SL_BUCKETS - 1, Math.floor(sl * SL_BUCKETS));
+}
+
+// Decode bucket index back to a representative skylight value used for
+// pushQuad. Midpoint of each bucket so colours are consistent within a merged
+// quad regardless of where the merge boundary fell.
+const SL_VALUES = [
+  DARK_FLOOR,                              // bucket 0: deep underground
+  DARK_FLOOR + (1.0 - DARK_FLOOR) / 3,    // bucket 1: transition low
+  DARK_FLOOR + (1.0 - DARK_FLOOR) * 2/3,  // bucket 2: transition high
+  1.0,                                     // bucket 3: full surface light
+];
+
 // Greedy mesh + texture grouping. Returns { opaque, water } geometries.
 export function buildChunkGeometry(chunk, worldGet) {
   const byMat = new Map();   // matIndex -> buffer (opaque + cutout)
@@ -149,6 +247,10 @@ export function buildChunkGeometry(chunk, worldGet) {
       ? chunk.get(lx, ly, lz)
       : worldGet(baseX + lx, ly, baseZ + lz);
   const occ = (x, y, z) => (isOpaque(at(x, y, z)) ? 1 : 0);
+
+  // Precompute per-column sky-roof heights once for the whole chunk.
+  // skyHeight[lz * CHUNK_SIZE + lx] = y of the first solid block from top.
+  const skyHeightMap = buildSkyHeightMap(chunk);
 
   for (let axis = 0; axis < 3; axis++) {
     const u = (axis + 1) % 3, v = (axis + 2) % 3;
@@ -189,7 +291,22 @@ export function buildChunkGeometry(chunk, worldGet) {
                 aoBits |= ao << (ci * 2);
               }
             }
-            mask[j * du + i] = id | (aoBits << ID_BITS);
+
+            // Skylight bucket: use the cell's own column (x = cell[0] for axis
+            // 1 & 2; the face y coordinate for the bucket). For axis 0 (x-faces)
+            // the relevant column is the neighbour's column since the face
+            // surface is at nb position.
+            const faceLx = (axis === 0) ? Math.max(0, Math.min(CHUNK_SIZE - 1, nb[0])) : cell[0];
+            const faceLz = (axis === 2) ? Math.max(0, Math.min(CHUNK_SIZE - 1, nb[2])) : cell[2];
+            const faceY  = cell[1];
+            let roofY = WORLD_HEIGHT; // fallback: open sky
+            if (faceLx >= 0 && faceLx < CHUNK_SIZE && faceLz >= 0 && faceLz < CHUNK_SIZE) {
+              roofY = skyHeightMap[faceLz * CHUNK_SIZE + faceLx];
+            }
+            const sl = skylightAt(faceY, roofY);
+            const slB = slBucket(sl);
+
+            mask[j * du + i] = id | (aoBits << ID_BITS) | (slB << SL_SHIFT);
           }
         }
 
@@ -208,8 +325,9 @@ export function buildChunkGeometry(chunk, worldGet) {
             }
 
             const id = key & ID_MASK;
-            const ao = decodeAO(key >>> ID_BITS);
-            const q = { axis, u, v, faceCoord, i, j, w, h, dir, normal, faceType, baseX, baseZ, id, ao };
+            const ao = decodeAO((key >>> ID_BITS) & 0xff);
+            const skylight = SL_VALUES[(key >>> SL_SHIFT) & SL_MASK];
+            const q = { axis, u, v, faceCoord, i, j, w, h, dir, normal, faceType, baseX, baseZ, id, ao, skylight };
             if (id === WATER) {
               pushQuad(water, q);
             } else {
@@ -242,9 +360,15 @@ export function buildChunkGeometry(chunk, worldGet) {
         if (!SPECIAL.has(id)) continue;
         const wx = baseX + lx, wz = baseZ + lz;
 
+        // Per-cell skylight for the special pass (plants, boxes).  Same
+        // column lookup as the greedy pass so special blocks underground darken
+        // consistently with the surrounding cube faces.
+        const roofY = skyHeightMap[lz * CHUNK_SIZE + lx];
+        const cellSl = skylightAt(y, roofY);
+
         if (PLANTS.has(id)) {
           const tint = id === TALL_GRASS ? climateTint(wx, wz) : [1, 1, 1];
-          pushCross(bufFor(faceMaterialIndex(id, 'side')), wx, y, wz, tint);
+          pushCross(bufFor(faceMaterialIndex(id, 'side')), wx, y, wz, tint, cellSl);
         } else if (id === DOOR || id === DOOR_OPEN) {
           // Hinge orientation from the wall: solid x-neighbours = doorway runs
           // along x (panel spans x); otherwise it spans z. The open panel
@@ -258,17 +382,17 @@ export function buildChunkGeometry(chunk, worldGet) {
           } else {
             b = wallX ? [0.84, 0, 0, 1, 1, 1] : [0, 0, 0.84, 1, 1, 1];
           }
-          pushBox(bufFor, wx + b[0], y + b[1], wz + b[2], wx + b[3], y + b[4], wz + b[5], mat, mat, mat);
+          pushBox(bufFor, wx + b[0], y + b[1], wz + b[2], wx + b[3], y + b[4], wz + b[5], mat, mat, mat, cellSl);
         } else if (STAIR_DIR[id]) {
           const matT = faceMaterialIndex(id, 'top');
           const matS = faceMaterialIndex(id, 'side');
           const matB = faceMaterialIndex(id, 'bottom');
           // Bottom slab + the high half on the ascending side.
-          pushBox(bufFor, wx, y, wz, wx + 1, y + 0.5, wz + 1, matT, matS, matB);
+          pushBox(bufFor, wx, y, wz, wx + 1, y + 0.5, wz + 1, matT, matS, matB, cellSl);
           const d = STAIR_DIR[id];
           const u = d === 'px' ? [0.5, 0, 1, 1] : d === 'nx' ? [0, 0, 0.5, 1]
             : d === 'pz' ? [0, 0.5, 1, 1] : [0, 0, 1, 0.5]; // [x0,z0,x1,z1]
-          pushBox(bufFor, wx + u[0], y + 0.5, wz + u[1], wx + u[2], y + 1, wz + u[3], matT, matS, matB);
+          pushBox(bufFor, wx + u[0], y + 0.5, wz + u[1], wx + u[2], y + 1, wz + u[3], matT, matS, matB, cellSl);
         } else if (id === BED || id === BED_HEAD) {
           // Mattress slab; halves extend to meet their partner cell flush.
           let bx0 = 0.03, bx1 = 0.97, bz0 = 0.03, bz1 = 0.97;
@@ -279,10 +403,10 @@ export function buildChunkGeometry(chunk, worldGet) {
           if (at(lx, y, lz - 1) === partner) bz0 = 0;
           pushBox(bufFor,
             wx + bx0, y, wz + bz0, wx + bx1, y + 0.55, wz + bz1,
-            faceMaterialIndex(id, 'top'), faceMaterialIndex(id, 'side'), faceMaterialIndex(id, 'bottom'));
+            faceMaterialIndex(id, 'top'), faceMaterialIndex(id, 'side'), faceMaterialIndex(id, 'bottom'), cellSl);
         } else if (SLABS.has(id)) {
           pushBox(bufFor, wx, y, wz, wx + 1, y + 0.5, wz + 1,
-            faceMaterialIndex(id, 'top'), faceMaterialIndex(id, 'side'), faceMaterialIndex(id, 'bottom'));
+            faceMaterialIndex(id, 'top'), faceMaterialIndex(id, 'side'), faceMaterialIndex(id, 'bottom'), cellSl);
         } else if (id === LADDER) {
           // Flat against whichever neighbouring wall it hangs on.
           const mat = faceMaterialIndex(LADDER, 'side');
@@ -291,18 +415,18 @@ export function buildChunkGeometry(chunk, worldGet) {
           else if (isSolid(at(lx, y, lz + 1))) b = [0, 0, 0.9, 1, 1, 0.98];
           else if (isSolid(at(lx - 1, y, lz))) b = [0.02, 0, 0, 0.1, 1, 1];
           else if (isSolid(at(lx + 1, y, lz))) b = [0.9, 0, 0, 0.98, 1, 1];
-          pushBox(bufFor, wx + b[0], y + b[1], wz + b[2], wx + b[3], y + b[4], wz + b[5], mat, mat, mat);
+          pushBox(bufFor, wx + b[0], y + b[1], wz + b[2], wx + b[3], y + b[4], wz + b[5], mat, mat, mat, cellSl);
         } else if (id === PANE) {
           // Thin glass sheet aligned with its solid neighbours (cross if both).
           const mat = faceMaterialIndex(PANE, 'side');
           const xConn = isSolid(at(lx - 1, y, lz)) || isSolid(at(lx + 1, y, lz));
           const zConn = isSolid(at(lx, y, lz - 1)) || isSolid(at(lx, y, lz + 1));
-          if (xConn || !zConn) pushBox(bufFor, wx, y, wz + 0.44, wx + 1, y + 1, wz + 0.56, mat, mat, mat);
-          if (zConn) pushBox(bufFor, wx + 0.44, y, wz, wx + 0.56, y + 1, wz + 1, mat, mat, mat);
+          if (xConn || !zConn) pushBox(bufFor, wx, y, wz + 0.44, wx + 1, y + 1, wz + 0.56, mat, mat, mat, cellSl);
+          if (zConn) pushBox(bufFor, wx + 0.44, y, wz, wx + 0.56, y + 1, wz + 1, mat, mat, mat, cellSl);
         } else if (id === FENCE) {
           const mat = faceMaterialIndex(FENCE, 'side');
           // Centre post...
-          pushBox(bufFor, wx + 0.36, y, wz + 0.36, wx + 0.64, y + 1, wz + 0.64, mat, mat, mat);
+          pushBox(bufFor, wx + 0.36, y, wz + 0.36, wx + 0.64, y + 1, wz + 0.64, mat, mat, mat, cellSl);
           // ...with two rails toward each solid/fence neighbour.
           const rails = [
             [1, 0, wx + 0.64, wx + 1, wz + 0.42, wz + 0.58],
@@ -312,8 +436,8 @@ export function buildChunkGeometry(chunk, worldGet) {
           ];
           for (const [dx, dz, rx0, rx1, rz0, rz1] of rails) {
             if (!isSolid(at(lx + dx, y, lz + dz))) continue;
-            pushBox(bufFor, rx0, y + 0.3, rz0, rx1, y + 0.45, rz1, mat, mat, mat);
-            pushBox(bufFor, rx0, y + 0.72, rz0, rx1, y + 0.87, rz1, mat, mat, mat);
+            pushBox(bufFor, rx0, y + 0.3, rz0, rx1, y + 0.45, rz1, mat, mat, mat, cellSl);
+            pushBox(bufFor, rx0, y + 0.72, rz0, rx1, y + 0.87, rz1, mat, mat, mat, cellSl);
           }
         }
       }
@@ -325,7 +449,8 @@ export function buildChunkGeometry(chunk, worldGet) {
 
 // Push an axis-aligned box with per-face materials, face shading, and UVs
 // scaled to each face's size. Used by the special (non-cube) block pass.
-function pushBox(bufFor, x0, y0, z0, x1, y1, z1, matTop, matSide, matBottom) {
+// sl = skylight multiplier (1.0 at surface, DARK_FLOOR deep underground).
+function pushBox(bufFor, x0, y0, z0, x1, y1, z1, matTop, matSide, matBottom, sl = 1.0) {
   const faces = [
     [matSide, [1, 0, 0], [[x1, y0, z1], [x1, y0, z0], [x1, y1, z0], [x1, y1, z1]], SHADE.side, z1 - z0, y1 - y0],
     [matSide, [-1, 0, 0], [[x0, y0, z0], [x0, y0, z1], [x0, y1, z1], [x0, y1, z0]], SHADE.side, z1 - z0, y1 - y0],
@@ -338,18 +463,20 @@ function pushBox(bufFor, x0, y0, z0, x1, y1, z1, matTop, matSide, matBottom) {
     const buf = bufFor(mat);
     const vi = buf.positions.length / 3;
     const uvs = [[0, 0], [su, 0], [su, sv], [0, sv]];
+    const bright = shade * sl;
     for (let k = 0; k < 4; k++) {
       buf.positions.push(c[k][0], c[k][1], c[k][2]);
       buf.normals.push(n[0], n[1], n[2]);
       buf.uvs.push(uvs[k][0], uvs[k][1]);
-      buf.colors.push(shade, shade, shade);
+      buf.colors.push(bright, bright, bright);
     }
     buf.indices.push(vi, vi + 1, vi + 2, vi, vi + 2, vi + 3);
   }
 }
 
 // Two crossed quads spanning a cell's diagonals (slightly inset).
-function pushCross(buf, x, y, z, tint) {
+// sl = skylight multiplier so cave plants darken underground like cube faces.
+function pushCross(buf, x, y, z, tint, sl = 1.0) {
   const a = 0.15, b = 0.85;
   const quads = [
     [[x + a, z + a], [x + b, z + b]], // diagonal /
@@ -363,7 +490,7 @@ function pushCross(buf, x, y, z, tint) {
       buf.positions.push(corners[k][0], corners[k][1], corners[k][2]);
       buf.normals.push(0, 1, 0); // lit like the ground it grows from
       buf.uvs.push(uvs[k][0], uvs[k][1]);
-      buf.colors.push(tint[0], tint[1], tint[2]);
+      buf.colors.push(tint[0] * sl, tint[1] * sl, tint[2] * sl);
     }
     buf.indices.push(vi, vi + 1, vi + 2, vi, vi + 2, vi + 3);
   }

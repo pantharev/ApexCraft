@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { Mob } from '../entities/Mob.js';
-import { MOBS, PASSIVE, HOSTILE } from '../entities/mobTypes.js';
+import { MOBS, PASSIVE, HOSTILE, CAVE_HOSTILE } from '../entities/mobTypes.js';
 import { getBlockId, isSolid } from '../blocks/BlockRegistry.js';
 import { villagesNear, villageLayout } from '../world/structures/VillagePlan.js';
 import { Sound } from './Sound.js';
@@ -9,9 +9,17 @@ const GRASS = getBlockId('grass');
 const PASSIVE_CAP = 10;
 const HOSTILE_CAP = 14;
 const VILLAGER_CAP = 4; // per village
+// Cave hostiles have their own cap so they don't starve the surface hostile
+// budget and vice-versa.  8 means a player caving in a moderate area will feel
+// threatened but not overwhelmed.
+const CAVE_HOSTILE_CAP = 8;
 const DESPAWN = 70;
 const SPAWN_MIN = 16;
 const SPAWN_MAX = 34;
+
+// Y below which we treat a position as "underground" for cave spawning.
+// SEA_LEVEL (62) minus a few blocks so overhangs / shallow caves don't count.
+const CAVE_MAX_Y = 58;
 
 // Spawns, updates, and despawns mobs around the player. Passive mobs spawn on
 // grass in daylight; hostile mobs spawn at night. Also resolves player melee
@@ -23,12 +31,23 @@ export class MobManager {
     this.itemDrops = itemDrops;
     this.mobs = [];
     this.spawnTimer = 2;
+    this.caveSpawnTimer = 3; // offset from surface timer to avoid same-frame bursts
     this.villagerTimer = 3;
   }
 
   count(category) {
     let n = 0;
     for (const m of this.mobs) if (m.def.category === category) n++;
+    return n;
+  }
+
+  // Cave hostiles are tagged on spawn so they're capped separately from the
+  // surface night pool (neither starves the other).
+  countCaveHostile() {
+    let n = 0;
+    for (const m of this.mobs) {
+      if (m.def.category === 'hostile' && m._caveSpawned) n++;
+    }
     return n;
   }
 
@@ -100,6 +119,49 @@ export class MobManager {
     this._spawn(list[Math.floor(Math.random() * list.length)], wx + 0.5, surf + 1, wz + 0.5);
   }
 
+  // Cave-specific hostile spawning: picks cells underground near the player
+  // that are dark (below CAVE_MAX_Y, below the surface height), have a solid
+  // floor, and 2+ blocks of air headroom. Triggers regardless of time of day
+  // so caving is always dangerous. Uses its own cap so cave mobs don't
+  // suppress surface mobs and vice-versa.
+  //
+  // Sky-exposure check: we use world.surfaceHeight to know the solid-ground
+  // height at a column. If the spawn candidate Y is below surfaceHeight - 4
+  // (well below the first solid roof) we consider it sufficiently underground.
+  // This matches the intuition used in the skylight mesher: sky-exposed = above
+  // the first opaque roof.
+  _trySpawnCave(playerPos) {
+    if (this.countCaveHostile() >= CAVE_HOSTILE_CAP) return;
+
+    // Pick a random horizontal position in a ring around the player, same
+    // distance range as surface spawning so the player can't out-run them.
+    const angle = Math.random() * Math.PI * 2;
+    const dist  = SPAWN_MIN + Math.random() * (SPAWN_MAX - SPAWN_MIN);
+    const wx = Math.floor(playerPos.x + Math.cos(angle) * dist);
+    const wz = Math.floor(playerPos.z + Math.sin(angle) * dist);
+
+    // We scan downward from CAVE_MAX_Y looking for a valid floor (solid block
+    // with 2 air blocks above it).  Stop at y=3 to stay off bedrock.
+    const scanTop = Math.min(CAVE_MAX_Y, this.world.surfaceHeight(wx, wz) - 4);
+    if (scanTop < 6) return; // column has no underground space
+
+    // Randomise starting y within the underground band to spread spawns.
+    const startY = 3 + Math.floor(Math.random() * Math.max(1, scanTop - 3));
+
+    for (let y = startY; y >= 3; y--) {
+      const floor  = this.world.getBlock(wx, y,     wz);
+      const head1  = this.world.getBlock(wx, y + 1, wz);
+      const head2  = this.world.getBlock(wx, y + 2, wz);
+      if (!isSolid(floor))   continue; // need solid floor
+      if (isSolid(head1) || isSolid(head2)) continue; // need 2-block headroom
+
+      const type = CAVE_HOSTILE[Math.floor(Math.random() * CAVE_HOSTILE.length)];
+      const mob = this._spawn(type, wx + 0.5, y + 1, wz + 0.5);
+      mob._caveSpawned = true; // tag so countCaveHostile() tracks them separately
+      return; // one mob per call
+    }
+  }
+
   update(dt, ctx) {
     // Multiplayer host: target/spawn around every player in the room, not just
     // the local one. ctx.players is [{ id, pos }]; absent = single-player.
@@ -112,6 +174,15 @@ export class MobManager {
       this.spawnTimer = 2;
       const anchor = players[Math.floor(Math.random() * players.length)];
       this._trySpawn({ ...ctx, playerPos: anchor.pos });
+    }
+
+    // Cave hostile spawning: runs on its own timer and cap, independent of the
+    // surface hostile pool so daytime caving is always dangerous.
+    this.caveSpawnTimer -= dt;
+    if (this.caveSpawnTimer <= 0) {
+      this.caveSpawnTimer = 3.5;
+      const anchor = players[Math.floor(Math.random() * players.length)];
+      this._trySpawnCave(anchor.pos);
     }
 
     this.villagerTimer -= dt;

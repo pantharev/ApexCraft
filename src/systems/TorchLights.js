@@ -1,9 +1,15 @@
 import * as THREE from 'three';
 
-const POOL = 12;     // max simultaneous torch point-lights
-const RANGE = 48;    // only torches within this distance get a light
-const LIGHT_DIST = 24;
-const LIGHT_INTENSITY = 3.2;
+// We split the light pool into two halves so torches (warm) and glow mushrooms
+// (cool/cyan) never compete for slots and the player always has reliable warm
+// torch lighting supplemented by ambient cave glow.
+const TORCH_POOL  = 10;  // warm orange-yellow point lights for placed torches
+const GLOW_POOL   = 6;   // cool cyan point lights for glow mushrooms
+// Total active lights: TORCH_POOL + GLOW_POOL = 16 (up from original 12).
+const RANGE       = 48;  // scan radius: only lights within this get a slot
+const LIGHT_DIST  = 22;  // Three.js point-light reach (distance falloff)
+const TORCH_INT   = 3.2; // intensity for torch lights
+const GLOW_INT    = 1.8; // intensity for glow mushroom lights (dimmer — ambient)
 
 // Shared geometry/materials for the thin torch stick + flame.
 const stickGeo = new THREE.BoxGeometry(0.12, 0.55, 0.12);
@@ -22,7 +28,11 @@ function buildTorchMesh() {
 }
 
 // Renders placed torches as thin stick meshes and lights their surroundings with
-// a pool of bright point lights that follow the nearest torches.
+// a split pool of point lights:
+//   • TORCH_POOL warm lights follow the nearest placed torches.
+//   • GLOW_POOL cool lights follow the nearest generated glow mushrooms (read
+//     from chunk.lights populated by CaveGen.placeGlowMushrooms).
+// Reuses existing THREE.PointLight instances — no per-frame allocation.
 export class TorchLights {
   constructor(scene, world) {
     this.scene = scene;
@@ -30,12 +40,22 @@ export class TorchLights {
     this.models = new Map(); // "x,y,z" -> Group
     this._mv = -1;
 
-    this.lights = [];
-    for (let i = 0; i < POOL; i++) {
+    // Warm torch lights (orange).
+    this.torchLights = [];
+    for (let i = 0; i < TORCH_POOL; i++) {
       const light = new THREE.PointLight(0xffc070, 0, LIGHT_DIST, 1.0);
       light.visible = false;
       scene.add(light);
-      this.lights.push(light);
+      this.torchLights.push(light);
+    }
+
+    // Cool glow-mushroom lights (cyan-teal).
+    this.glowLights = [];
+    for (let i = 0; i < GLOW_POOL; i++) {
+      const light = new THREE.PointLight(0x30e8cc, 0, LIGHT_DIST, 1.0);
+      light.visible = false;
+      scene.add(light);
+      this.glowLights.push(light);
     }
   }
 
@@ -63,29 +83,78 @@ export class TorchLights {
     }
   }
 
+  // Scan loaded chunks for glow mushroom light positions within RANGE.
+  // chunk.lights is set by CaveGen.placeGlowMushrooms on generation; it
+  // persists in the Chunk object (LRU-cached) so we don't rescan each frame.
+  _nearGlowSources(playerPos, buf) {
+    buf.length = 0;
+    const rangeSq = RANGE * RANGE;
+    for (const chunk of this.world.chunks.values()) {
+      if (!chunk.lights || chunk.lights.length === 0) continue;
+      for (const [wx, wy, wz] of chunk.lights) {
+        const dx = wx + 0.5 - playerPos.x;
+        const dy = wy + 0.7 - playerPos.y;
+        const dz = wz + 0.5 - playerPos.z;
+        const d2 = dx * dx + dy * dy + dz * dz;
+        if (d2 >= rangeSq) continue;
+        let ins = buf.length;
+        while (ins > 0 && buf[ins - 1][0] > d2) ins--;
+        if (buf.length < GLOW_POOL) buf.splice(ins, 0, [d2, wx + 0.5, wy + 0.7, wz + 0.5]);
+        else if (ins < GLOW_POOL) { buf.splice(ins, 0, [d2, wx + 0.5, wy + 0.7, wz + 0.5]); buf.length = GLOW_POOL; }
+      }
+    }
+  }
+
   update(playerPos) {
     this._syncModels();
 
-    const near = [];
+    // --- Torch lights (warm) ---
+    const nearTorches = [];
     for (const k of this.world.torches) {
       const [x, y, z] = k.split(',');
       const tx = +x + 0.5, ty = +y + 0.7, tz = +z + 0.5;
       const dx = tx - playerPos.x, dy = ty - playerPos.y, dz = tz - playerPos.z;
       const d2 = dx * dx + dy * dy + dz * dz;
-      if (d2 < RANGE * RANGE) near.push([d2, tx, ty, tz]);
+      if (d2 < RANGE * RANGE) nearTorches.push([d2, tx, ty, tz]);
     }
-    near.sort((a, b) => a[0] - b[0]);
+    nearTorches.sort((a, b) => a[0] - b[0]);
 
-    for (let i = 0; i < POOL; i++) {
-      const light = this.lights[i];
-      if (i < near.length) {
-        light.position.set(near[i][1], near[i][2], near[i][3]);
-        light.intensity = LIGHT_INTENSITY;
+    for (let i = 0; i < TORCH_POOL; i++) {
+      const light = this.torchLights[i];
+      if (i < nearTorches.length) {
+        light.position.set(nearTorches[i][1], nearTorches[i][2], nearTorches[i][3]);
+        light.intensity = TORCH_INT;
         light.visible = true;
       } else {
         light.visible = false;
         light.intensity = 0;
       }
+    }
+
+    // --- Glow mushroom lights (cool cyan) ---
+    const nearGlow = [];
+    this._nearGlowSources(playerPos, nearGlow);
+
+    for (let i = 0; i < GLOW_POOL; i++) {
+      const light = this.glowLights[i];
+      if (i < nearGlow.length) {
+        light.position.set(nearGlow[i][1], nearGlow[i][2], nearGlow[i][3]);
+        light.intensity = GLOW_INT;
+        light.visible = true;
+      } else {
+        light.visible = false;
+        light.intensity = 0;
+      }
+    }
+  }
+
+  // Dispose all pooled lights and torch meshes on teardown.
+  dispose() {
+    for (const light of this.torchLights) { this.scene.remove(light); light.dispose(); }
+    for (const light of this.glowLights)  { this.scene.remove(light); light.dispose(); }
+    for (const mesh of this.models.values()) {
+      this.scene.remove(mesh);
+      mesh.traverse((o) => o.geometry && o.geometry.dispose());
     }
   }
 }

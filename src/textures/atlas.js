@@ -384,6 +384,19 @@ const DRAW = {
     for (const [x, y] of [[2, 2], [9, 2], [2, 9], [9, 9]]) c.fillRect(x, y, 5, 5);
     c.fillStyle = '#3a2a14'; c.fillRect(7, 7, 2, 2); // fuse
   },
+  mega_tnt_side: (c, r) => {
+    paint(c, '#6e1212', (x, y) => (y < 3 || y > 12 ? -22 : 0), 12, r);
+    c.fillStyle = '#f2c200'; c.fillRect(0, 5, 16, 6);                 // yellow hazard band
+    c.fillStyle = '#141414';                                          // black hazard blocks
+    for (let x = 0; x < 16; x += 4) c.fillRect(x, 5, 2, 6);
+    c.fillStyle = '#2c0808'; c.fillRect(0, 4, 16, 1); c.fillRect(0, 11, 16, 1); // trim
+  },
+  mega_tnt_top: (c, r) => {
+    paint(c, '#6e1212', null, 12, r);
+    c.fillStyle = '#f2c200'; c.fillRect(3, 3, 10, 10);                // warning cap
+    c.fillStyle = '#141414'; c.fillRect(5, 5, 6, 6);
+    c.fillStyle = '#f2c200'; c.fillRect(7, 7, 2, 2);                  // fuse glow
+  },
   wool_block: (c, r) => {
     const vn = valueNoise(r, 4);
     // Soft weave: gentle diagonal crosshatch.
@@ -574,6 +587,7 @@ const FACE_TILES = {
   bed_head: { top: 'bed_top_head', side: 'bed_side', bottom: 'planks' },
   fence: t('planks'),
   tnt: { top: 'tnt_top', side: 'tnt_side', bottom: 'tnt_top' },
+  mega_tnt: { top: 'mega_tnt_top', side: 'mega_tnt_side', bottom: 'mega_tnt_top' },
   wool: t('wool_block'),
   pumpkin: { top: 'pumpkin_top', side: 'pumpkin_side', bottom: 'pumpkin_top' },
   melon: { top: 'melon_side', side: 'melon_side', bottom: 'melon_side' },

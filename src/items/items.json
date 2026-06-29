@@ -157,6 +157,13 @@
     "maxStack": 16
   },
   {
+    "name": "mega_tnt",
+    "display": "Mega TNT",
+    "color": "#7a1414",
+    "placeBlock": "mega_tnt",
+    "maxStack": 16
+  },
+  {
     "name": "gunpowder",
     "display": "Gunpowder",
     "color": "#6e6e6e",

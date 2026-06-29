@@ -4,8 +4,14 @@ import { buildBlockCube } from '../items/ItemModels.js';
 import { Sound } from './Sound.js';
 
 const TNT = getBlockId('tnt');
+const MEGA_TNT = getBlockId('mega_tnt');
 const WATER = getBlockId('water');
 const BEDROCK = getBlockId('bedrock');
+
+const TNT_RADIUS = 3.4;
+// Mega TNT (a mini-nuke for carving mountains): far bigger blast + a longer
+// fuse so there's time to run. ~18× the volume of a regular charge.
+export const MEGA_TNT_RADIUS = 9;
 
 // Explosions: primed TNT entities (flashing, falling, fused) and the blast
 // itself — a roughened sphere of block removal, a fireball of particles, and
@@ -23,9 +29,11 @@ export class Explosions {
   }
 
   // Light a TNT at block coords (the block itself is removed by the caller).
-  prime(x, y, z, fuse = 1.8) {
+  // `radius` sets the blast size and `block` the falling visual, so the same
+  // path drives both regular TNT and the much larger mega TNT.
+  prime(x, y, z, fuse = 1.8, radius = TNT_RADIUS, block = 'tnt') {
     const group = new THREE.Group();
-    group.add(buildBlockCube('tnt', 0.96));
+    group.add(buildBlockCube(block, 0.96));
     const flash = new THREE.Mesh(
       new THREE.BoxGeometry(1.0, 1.0, 1.0),
       new THREE.MeshBasicMaterial({ color: '#ffffff', transparent: true, opacity: 0.55, depthWrite: false })
@@ -34,7 +42,7 @@ export class Explosions {
     group.add(flash);
     group.position.set(x + 0.5, y + 0.5, z + 0.5);
     this.scene.add(group);
-    this.primed.push({ pos: group.position, vy: 0, fuse, group, flash });
+    this.primed.push({ pos: group.position, vy: 0, fuse, radius, group, flash });
     Sound.fuse();
   }
 
@@ -59,8 +67,8 @@ export class Explosions {
         this.scene.remove(p.group);
         p.group.traverse((o) => o.geometry && o.geometry.dispose());
         this.primed.splice(i, 1);
-        this.boom(p.pos.x, p.pos.y, p.pos.z, 3.4, ctx, true);
-        if (ctx.broadcast) ctx.broadcast(p.pos.x, p.pos.y, p.pos.z, 3.4);
+        this.boom(p.pos.x, p.pos.y, p.pos.z, p.radius, ctx, true);
+        if (ctx.broadcast) ctx.broadcast(p.pos.x, p.pos.y, p.pos.z, p.radius);
       }
     }
   }
@@ -79,23 +87,30 @@ export class Explosions {
             const id = this.world.getBlock(bx, by, bz);
             if (id === 0 || id === BEDROCK || id === WATER) continue;
             this.world.setBlock(bx, by, bz, 0);
-            if (id === TNT) this.prime(bx, by, bz, 0.3 + Math.random() * 0.4); // chain reaction
+            // Chain reaction: nearby TNT of either kind cooks off on a short fuse.
+            if (id === TNT) this.prime(bx, by, bz, 0.3 + Math.random() * 0.4);
+            else if (id === MEGA_TNT) this.prime(bx, by, bz, 0.3 + Math.random() * 0.4, MEGA_TNT_RADIUS, 'mega_tnt');
           }
         }
       }
     }
 
-    // Fireball + smoke.
-    for (let i = 0; i < 4; i++) {
-      this.particles.burst(x, y, z, [1, 0.5 + Math.random() * 0.35, 0.12], 16, 5);
-      this.particles.burst(x, y, z, [0.25, 0.24, 0.22], 12, 3.5);
+    // Fireball + smoke — bigger blasts throw more fire, further.
+    const blasts = Math.max(4, Math.round(radius * 1.2));
+    const spread = Math.max(5, radius);
+    for (let i = 0; i < blasts; i++) {
+      this.particles.burst(x, y, z, [1, 0.5 + Math.random() * 0.35, 0.12], 16, spread);
+      this.particles.burst(x, y, z, [0.25, 0.24, 0.22], 12, spread * 0.7);
     }
+
+    // Damage scales with blast size; regular TNT/creepers keep their old hit.
+    const power = Math.max(12, radius * 3.5);
 
     // Hurt the local player (each client owns its own vitals).
     const pp = ctx.playerPos;
     const pd = Math.hypot(pp.x - x, (pp.y + 0.9) - y, pp.z - z);
     if (pd < radius * 2) {
-      const dmg = Math.max(1, Math.round((1 - pd / (radius * 2)) * 12));
+      const dmg = Math.max(1, Math.round((1 - pd / (radius * 2)) * power));
       ctx.damagePlayer(dmg, pp.x - x, pp.z - z);
     }
 
@@ -105,7 +120,7 @@ export class Explosions {
         if (m.dead) continue;
         const md = Math.hypot(m.pos.x - x, m.pos.y + 0.5 - y, m.pos.z - z);
         if (md < radius * 1.8) {
-          m.takeDamage(Math.max(1, Math.round((1 - md / (radius * 1.8)) * 14)), new THREE.Vector3(x, y, z));
+          m.takeDamage(Math.max(1, Math.round((1 - md / (radius * 1.8)) * Math.max(14, radius * 4))), new THREE.Vector3(x, y, z));
         }
       }
     }

@@ -13,7 +13,7 @@ import { MobManager } from '../systems/MobManager.js';
 import { TorchLights } from '../systems/TorchLights.js';
 import { Projectiles } from '../systems/Projectiles.js';
 import { Particles } from '../systems/Particles.js';
-import { Explosions } from '../systems/Explosions.js';
+import { Explosions, MEGA_TNT_RADIUS } from '../systems/Explosions.js';
 import { ChessGames } from '../chess/ChessGames.js';
 import { RemotePlayers } from '../net/RemotePlayers.js';
 import { GhostMobs } from '../net/GhostMobs.js';
@@ -273,6 +273,10 @@ export class Game {
         // Light it: the block becomes a primed, flashing entity.
         this.world.setBlock(pos.x, pos.y, pos.z, 0);
         this.explosions.prime(pos.x, pos.y, pos.z);
+      } else if (name === 'mega_tnt') {
+        // Mega TNT: a much larger blast with a longer fuse — get clear!
+        this.world.setBlock(pos.x, pos.y, pos.z, 0);
+        this.explosions.prime(pos.x, pos.y, pos.z, 3.0, MEGA_TNT_RADIUS, 'mega_tnt');
       } else if (name === 'chess_table') {
         this._openChess(pos);
       }

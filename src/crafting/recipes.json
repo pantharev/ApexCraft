@@ -561,6 +561,23 @@
     }
   },
   {
+    "id": "mega_tnt",
+    "type": "shaped",
+    "pattern": [
+      "TTT",
+      "TGT",
+      "TTT"
+    ],
+    "key": {
+      "T": "tnt",
+      "G": "gunpowder"
+    },
+    "result": {
+      "item": "mega_tnt",
+      "count": 1
+    }
+  },
+  {
     "id": "sandstone",
     "type": "shaped",
     "pattern": [

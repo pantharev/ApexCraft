@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { getItem } from '../items/ItemRegistry.js';
+import { getItem, ALL_ITEMS } from '../items/ItemRegistry.js';
 import { leftClick, rightClick, maxStackOf } from '../player/slotOps.js';
 import { matchRecipe } from '../crafting/CraftingEngine.js';
 import { getSmeltTime } from '../crafting/Smelting.js';
@@ -7,6 +7,10 @@ import { itemIconURL } from '../textures/icons.js';
 import { RecipeBook } from './RecipeBook.jsx';
 
 const SLOT = 46; // px
+
+// Take-only output slots (crafting result, furnace output): they have no
+// "source" to return a swapped item to, so touch-drag swap-return skips them.
+const TAKE_ONLY = new Set(['out', 'fout']);
 
 // Textured item icon (pixelated). Falls back cleanly if no icon.
 function ItemSprite({ name, inset = 5 }) {
@@ -96,7 +100,7 @@ function InventoryGrids({ inventory, onLeft, onRight, setHover, touch }) {
 //   • long-press     = the right-click action (split stack / take half)
 // Pointer capture keeps move/up events flowing even when the finger leaves
 // the slot; the drop target is found under the release point.
-function useSlotPointer(leftByKey, rightByKey, setMouse) {
+function useSlotPointer(leftByKey, rightByKey, setMouse, cursorRef) {
   const ref = useRef(null); // { key, x, y, dragging, done, timer }
   const clearTimer = () => {
     if (ref.current && ref.current.timer) {
@@ -144,7 +148,12 @@ function useSlotPointer(leftByKey, rightByKey, setMouse) {
           const el = document.elementFromPoint(e.clientX, e.clientY);
           const holder = el && el.closest && el.closest('[data-slotkey]');
           const key = holder && holder.dataset.slotkey;
-          if (key && key !== s.key) leftByKey(key); // drop on the release slot
+          if (key && key !== s.key) leftByKey(key); // drop/swap onto the release slot
+          // Whatever is still on the cursor — the block displaced by a swap, or a
+          // drag let go on the same slot / outside any slot — goes back into the
+          // now-empty source slot, so a touch drag always ends clean instead of
+          // leaving a block stuck to the cursor (the full-palette creative case).
+          if (cursorRef && cursorRef.current && !TAKE_ONLY.has(s.key)) leftByKey(s.key);
         } else {
           leftByKey(s.key); // plain tap
         }
@@ -226,6 +235,9 @@ function CraftingScreen({ inventory, gridSize, title }) {
   const [hover, setHover] = useState(null);
 
   const cursorRef = useRef(null); cursorRef.current = cursor;
+  // Update the ref synchronously so two slot ops can run in one pointer event
+  // (e.g. a touch swap: drop on target, then return the displaced block to source).
+  const setCur = (c) => { cursorRef.current = c; setCursor(c); };
   const gridRef = useRef(grid); gridRef.current = grid;
 
   useEffect(() => () => {
@@ -239,10 +251,10 @@ function CraftingScreen({ inventory, gridSize, title }) {
     [grid, gridSize]
   );
 
-  const invLeft = (i) => setCursor(inventory.clickSlot(i, cursorRef.current));
-  const invRight = (i) => setCursor(inventory.rightClickSlot(i, cursorRef.current));
-  const cellLeft = (j) => { const r = leftClick(grid[j], cursorRef.current); const g = grid.slice(); g[j] = r.slot; setGrid(g); setCursor(r.cursor); };
-  const cellRight = (j) => { const r = rightClick(grid[j], cursorRef.current); const g = grid.slice(); g[j] = r.slot; setGrid(g); setCursor(r.cursor); };
+  const invLeft = (i) => setCur(inventory.clickSlot(i, cursorRef.current));
+  const invRight = (i) => setCur(inventory.rightClickSlot(i, cursorRef.current));
+  const cellLeft = (j) => { const r = leftClick(grid[j], cursorRef.current); const g = grid.slice(); g[j] = r.slot; setGrid(g); setCur(r.cursor); };
+  const cellRight = (j) => { const r = rightClick(grid[j], cursorRef.current); const g = grid.slice(); g[j] = r.slot; setGrid(g); setCur(r.cursor); };
   const consumeOnce = (g) => g.map((s) => (s ? (s.count > 1 ? { ...s, count: s.count - 1 } : null) : null));
 
   const takeOutput = (shift) => {
@@ -261,7 +273,7 @@ function CraftingScreen({ inventory, gridSize, title }) {
     }
     const c = cursorRef.current;
     if (c && (c.item !== result.item || c.count + result.count > maxStackOf(result.item))) return;
-    setCursor(c ? { item: c.item, count: c.count + result.count } : { ...result });
+    setCur(c ? { item: c.item, count: c.count + result.count } : { ...result });
     setGrid(consumeOnce(grid));
   };
 
@@ -276,7 +288,7 @@ function CraftingScreen({ inventory, gridSize, title }) {
     else if (key[0] === 'c') cellRight(+key.slice(1));
     else invRight(+key.slice(1));
   };
-  const drag = useSlotPointer(leftByKey, rightByKey, setMouse);
+  const drag = useSlotPointer(leftByKey, rightByKey, setMouse, cursorRef);
 
   return (
     <Panel title={title}
@@ -325,25 +337,28 @@ function FurnaceScreen({ inventory, furnace }) {
   const [hover, setHover] = useState(null);
   const [, force] = useState(0);
   const cursorRef = useRef(null); cursorRef.current = cursor;
+  // Update the ref synchronously so two slot ops can run in one pointer event
+  // (e.g. a touch swap: drop on target, then return the displaced block to source).
+  const setCur = (c) => { cursorRef.current = c; setCursor(c); };
 
   // Re-render periodically so the burn/cook bars animate.
   useEffect(() => { const id = setInterval(() => force((t) => t + 1), 80); return () => clearInterval(id); }, []);
   useEffect(() => () => { const c = cursorRef.current; if (c) inventory.addItem(c.item, c.count); }, [inventory]);
 
   const f = furnace;
-  const invLeft = (i) => setCursor(inventory.clickSlot(i, cursorRef.current));
-  const invRight = (i) => setCursor(inventory.rightClickSlot(i, cursorRef.current));
-  const slotLeft = (name) => { const r = leftClick(f[name], cursorRef.current); f[name] = r.slot; setCursor(r.cursor); };
-  const slotRight = (name) => { const r = rightClick(f[name], cursorRef.current); f[name] = r.slot; setCursor(r.cursor); };
+  const invLeft = (i) => setCur(inventory.clickSlot(i, cursorRef.current));
+  const invRight = (i) => setCur(inventory.rightClickSlot(i, cursorRef.current));
+  const slotLeft = (name) => { const r = leftClick(f[name], cursorRef.current); f[name] = r.slot; setCur(r.cursor); };
+  const slotRight = (name) => { const r = rightClick(f[name], cursorRef.current); f[name] = r.slot; setCur(r.cursor); };
 
   const takeOutput = () => {
     if (!f.output) return;
     const c = cursorRef.current;
-    if (!c) { setCursor({ ...f.output }); f.output = null; return; }
+    if (!c) { setCur({ ...f.output }); f.output = null; return; }
     if (c.item === f.output.item) {
       const move = Math.min(maxStackOf(c.item) - c.count, f.output.count);
       if (move > 0) {
-        setCursor({ item: c.item, count: c.count + move });
+        setCur({ item: c.item, count: c.count + move });
         f.output = f.output.count - move > 0 ? { item: f.output.item, count: f.output.count - move } : null;
       }
     }
@@ -365,7 +380,7 @@ function FurnaceScreen({ inventory, furnace }) {
     else if (key === 'fout') takeOutput();
     else invRight(+key.slice(1));
   };
-  const drag = useSlotPointer(leftByKey, rightByKey, setMouse);
+  const drag = useSlotPointer(leftByKey, rightByKey, setMouse, cursorRef);
 
   const SlotBox = ({ stack, onLeft, onRight, slotKey }) => (
     <Slot stack={stack} onLeft={onLeft} onRight={onRight} slotKey={slotKey}
@@ -429,18 +444,21 @@ export function ChestScreen({ chest, inventory }) {
   const [mouse, setMouse] = useState({ x: 0, y: 0 });
   const [hover, setHover] = useState(null);
   const cursorRef = useRef(null); cursorRef.current = cursor;
+  // Update the ref synchronously so two slot ops can run in one pointer event
+  // (e.g. a touch swap: drop on target, then return the displaced block to source).
+  const setCur = (c) => { cursorRef.current = c; setCursor(c); };
 
   // Drop any cursor-held stack back into the inventory on close.
   useEffect(() => () => { const c = cursorRef.current; if (c) inventory.addItem(c.item, c.count); }, [inventory]);
 
-  const chestLeft = (i) => { const r = leftClick(chest.get(i), cursorRef.current); chest.set(i, r.slot); setCursor(r.cursor); force((v) => v + 1); };
-  const chestRight = (i) => { const r = rightClick(chest.get(i), cursorRef.current); chest.set(i, r.slot); setCursor(r.cursor); force((v) => v + 1); };
-  const invLeft = (i) => setCursor(inventory.clickSlot(i, cursorRef.current));
-  const invRight = (i) => setCursor(inventory.rightClickSlot(i, cursorRef.current));
+  const chestLeft = (i) => { const r = leftClick(chest.get(i), cursorRef.current); chest.set(i, r.slot); setCur(r.cursor); force((v) => v + 1); };
+  const chestRight = (i) => { const r = rightClick(chest.get(i), cursorRef.current); chest.set(i, r.slot); setCur(r.cursor); force((v) => v + 1); };
+  const invLeft = (i) => setCur(inventory.clickSlot(i, cursorRef.current));
+  const invRight = (i) => setCur(inventory.rightClickSlot(i, cursorRef.current));
 
   const leftByKey = (key) => { if (key[0] === 'g') chestLeft(+key.slice(1)); else invLeft(+key.slice(1)); };
   const rightByKey = (key) => { if (key[0] === 'g') chestRight(+key.slice(1)); else invRight(+key.slice(1)); };
-  const drag = useSlotPointer(leftByKey, rightByKey, setMouse);
+  const drag = useSlotPointer(leftByKey, rightByKey, setMouse, cursorRef);
 
   const slots = [];
   for (let i = 0; i < chest.size; i++) slots.push(i);
@@ -464,9 +482,66 @@ export function ChestScreen({ chest, inventory }) {
   );
 }
 
+// Creative palette: a scrollable grid of every block (then the rest of the
+// items), each an infinite source. Tap/click one to grab a full stack onto the
+// cursor, then drop it into your hotbar or inventory below. Placement never
+// depletes in creative, so a single grab lasts forever. The palette scrolls on
+// touch (it isn't a drag target), while the inventory grids keep full drag/swap.
+const PALETTE = [
+  ...ALL_ITEMS.filter((it) => it.placeBlock).map((it) => it.name),
+  ...ALL_ITEMS.filter((it) => !it.placeBlock).map((it) => it.name),
+];
+
+function CreativeInventory({ inventory }) {
+  useInventoryVersion(inventory);
+  const [cursor, setCursor] = useState(null);
+  const [mouse, setMouse] = useState({ x: 0, y: 0 });
+  const [hover, setHover] = useState(null);
+
+  const cursorRef = useRef(null); cursorRef.current = cursor;
+  const setCur = (c) => { cursorRef.current = c; setCursor(c); };
+
+  // Drop any held stack back into the inventory on close.
+  useEffect(() => () => { const c = cursorRef.current; if (c) inventory.addItem(c.item, c.count); }, [inventory]);
+
+  // Grab a fresh full stack of a palette block onto the cursor (infinite).
+  const grab = (name) => setCur({ item: name, count: maxStackOf(name) });
+
+  const invLeft = (i) => setCur(inventory.clickSlot(i, cursorRef.current));
+  const invRight = (i) => setCur(inventory.rightClickSlot(i, cursorRef.current));
+  const drag = useSlotPointer((key) => invLeft(+key.slice(1)), (key) => invRight(+key.slice(1)), setMouse, cursorRef);
+
+  return (
+    <Panel title="Creative Inventory"
+      onMouseMove={(e) => setMouse({ x: e.clientX, y: e.clientY })}>
+      <div style={{
+        display: 'grid', gridTemplateColumns: `repeat(9, ${SLOT}px)`, gap: 2,
+        maxHeight: SLOT * 5 + 8, overflowY: 'auto', marginBottom: 14, touchAction: 'pan-y',
+      }}>
+        {PALETTE.map((name, i) => (
+          <div key={i} onClick={() => grab(name)}
+            onMouseEnter={() => setHover(name)} onMouseLeave={() => setHover(null)}
+            style={{
+              width: SLOT, height: SLOT, boxSizing: 'border-box', border: '2px solid #555',
+              background: '#8b8b8b', position: 'relative', cursor: 'pointer',
+            }}>
+            <ItemSprite name={name} />
+          </div>
+        ))}
+      </div>
+      <InventoryGrids inventory={inventory} onLeft={invLeft} onRight={invRight} setHover={setHover} touch={drag} />
+      <div style={{ font: '12px system-ui', color: '#444', marginTop: 10, opacity: 0.8 }}>
+        Tap a block to grab it, then drop it into your hotbar · scroll the palette for more<br />{TOUCH_HINT}
+      </div>
+      <CursorLayer cursor={cursor} mouse={mouse} hover={hover} />
+    </Panel>
+  );
+}
+
 export function InventoryPanel({ inventory }) {
   return <CraftingScreen inventory={inventory} gridSize={2} title="Inventory" />;
 }
+export { CreativeInventory };
 export function CraftingTableScreen({ inventory }) {
   return <CraftingScreen inventory={inventory} gridSize={3} title="Crafting Table" />;
 }

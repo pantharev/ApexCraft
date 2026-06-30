@@ -1,8 +1,12 @@
 import * as THREE from 'three';
+import { buildBlockCube } from '../items/ItemModels.js';
+import { getBlock } from '../blocks/BlockRegistry.js';
 
 // Renders the other players in a multiplayer room: a blocky humanoid avatar
 // per peer with a floating name tag, interpolated between network snapshots
-// (~15 Hz) so movement looks smooth at render rate.
+// (~15 Hz) so movement looks smooth at render rate. In Prop Hunt a hider's
+// avatar is swapped for a textured block cube (setDisguise) so they blend into
+// the arena's real props.
 
 const LERP = 12; // snap speed toward the latest snapshot (higher = tighter)
 
@@ -98,10 +102,48 @@ export class RemotePlayers {
     this.map.set(id, {
       id, group,
       legs: group.userData.legs,
+      body: group.children.slice(), // humanoid parts + name tag (hidden when disguised)
+      disguiseMesh: null,
+      disguiseId: 0,
       cur: { x: 0, y: 0, z: 0, yaw: 0 },
       target: null,
       walkPhase: 0,
     });
+  }
+
+  // Prop Hunt: swap a peer's humanoid avatar for a textured block cube (or back
+  // when blockId is 0/null). Cheap to call every frame — only rebuilds on change.
+  setDisguise(id, blockId) {
+    const p = this.map.get(id);
+    if (!p) return;
+    blockId = blockId || 0;
+    if (p.disguiseId === blockId) return;
+    p.disguiseId = blockId;
+    if (p.disguiseMesh) { p.group.remove(p.disguiseMesh); p.disguiseMesh = null; }
+    if (blockId) {
+      // Full block size so it matches the arena's real placed blocks.
+      p.disguiseMesh = buildBlockCube(getBlock(blockId).name, 1.0, true);
+      p.disguiseMesh.position.y = 0.5; // sit the block on the ground
+      p.group.add(p.disguiseMesh);
+    }
+    for (const b of p.body) b.visible = !blockId;
+  }
+
+  // Ray vs. each peer (sphere test) for seeker tagging: nearest hit id or null.
+  raycast(origin, dir, maxDist = 5) {
+    let bestId = null, bestT = Infinity;
+    for (const p of this.map.values()) {
+      if (!p.target) continue;
+      const cx = p.cur.x - origin.x, cy = (p.cur.y + 0.9) - origin.y, cz = p.cur.z - origin.z;
+      const t = cx * dir.x + cy * dir.y + cz * dir.z; // projection onto the ray
+      if (t < 0 || t > maxDist) continue;
+      const dx = p.cur.x - (origin.x + dir.x * t);
+      const dy = (p.cur.y + 0.9) - (origin.y + dir.y * t);
+      const dz = p.cur.z - (origin.z + dir.z * t);
+      const r = p.disguiseId ? 0.75 : 0.6; // disguised blocks are a touch wider
+      if (Math.hypot(dx, dy, dz) <= r && t < bestT) { bestT = t; bestId = p.id; }
+    }
+    return bestId;
   }
 
   remove(id) {

@@ -23,6 +23,7 @@ export class Interaction {
     this.heldItem = null;   // full item def (doors/stairs place specially)
     this.currentTool = null; // null = bare hand (tier 0, speed 1)
     this.creative = false;  // creative mode: instant break, no drops
+    this.locked = false;    // hide & seek: no breaking or placing (arena is fixed)
     this.onPlaced = null; // called after a successful placement
     this.onUseBlock = null; // called when right-clicking an interactive block
     this.onBlockBroken = null; // called after a block is removed (name, coords)
@@ -70,6 +71,7 @@ export class Interaction {
   // start breaking. Shared by mouse and touch input.
   primaryDown() {
     if (this.onAttack && this.onAttack()) return;
+    if (this.locked) return; // no mining in a locked (hide & seek) world
     this.breaking = true;
   }
 
@@ -92,12 +94,14 @@ export class Interaction {
 
   // Touch hold: start mining only (no mob attack — that's the tap).
   startMining() {
+    if (this.locked) return; // no mining in a locked (hide & seek) world
     this.breaking = true;
   }
 
   // Right-click: toggle a door, use an interactive block (crafting table,
   // furnace, chest, bed), or place the held block.
   _rightClick() {
+    if (this.locked) return; // no placing/using in a locked (hide & seek) world
     if (this.target) {
       const b = this.target.block;
       const block = getBlock(this.world.getBlock(b.x, b.y, b.z));

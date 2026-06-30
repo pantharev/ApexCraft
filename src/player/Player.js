@@ -57,6 +57,8 @@ export class Player {
     this.locked = false;
     this.enabled = true; // false while a UI (inventory) is open
     this.speedBoost = 1; // dev: walk/fly speed multiplier (G on localhost)
+    this.thirdPerson = false; // orbit camera (hide & seek: hiders see their block)
+    this.camDist = 4;        // third-person camera pull-back distance
 
     this._bindEvents();
   }
@@ -290,13 +292,22 @@ export class Player {
     else this._peakY = Math.max(this._peakY, this.pos.y);
 
     // Sync camera.
-    this.camera.position.set(this.pos.x, this.pos.y + EYE, this.pos.z);
     const dirVec = new THREE.Vector3(
       -Math.sin(this.yaw) * Math.cos(this.pitch),
       Math.sin(this.pitch),
       -Math.cos(this.yaw) * Math.cos(this.pitch)
     );
-    this.camera.lookAt(this.camera.position.clone().add(dirVec));
+    if (this.thirdPerson) {
+      // Orbit behind/above the feet so the player can see their own disguise
+      // block. Pull back along the look direction, clamped above the floor.
+      const target = new THREE.Vector3(this.pos.x, this.pos.y + 0.6, this.pos.z);
+      this.camera.position.copy(target).addScaledVector(dirVec, -this.camDist);
+      this.camera.position.y = Math.max(this.camera.position.y, this.pos.y + 0.4);
+      this.camera.lookAt(target);
+    } else {
+      this.camera.position.set(this.pos.x, this.pos.y + EYE, this.pos.z);
+      this.camera.lookAt(this.camera.position.clone().add(dirVec));
+    }
   }
 
   // Shove the player away from an attacker: horizontal impulse + a hop.

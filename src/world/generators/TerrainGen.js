@@ -8,6 +8,7 @@ import { generateOres } from './OreGen.js';
 import { generateTrees } from '../structures/Tree.js';
 import { generateVillages } from '../structures/Villages.js';
 import { generateDecorations } from '../structures/Decorations.js';
+import { generateArena, FLOOR_Y } from '../arenas/ArenaGen.js';
 
 const STONE = getBlockId('stone');
 const DIRT = getBlockId('dirt');
@@ -19,11 +20,18 @@ const CLAY = getBlockId('clay');
 const WATER = getBlockId('water');
 const BEDROCK = getBlockId('bedrock');
 const ANDESITE = getBlockId('andesite');
+const GRASS = getBlockId('grass');
+
+// Generation mode, set once before a Game's chunks generate (see Game ctor).
+// 'hideseek' swaps the procedural terrain for a flat Prop Hunt arena.
+let GEN_MODE = null;
+export function setGenMode(m) { GEN_MODE = m || null; }
 
 // The heightfield itself lives in Height.js so structures (villages) can
 // query terrain shape without importing the whole generator.
 
 export function generateChunk(chunk) {
+  if (GEN_MODE === 'hideseek') { generateArenaChunk(chunk); return; }
   const baseX = chunk.cx * CHUNK_SIZE;
   const baseZ = chunk.cz * CHUNK_SIZE;
 
@@ -76,6 +84,21 @@ export function generateChunk(chunk) {
   generateVillages(chunk); // before trees so trees skip village ground
   generateTrees(chunk);
   generateDecorations(chunk);
+  chunk.generated = true;
+  chunk.dirty = true;
+}
+
+// Flat Prop Hunt base: bedrock floor, stone fill, a grass surface at FLOOR_Y,
+// air above — no caves/ores/villages/trees. The arena is stamped on top.
+function generateArenaChunk(chunk) {
+  for (let x = 0; x < CHUNK_SIZE; x++) {
+    for (let z = 0; z < CHUNK_SIZE; z++) {
+      for (let y = 0; y <= FLOOR_Y; y++) {
+        chunk.set(x, y, z, y === 0 ? BEDROCK : y === FLOOR_Y ? GRASS : STONE);
+      }
+    }
+  }
+  generateArena(chunk);
   chunk.generated = true;
   chunk.dirty = true;
 }

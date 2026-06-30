@@ -113,6 +113,20 @@ try {
   host.emit('chessState', { key: '1,64,2', turn: 'w' });
   ok((await chessStateP).key === '1,64,2', 'chess state broadcasts from host');
 
+  // --- hide & seek match routing: guest intent -> host; host state -> room + stored ---
+  const matchP = once(host, 'match');
+  guest.emit('match', { action: 'start' });
+  const mm = await matchP;
+  ok(mm.action === 'start' && mm.from === guest.id, 'match intent routes to host with sender id');
+  const matchStateP = once(guest, 'matchState');
+  host.emit('matchState', { phase: 'seeking', round: 1, roles: { a: 'seeker' } });
+  ok((await matchStateP).phase === 'seeking', 'match state broadcasts from host');
+  const ml = io(URL);
+  const j3 = await ack(ml, 'join', { code: h.code, name: 'MatchLate' });
+  ok(j3.match && j3.match.phase === 'seeking', 'late joiner receives the stored match state');
+  ml.disconnect();
+  await wait(50);
+
   // --- time sync (host only) ---
   const timeP = once(guest, 'time');
   host.emit('time', 0.77);

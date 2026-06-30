@@ -13,7 +13,7 @@ import { MobManager } from '../systems/MobManager.js';
 import { TorchLights } from '../systems/TorchLights.js';
 import { Projectiles } from '../systems/Projectiles.js';
 import { Particles } from '../systems/Particles.js';
-import { Explosions, MEGA_TNT_RADIUS } from '../systems/Explosions.js';
+import { Explosions, MEGA_TNT_RADIUS, NUKE_RADIUS } from '../systems/Explosions.js';
 import { ChessGames } from '../chess/ChessGames.js';
 import { RemotePlayers } from '../net/RemotePlayers.js';
 import { GhostMobs } from '../net/GhostMobs.js';
@@ -277,6 +277,10 @@ export class Game {
         // Mega TNT: a much larger blast with a longer fuse — get clear!
         this.world.setBlock(pos.x, pos.y, pos.z, 0);
         this.explosions.prime(pos.x, pos.y, pos.z, 3.0, MEGA_TNT_RADIUS, 'mega_tnt');
+      } else if (name === 'nuke') {
+        // Nuke: the biggest blast in the game and the longest fuse — RUN.
+        this.world.setBlock(pos.x, pos.y, pos.z, 0);
+        this.explosions.prime(pos.x, pos.y, pos.z, 4.5, NUKE_RADIUS, 'nuke');
       } else if (name === 'chess_table') {
         this._openChess(pos);
       }

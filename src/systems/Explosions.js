@@ -5,6 +5,7 @@ import { Sound } from './Sound.js';
 
 const TNT = getBlockId('tnt');
 const MEGA_TNT = getBlockId('mega_tnt');
+const NUKE = getBlockId('nuke');
 const WATER = getBlockId('water');
 const BEDROCK = getBlockId('bedrock');
 
@@ -12,6 +13,9 @@ const TNT_RADIUS = 3.4;
 // Mega TNT (a mini-nuke for carving mountains): far bigger blast + a longer
 // fuse so there's time to run. ~18× the volume of a regular charge.
 export const MEGA_TNT_RADIUS = 9;
+// Nuke: the big one — roughly 5-6× the volume of a Mega TNT. Levels hills and
+// digs craters. The fuse is longer still (set where it's primed): run.
+export const NUKE_RADIUS = 16;
 
 // Explosions: primed TNT entities (flashing, falling, fused) and the blast
 // itself — a roughened sphere of block removal, a fireball of particles, and
@@ -90,6 +94,7 @@ export class Explosions {
             // Chain reaction: nearby TNT of either kind cooks off on a short fuse.
             if (id === TNT) this.prime(bx, by, bz, 0.3 + Math.random() * 0.4);
             else if (id === MEGA_TNT) this.prime(bx, by, bz, 0.3 + Math.random() * 0.4, MEGA_TNT_RADIUS, 'mega_tnt');
+            else if (id === NUKE) this.prime(bx, by, bz, 0.3 + Math.random() * 0.4, NUKE_RADIUS, 'nuke');
           }
         }
       }

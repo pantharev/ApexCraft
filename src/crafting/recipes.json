@@ -578,6 +578,23 @@
     }
   },
   {
+    "id": "nuke",
+    "type": "shaped",
+    "pattern": [
+      "MMM",
+      "MGM",
+      "MMM"
+    ],
+    "key": {
+      "M": "mega_tnt",
+      "G": "gunpowder"
+    },
+    "result": {
+      "item": "nuke",
+      "count": 1
+    }
+  },
+  {
     "id": "sandstone",
     "type": "shaped",
     "pattern": [

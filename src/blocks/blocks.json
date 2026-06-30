@@ -658,6 +658,23 @@
     ]
   },
   {
+    "id": 54,
+    "name": "nuke",
+    "solid": true,
+    "transparent": false,
+    "interactive": true,
+    "hardness": 0,
+    "drops": [
+      {
+        "item": "nuke",
+        "count": [
+          1,
+          1
+        ]
+      }
+    ]
+  },
+  {
     "id": 40,
     "name": "wool",
     "solid": true,

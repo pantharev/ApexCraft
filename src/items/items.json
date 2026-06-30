@@ -164,6 +164,13 @@
     "maxStack": 16
   },
   {
+    "name": "nuke",
+    "display": "Nuke",
+    "color": "#1f7a2e",
+    "placeBlock": "nuke",
+    "maxStack": 16
+  },
+  {
     "name": "gunpowder",
     "display": "Gunpowder",
     "color": "#6e6e6e",

@@ -397,6 +397,22 @@ const DRAW = {
     c.fillStyle = '#141414'; c.fillRect(5, 5, 6, 6);
     c.fillStyle = '#f2c200'; c.fillRect(7, 7, 2, 2);                  // fuse glow
   },
+  nuke_side: (c, r) => {
+    paint(c, '#16261a', (x, y) => (y < 3 || y > 12 ? -22 : 0), 12, r);
+    c.fillStyle = '#2fbf4a'; c.fillRect(0, 5, 16, 6);                 // radioactive green band
+    c.fillStyle = '#0c160f';                                         // dark trefoil blades
+    for (const [x, y] of [[8, 4], [4, 11], [12, 11]]) {              // three blades around center
+      c.beginPath(); c.moveTo(8, 8); c.lineTo(x, y); c.lineTo(x + (x === 8 ? 0 : (x < 8 ? 2 : -2)), y + (y < 8 ? 1 : -1)); c.closePath(); c.fill();
+    }
+    c.fillStyle = '#0c160f'; c.fillRect(7, 7, 2, 2);                  // hub
+    c.fillStyle = '#0a120c'; c.fillRect(0, 4, 16, 1); c.fillRect(0, 11, 16, 1); // trim
+  },
+  nuke_top: (c, r) => {
+    paint(c, '#16261a', null, 12, r);
+    c.fillStyle = '#2fbf4a'; c.fillRect(3, 3, 10, 10);               // warning cap
+    c.fillStyle = '#0c160f'; c.fillRect(5, 5, 6, 6);
+    c.fillStyle = '#7dff9a'; c.fillRect(7, 7, 2, 2);                 // glowing fuse
+  },
   wool_block: (c, r) => {
     const vn = valueNoise(r, 4);
     // Soft weave: gentle diagonal crosshatch.
@@ -588,6 +604,7 @@ const FACE_TILES = {
   fence: t('planks'),
   tnt: { top: 'tnt_top', side: 'tnt_side', bottom: 'tnt_top' },
   mega_tnt: { top: 'mega_tnt_top', side: 'mega_tnt_side', bottom: 'mega_tnt_top' },
+  nuke: { top: 'nuke_top', side: 'nuke_side', bottom: 'nuke_top' },
   wool: t('wool_block'),
   pumpkin: { top: 'pumpkin_top', side: 'pumpkin_side', bottom: 'pumpkin_top' },
   melon: { top: 'melon_side', side: 'melon_side', bottom: 'melon_side' },

@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { getItem } from '../items/ItemRegistry.js';
+import { getItem, ALL_ITEMS } from '../items/ItemRegistry.js';
 import { leftClick, rightClick, maxStackOf } from '../player/slotOps.js';
 import { matchRecipe } from '../crafting/CraftingEngine.js';
 import { getSmeltTime } from '../crafting/Smelting.js';
@@ -482,9 +482,66 @@ export function ChestScreen({ chest, inventory }) {
   );
 }
 
+// Creative palette: a scrollable grid of every block (then the rest of the
+// items), each an infinite source. Tap/click one to grab a full stack onto the
+// cursor, then drop it into your hotbar or inventory below. Placement never
+// depletes in creative, so a single grab lasts forever. The palette scrolls on
+// touch (it isn't a drag target), while the inventory grids keep full drag/swap.
+const PALETTE = [
+  ...ALL_ITEMS.filter((it) => it.placeBlock).map((it) => it.name),
+  ...ALL_ITEMS.filter((it) => !it.placeBlock).map((it) => it.name),
+];
+
+function CreativeInventory({ inventory }) {
+  useInventoryVersion(inventory);
+  const [cursor, setCursor] = useState(null);
+  const [mouse, setMouse] = useState({ x: 0, y: 0 });
+  const [hover, setHover] = useState(null);
+
+  const cursorRef = useRef(null); cursorRef.current = cursor;
+  const setCur = (c) => { cursorRef.current = c; setCursor(c); };
+
+  // Drop any held stack back into the inventory on close.
+  useEffect(() => () => { const c = cursorRef.current; if (c) inventory.addItem(c.item, c.count); }, [inventory]);
+
+  // Grab a fresh full stack of a palette block onto the cursor (infinite).
+  const grab = (name) => setCur({ item: name, count: maxStackOf(name) });
+
+  const invLeft = (i) => setCur(inventory.clickSlot(i, cursorRef.current));
+  const invRight = (i) => setCur(inventory.rightClickSlot(i, cursorRef.current));
+  const drag = useSlotPointer((key) => invLeft(+key.slice(1)), (key) => invRight(+key.slice(1)), setMouse, cursorRef);
+
+  return (
+    <Panel title="Creative Inventory"
+      onMouseMove={(e) => setMouse({ x: e.clientX, y: e.clientY })}>
+      <div style={{
+        display: 'grid', gridTemplateColumns: `repeat(9, ${SLOT}px)`, gap: 2,
+        maxHeight: SLOT * 5 + 8, overflowY: 'auto', marginBottom: 14, touchAction: 'pan-y',
+      }}>
+        {PALETTE.map((name, i) => (
+          <div key={i} onClick={() => grab(name)}
+            onMouseEnter={() => setHover(name)} onMouseLeave={() => setHover(null)}
+            style={{
+              width: SLOT, height: SLOT, boxSizing: 'border-box', border: '2px solid #555',
+              background: '#8b8b8b', position: 'relative', cursor: 'pointer',
+            }}>
+            <ItemSprite name={name} />
+          </div>
+        ))}
+      </div>
+      <InventoryGrids inventory={inventory} onLeft={invLeft} onRight={invRight} setHover={setHover} touch={drag} />
+      <div style={{ font: '12px system-ui', color: '#444', marginTop: 10, opacity: 0.8 }}>
+        Tap a block to grab it, then drop it into your hotbar · scroll the palette for more<br />{TOUCH_HINT}
+      </div>
+      <CursorLayer cursor={cursor} mouse={mouse} hover={hover} />
+    </Panel>
+  );
+}
+
 export function InventoryPanel({ inventory }) {
   return <CraftingScreen inventory={inventory} gridSize={2} title="Inventory" />;
 }
+export { CreativeInventory };
 export function CraftingTableScreen({ inventory }) {
   return <CraftingScreen inventory={inventory} gridSize={3} title="Crafting Table" />;
 }

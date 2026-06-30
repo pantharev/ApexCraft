@@ -23,7 +23,7 @@ import { saveWorld } from '../systems/Storage.js';
 import { WORLD_SEED } from '../config.js';
 import { villageForCell, VILLAGE_CELL } from '../world/structures/VillagePlan.js';
 import { getBlockId } from '../blocks/BlockRegistry.js';
-import { getItem, ALL_ITEMS } from '../items/ItemRegistry.js';
+import { getItem } from '../items/ItemRegistry.js';
 import { SEA_LEVEL } from '../config.js';
 
 // A small starter kit so placement and tools are usable before crafting exists
@@ -43,14 +43,14 @@ const STARTER_KIT = [
   ['arrow', 32],
 ];
 
-// Creative loadout: one of every placeable block (so the whole palette is at
-// hand) plus the top tools — placement never consumes, so these never run out.
-// Capped to the 36 inventory slots; blocks come first.
-const CREATIVE_KIT = (() => {
-  const blocks = ALL_ITEMS.filter((it) => it.placeBlock).map((it) => it.name);
-  const tools = ['diamond_pickaxe', 'diamond_sword', 'diamond_axe'];
-  return [...blocks, ...tools].slice(0, 36).map((name) => [name, 1]);
-})();
+// Creative loadout: just the top tools in hand. Every block is reachable from
+// the scrollable creative palette (see CreativeInventory), so the inventory is
+// otherwise left empty for the player to fill. Placement never consumes.
+const CREATIVE_KIT = [
+  ['diamond_pickaxe', 1],
+  ['diamond_axe', 1],
+  ['diamond_sword', 1],
+];
 
 // Owns the Three.js renderer/scene/camera, the World, and the Player, plus the
 // requestAnimationFrame loop. Mounted by the React <App/> into a container div.

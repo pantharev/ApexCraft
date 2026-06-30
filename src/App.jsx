@@ -5,7 +5,7 @@ import { listWorlds, loadWorld, deleteWorld } from './systems/Storage.js';
 import { Net } from './net/Net.js';
 import { MainMenu, PauseMenu } from './ui/Menus.jsx';
 import { Landing } from './ui/Landing.jsx';
-import { Hotbar, InventoryPanel, CraftingTableScreen, FurnaceScreen, ChestScreen } from './ui/InventoryUI.jsx';
+import { Hotbar, InventoryPanel, CreativeInventory, CraftingTableScreen, FurnaceScreen, ChestScreen } from './ui/InventoryUI.jsx';
 import { ChessScreen } from './ui/ChessScreen.jsx';
 import { TouchControls } from './ui/TouchControls.jsx';
 
@@ -250,7 +250,11 @@ export default function App() {
             }}>✕ Close</button>
           )}
 
-          {gameRef.current?.inventory && openScreen === 'inventory' && <InventoryPanel inventory={gameRef.current.inventory} />}
+          {gameRef.current?.inventory && openScreen === 'inventory' && (
+            gameRef.current.creative
+              ? <CreativeInventory inventory={gameRef.current.inventory} />
+              : <InventoryPanel inventory={gameRef.current.inventory} />
+          )}
           {gameRef.current?.inventory && openScreen === 'crafting' && <CraftingTableScreen inventory={gameRef.current.inventory} />}
           {gameRef.current?.inventory && openScreen === 'furnace' && (
             <FurnaceScreen inventory={gameRef.current.inventory} furnace={gameRef.current.activeFurnace} />

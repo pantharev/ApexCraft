@@ -7,7 +7,7 @@ import { MainMenu, PauseMenu } from './ui/Menus.jsx';
 import { Landing } from './ui/Landing.jsx';
 import { Hotbar, InventoryPanel, CreativeInventory, CraftingTableScreen, FurnaceScreen, ChestScreen } from './ui/InventoryUI.jsx';
 import { ChessScreen } from './ui/ChessScreen.jsx';
-import { HideSeekHUD } from './ui/HideSeekUI.jsx';
+import { HideSeekHUD, TauntWheel, HideSeekTouch } from './ui/HideSeekUI.jsx';
 import { TouchControls } from './ui/TouchControls.jsx';
 
 const IS_TOUCH = typeof window !== 'undefined' &&
@@ -34,6 +34,7 @@ export default function App() {
   const [sleeping, setSleeping] = useState(false);
   const [toast, setToast] = useState(null);
   const [match, setMatch] = useState(null); // hide & seek round state
+  const [tauntWheel, setTauntWheel] = useState(null); // radial taunt selector
 
   const refreshWorlds = async () => setWorlds(await listWorlds());
   useEffect(() => { refreshWorlds(); }, []);
@@ -66,6 +67,7 @@ export default function App() {
     game.onSleep = setSleeping;
     game.onToast = (msg) => { setToast(msg); clearTimeout(toastTimer); toastTimer = setTimeout(() => setToast(null), 2200); };
     game.onMatch = setMatch;
+    game.onTauntWheel = setTauntWheel;
     if (game.hideSeek) setMatch(game.hideSeek.state); // seed the initial lobby state
     game.start();
 
@@ -79,6 +81,7 @@ export default function App() {
       setSleeping(false);
       setToast(null);
       setMatch(null);
+      setTauntWheel(null);
       document.removeEventListener('pointerlockchange', onLock);
       game.dispose();
       current.net?.close();
@@ -270,6 +273,8 @@ export default function App() {
           {gameRef.current && openScreen === 'chess' && <ChessScreen game={gameRef.current} />}
 
           {stats?.hideseek && gameRef.current && <HideSeekHUD game={gameRef.current} match={match} />}
+          {stats?.hideseek && !IS_TOUCH && <TauntWheel wheel={tauntWheel} />}
+          {stats?.hideseek && IS_TOUCH && active && gameRef.current && <HideSeekTouch game={gameRef.current} match={match} />}
 
           {saved && (
             <div style={{ position: 'absolute', bottom: 8, right: 10, color: '#cfe9c0', font: '12px monospace', textShadow: '1px 1px 2px #000', pointerEvents: 'none' }}>Saved</div>

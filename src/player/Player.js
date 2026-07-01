@@ -59,6 +59,7 @@ export class Player {
     this.speedBoost = 1; // dev: walk/fly speed multiplier (G on localhost)
     this.thirdPerson = false; // orbit camera (hide & seek: hiders see their block)
     this.camDist = 4;        // third-person camera pull-back distance
+    this.lookFrozen = false; // suspend mouse-look (e.g. while the taunt wheel is open)
 
     this._bindEvents();
   }
@@ -73,7 +74,7 @@ export class Player {
       this.locked = document.pointerLockElement === this.dom;
     });
     document.addEventListener('mousemove', (e) => {
-      if (!this.locked) return;
+      if (!this.locked || this.lookFrozen) return;
       // Ignore spurious large jumps some browsers emit on pointer-lock entry.
       const mx = Math.abs(e.movementX) > 200 ? 0 : e.movementX;
       const my = Math.abs(e.movementY) > 200 ? 0 : e.movementY;

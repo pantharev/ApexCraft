@@ -1,6 +1,8 @@
 import { getBlockId, getBlock } from '../blocks/BlockRegistry.js';
 import { buildBlockCube } from '../items/ItemModels.js';
+import { emojiSprite } from '../net/RemotePlayers.js';
 import { seekerSpawn, hiderSpawns, PROP_BLOCKS, FLOOR_Y } from '../world/arenas/index.js';
+import { tauntById } from './taunts.js';
 
 // Prop Hunt round state machine. Host/solo-authoritative: it owns the match
 // state, advances the phase timers, assigns roles, teleports players, and
@@ -17,6 +19,7 @@ const TARGET_PLAYERS = 6; // fill up to this many with bots (solo/host)
 export const TAG_RANGE = 4;
 const STUN_TIME = 3;    // seconds a seeker is frozen after a wrong guess
 const SEEKER_RATIO = 4; // ~1 seeker per this many players
+const TAUNT_COOLDOWN = 2.5; // seconds between a player's taunts
 
 const PROP_IDS = PROP_BLOCKS.map(getBlockId).filter(Boolean);
 
@@ -34,7 +37,7 @@ export class HideSeek {
   }
 
   _emptyState() {
-    return { phase: 'lobby', timeLeft: 0, round: 0, roles: {}, alive: {}, disguise: {}, stun: {}, spawns: {}, winner: null };
+    return { phase: 'lobby', timeLeft: 0, round: 0, roles: {}, alive: {}, disguise: {}, stun: {}, spawns: {}, score: {}, winner: null };
   }
 
   // ---- Roster (authoritative only) ----
@@ -60,10 +63,12 @@ export class HideSeek {
     // Assign roles: ~1 seeker per SEEKER_RATIO players, at least one.
     const shuffled = this._shuffle(ids.slice());
     const numSeekers = Math.max(1, Math.floor(ids.length / SEEKER_RATIO));
-    const roles = {}, alive = {}, disguise = {}, stun = {};
+    const roles = {}, alive = {}, disguise = {}, stun = {}, score = {};
+    const prevScore = this.state.score || {}; // style score is cumulative across rounds
     shuffled.forEach((id, i) => {
       roles[id] = i < numSeekers ? 'seeker' : 'hider';
       alive[id] = true;
+      score[id] = prevScore[id] || 0;
     });
 
     // Spawn placement + default disguises for hiders.
@@ -79,7 +84,7 @@ export class HideSeek {
 
     this.state = {
       phase: 'countdown', timeLeft: HIDE_TIME, round: this.state.round + 1,
-      roles, alive, disguise, stun, spawns, winner: null,
+      roles, alive, disguise, stun, spawns, score, winner: null,
     };
     this._teleportLocal();
     if (this.game.hsBots) this.game.hsBots.beginRound(roles, spawns, disguise);
@@ -103,6 +108,13 @@ export class HideSeek {
     else this.net.sendMatch({ action: 'tag', target: targetId });
   }
 
+  // A hider triggers a taunt: a floating emoji + style points, at the cost of
+  // drawing seekers toward them.
+  taunt(tauntId) {
+    if (this.authoritative) this._applyTaunt(this.selfId, tauntId);
+    else this.net.sendMatch({ action: 'taunt', id: tauntId });
+  }
+
   // ---- Authoritative intent handling (host receives guest commands) ----
 
   handleIntent(fromId, msg) {
@@ -111,6 +123,45 @@ export class HideSeek {
     else if (msg.action === 'disguise') {
       if (this.state.roles[fromId] === 'hider') { this.state.disguise[fromId] = msg.blockId; this._changed(); }
     } else if (msg.action === 'tag') this._resolveTag(fromId, msg.target);
+    else if (msg.action === 'taunt') this._applyTaunt(fromId, msg.id);
+  }
+
+  // Authoritative: award style points, alert nearby seekers, play + broadcast
+  // the effect, and queue the llama's cosmetic blast.
+  _applyTaunt(playerId, tauntId) {
+    const def = tauntById[tauntId];
+    const s = this.state;
+    if (!def || s.phase !== 'seeking') return;
+    if (s.roles[playerId] !== 'hider' || s.alive[playerId] === false) return;
+    if (!this._tauntCd) this._tauntCd = {};
+    if ((this._tauntCd[playerId] || 0) > 0) return; // still cooling down
+    this._tauntCd[playerId] = TAUNT_COOLDOWN;
+
+    s.score[playerId] = (s.score[playerId] || 0) + def.points;
+
+    const pos = this._playerPos(playerId);
+    if (pos && this.game.hsBots) this.game.hsBots.alert(pos.x, pos.z, def.alert);
+
+    this.game.playTauntFx(playerId, tauntId);
+    if (this.net && this.net.isHost) this.net.sendTaunt({ id: playerId, taunt: tauntId });
+
+    if (def.explode) {
+      if (!this._llamas) this._llamas = [];
+      this._llamas.push({ id: playerId, tEnd: def.duration });
+    }
+    this._changed();
+  }
+
+  // Best-known world position of a participant (self / bot / remote).
+  _playerPos(playerId) {
+    if (playerId === this.selfId) { const p = this.game.player.pos; return { x: p.x, y: p.y, z: p.z }; }
+    if (playerId.startsWith('#bot:') && this.game.hsBots) {
+      const b = this.game.hsBots.bots.get(playerId);
+      if (b) return { x: b.x, y: b.y, z: b.z };
+    }
+    const rp = this.game.remotePlayers;
+    if (rp && rp.map.has(playerId)) { const c = rp.map.get(playerId).cur; return { x: c.x, y: c.y, z: c.z }; }
+    return null;
   }
 
   _resolveTag(seekerId, targetId) {
@@ -136,6 +187,37 @@ export class HideSeek {
     if (this.game.hsBots) this.game.hsBots.update(dt, this.state);
     this._syncRemoteDisguises();
     this._applyLocal(dt);
+    this._tickLocalTaunt(dt);
+  }
+
+  // A taunt emoji over the local player's own head — they're first-person with
+  // no RemotePlayers avatar, so it lives directly in the scene. (Hiders are in
+  // third person, so they see it float above their block.)
+  showLocalTaunt(emoji, ttl) {
+    this._clearLocalTaunt();
+    const sprite = emojiSprite(emoji);
+    this.game.scene.add(sprite);
+    this._localTaunt = { sprite, ttl, age: 0 };
+  }
+
+  _tickLocalTaunt(dt) {
+    const lt = this._localTaunt;
+    if (!lt) return;
+    lt.age += dt;
+    const f = lt.age / lt.ttl;
+    const p = this.game.player.pos;
+    lt.sprite.position.set(p.x, p.y + 2.4 + f * 0.6, p.z);
+    lt.sprite.material.opacity = Math.max(0, 1 - f);
+    if (f >= 1) this._clearLocalTaunt();
+  }
+
+  _clearLocalTaunt() {
+    const lt = this._localTaunt;
+    if (!lt) return;
+    this.game.scene.remove(lt.sprite);
+    lt.sprite.material.map.dispose();
+    lt.sprite.material.dispose();
+    this._localTaunt = null;
   }
 
   // Reflect every other participant's disguise onto their remote avatar so
@@ -159,12 +241,25 @@ export class HideSeek {
     for (const id of Object.keys(s.stun)) {
       if (s.stun[id] > 0) s.stun[id] = Math.max(0, s.stun[id] - dt);
     }
+    // Count down taunt cooldowns and resolve exploding-llama timers.
+    if (this._tauntCd) for (const id of Object.keys(this._tauntCd)) {
+      if (this._tauntCd[id] > 0) this._tauntCd[id] = Math.max(0, this._tauntCd[id] - dt);
+    }
+    if (this._llamas && this._llamas.length) {
+      const due = [];
+      this._llamas = this._llamas.filter((l) => { l.tEnd -= dt; if (l.tEnd <= 0) { due.push(l); return false; } return true; });
+      for (const l of due) {
+        const pos = this._playerPos(l.id);
+        if (pos) this.game.cosmeticBoom(pos.x, pos.y + 0.5, pos.z, 3.2);
+      }
+    }
     if (s.phase === 'countdown') {
       if (s.timeLeft <= 0) { s.phase = 'seeking'; s.timeLeft = SEEK_TIME; this._changed(); }
     } else if (s.phase === 'seeking') {
       if (s.timeLeft <= 0) this._endRound('hiders'); // time up — hiders survive
     } else if (s.phase === 'roundEnd') {
-      if (s.timeLeft <= 0) { this.state = { ...this._emptyState(), round: s.round }; this._changed(); }
+      // Carry the cumulative style score into the next lobby.
+      if (s.timeLeft <= 0) { this.state = { ...this._emptyState(), round: s.round, score: s.score }; this._changed(); }
     }
     // Re-broadcast ~1 Hz so multiplayer guests keep their timers/stuns in sync.
     this._bcastT = (this._bcastT || 0) + dt;

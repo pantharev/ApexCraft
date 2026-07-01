@@ -213,6 +213,27 @@ class SoundEngine {
     this.burst(jit(700), 0.7, 'bandpass', 0.13, 0.18);
     this.burst(jit(1900), 0.8, 'highpass', 0.07, 0.12, 0.02);
   }
+
+  // ---- Prop Hunt taunts ----
+
+  // Cackle: four quick rising triangle blips.
+  laugh() {
+    for (let i = 0; i < 4; i++) {
+      this.tone(jit(520 + i * 45), 0.08, 'triangle', 0.2, 720 + i * 45, i * 0.11);
+    }
+  }
+
+  // Grumble: harsh descending sawtooth + a low growl.
+  angry() {
+    this.tone(jit(240), 0.3, 'sawtooth', 0.28, 90);
+    this.burst(500, 1.2, 'lowpass', 0.2, 0.25, 0.02);
+  }
+
+  // Llama call: two nasal, slightly detuned square tones sliding up.
+  llama() {
+    this.tone(jit(300), 0.18, 'square', 0.24, 520);
+    this.tone(jit(360), 0.16, 'square', 0.18, 620, 0.12);
+  }
 }
 
 export const Sound = new SoundEngine();

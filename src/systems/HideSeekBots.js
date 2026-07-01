@@ -75,6 +75,14 @@ export class HideSeekBots {
     if (bot) { bot.alive = false; bot.target = null; this._render(bot); }
   }
 
+  // A taunt was heard: draw seeker bots within `radius` toward (x,z).
+  alert(x, z, radius) {
+    for (const bot of this.bots.values()) {
+      if (bot.role !== 'seeker' || !bot.alive) continue;
+      if (Math.hypot(bot.x - x, bot.z - z) <= radius) { bot.lastSeen = { x, z }; bot.lostT = 0; bot.roam = null; }
+    }
+  }
+
   endRound() {
     for (const bot of this.bots.values()) bot.target = null;
   }

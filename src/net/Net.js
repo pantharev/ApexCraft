@@ -56,6 +56,8 @@ export class Net {
     this.onBoom = null;         // ({x,y,z,r}) — explosion visuals + self-damage
     this.onChess = null;        // ({from, action, key, ...}) — host only
     this.onChessState = null;   // (view) — authoritative table state
+    this.onMatch = null;        // ({from, action, ...}) — hide & seek intent, host only
+    this.onMatchState = null;   // (state) — authoritative hide & seek round state
     this.onHitPlayer = null;    // (dmg)
     this.onMobHit = null;       // ({i, dmg, x, y, z}) — host only
     this.onBecomeHost = null;   // ()
@@ -83,6 +85,8 @@ export class Net {
     this.socket.on('boom', (b) => this.onBoom && this.onBoom(b));
     this.socket.on('chess', (m) => this.onChess && this.onChess(m));
     this.socket.on('chessState', (v) => this.onChessState && this.onChessState(v));
+    this.socket.on('match', (m) => this.onMatch && this.onMatch(m));
+    this.socket.on('matchState', (s) => this.onMatchState && this.onMatchState(s));
     this.socket.on('hitPlayer', (m) => this.onHitPlayer && this.onHitPlayer(m.dmg, m.kx || 0, m.kz || 0));
     this.socket.on('mobHit', (m) => this.onMobHit && this.onMobHit(m));
     this.socket.on('time', (t) => this.onTime && this.onTime(t));
@@ -133,6 +137,8 @@ export class Net {
   sendBoom(x, y, z, r) { this.socket.emit('boom', { x, y, z, r }); }
   sendChess(msg) { this.socket.emit('chess', msg); }          // guest -> host
   sendChessState(view) { this.socket.emit('chessState', view); } // host -> room
+  sendMatch(msg) { this.socket.emit('match', msg); }            // guest -> host
+  sendMatchState(state) { this.socket.emit('matchState', state); } // host -> room
 
   get id() { return this.socket.id; }
   sendTime(t) { this.socket.emit('time', t); }

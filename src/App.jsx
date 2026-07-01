@@ -7,6 +7,7 @@ import { MainMenu, PauseMenu } from './ui/Menus.jsx';
 import { Landing } from './ui/Landing.jsx';
 import { Hotbar, InventoryPanel, CreativeInventory, CraftingTableScreen, FurnaceScreen, ChestScreen } from './ui/InventoryUI.jsx';
 import { ChessScreen } from './ui/ChessScreen.jsx';
+import { HideSeekHUD } from './ui/HideSeekUI.jsx';
 import { TouchControls } from './ui/TouchControls.jsx';
 
 const IS_TOUCH = typeof window !== 'undefined' &&
@@ -32,6 +33,7 @@ export default function App() {
   const [netBusy, setNetBusy] = useState(false);
   const [sleeping, setSleeping] = useState(false);
   const [toast, setToast] = useState(null);
+  const [match, setMatch] = useState(null); // hide & seek round state
 
   const refreshWorlds = async () => setWorlds(await listWorlds());
   useEffect(() => { refreshWorlds(); }, []);
@@ -63,6 +65,8 @@ export default function App() {
     game.onPlayerHurt = () => { setHurt(true); clearTimeout(hurtTimer); hurtTimer = setTimeout(() => setHurt(false), 250); };
     game.onSleep = setSleeping;
     game.onToast = (msg) => { setToast(msg); clearTimeout(toastTimer); toastTimer = setTimeout(() => setToast(null), 2200); };
+    game.onMatch = setMatch;
+    if (game.hideSeek) setMatch(game.hideSeek.state); // seed the initial lobby state
     game.start();
 
     const onLock = () => setLocked(document.pointerLockElement === game.renderer.domElement);
@@ -74,6 +78,7 @@ export default function App() {
       clearTimeout(toastTimer);
       setSleeping(false);
       setToast(null);
+      setMatch(null);
       document.removeEventListener('pointerlockchange', onLock);
       game.dispose();
       current.net?.close();
@@ -143,7 +148,7 @@ export default function App() {
       setStats(null); setLocked(false); setOpenScreen(null); setDead(false); setTouchActive(false);
       setCurrent({
         id: `mp_${j.code}`, name: `Room ${j.code}`, seed: j.seed,
-        save: { edits: j.edits || {}, time: j.time, mode: j.mode || 'survival' }, net,
+        save: { edits: j.edits || {}, time: j.time, mode: j.mode || 'survival', match: j.match || null }, net,
       });
       setPhase('playing');
     } catch (e) {
@@ -228,7 +233,7 @@ export default function App() {
             <Hotbar inventory={gameRef.current.inventory}
               onSelect={IS_TOUCH ? (i) => gameRef.current.inventory.setSelected(i) : undefined} />
           )}
-          {stats && active && !stats.creative && (
+          {stats && active && !stats.creative && !stats.hideseek && (
             <StatusBars health={stats.health} hunger={stats.hunger} air={stats.air} submerged={stats.submerged} />
           )}
 
@@ -263,6 +268,8 @@ export default function App() {
             <ChestScreen inventory={gameRef.current.inventory} chest={gameRef.current.activeChest} />
           )}
           {gameRef.current && openScreen === 'chess' && <ChessScreen game={gameRef.current} />}
+
+          {stats?.hideseek && gameRef.current && <HideSeekHUD game={gameRef.current} match={match} />}
 
           {saved && (
             <div style={{ position: 'absolute', bottom: 8, right: 10, color: '#cfe9c0', font: '12px monospace', textShadow: '1px 1px 2px #000', pointerEvents: 'none' }}>Saved</div>

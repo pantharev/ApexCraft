@@ -65,9 +65,10 @@ io.on('connection', (socket) => {
     rooms.set(c, {
       seed: data?.seed ?? 0,
       time: data?.time ?? 0.3,
-      mode: data?.mode === 'creative' ? 'creative' : 'survival',
+      mode: ['creative', 'hideseek'].includes(data?.mode) ? data.mode : 'survival',
       edits: data?.edits && typeof data.edits === 'object' ? data.edits : {},
       host: socket.id,
+      match: null, // hide & seek round state (host-authoritative, see 'matchState')
       players: new Map([[socket.id, { name: cleanName(data?.name) }]]),
     });
     code = c;
@@ -87,7 +88,7 @@ io.on('connection', (socket) => {
     socket.to(c).emit('playerJoined', { id: socket.id, name });
     const players = [...r.players].map(([id, p]) => ({ id, name: p.name }));
     r.players.set(socket.id, { name });
-    ack({ code: c, seed: r.seed, time: r.time, mode: r.mode, edits: r.edits, players });
+    ack({ code: c, seed: r.seed, time: r.time, mode: r.mode, edits: r.edits, match: r.match, players });
   });
 
   // Player transform at ~15 Hz. Volatile: drop frames rather than queue them.
@@ -153,6 +154,21 @@ io.on('connection', (socket) => {
     const r = room();
     if (!r || r.host !== socket.id || !v) return;
     socket.to(code).emit('chessState', v);
+  });
+
+  // Hide & seek (Prop Hunt): intents route to the host; authoritative round
+  // state broadcasts from the host and is stored on the room so late joiners
+  // and a migrated host pick up the round in progress.
+  socket.on('match', (m) => {
+    const r = room();
+    if (!r || !m) return;
+    io.to(r.host).emit('match', { ...m, from: socket.id });
+  });
+  socket.on('matchState', (s) => {
+    const r = room();
+    if (!r || r.host !== socket.id || !s) return;
+    r.match = s;
+    socket.to(code).emit('matchState', s);
   });
 
   // A guest hit a mob; route to the host who owns the simulation.

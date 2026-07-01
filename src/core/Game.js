@@ -22,6 +22,9 @@ import { blockAverageColor } from '../textures/atlas.js';
 import { saveWorld } from '../systems/Storage.js';
 import { WORLD_SEED } from '../config.js';
 import { villageForCell, VILLAGE_CELL } from '../world/structures/VillagePlan.js';
+import { setGenMode } from '../world/generators/TerrainGen.js';
+import { HideSeek, TAG_RANGE } from '../systems/HideSeek.js';
+import { HideSeekBots } from '../systems/HideSeekBots.js';
 import { getBlockId } from '../blocks/BlockRegistry.js';
 import { getItem } from '../items/ItemRegistry.js';
 import { SEA_LEVEL } from '../config.js';
@@ -65,9 +68,14 @@ export class Game {
     this.worldName = save?.name || 'World';
     this.seed = save?.seed ?? WORLD_SEED;
     // Game mode (survival = default, with mobs + mining; creative = infinite
-    // blocks, no mobs, no damage). A per-world setting, fixed at creation.
-    this.mode = save?.mode === 'creative' ? 'creative' : 'survival';
+    // blocks, no mobs, no damage; hideseek = Prop Hunt minigame on a fixed
+    // arena). A per-world setting, fixed at creation.
+    this.mode = ['creative', 'hideseek'].includes(save?.mode) ? save.mode : 'survival';
     this.creative = this.mode === 'creative';
+    this.hideseek = this.mode === 'hideseek';
+    // Tell the chunk generator which world to build before any chunk generates
+    // (flat Prop Hunt arena for hide & seek, procedural terrain otherwise).
+    setGenMode(this.hideseek ? 'hideseek' : null);
     this.dev = typeof location !== 'undefined' && ['localhost', '127.0.0.1'].includes(location.hostname);
     this._devTime = 0; // 0 = auto, 1 = day, 2 = night
 
@@ -107,18 +115,24 @@ export class Game {
     // Inventory: mined drops flow in here; leftover (full) stays in the world.
     this.inventory = new Inventory();
     if (this._save?.inventory) this.inventory.load(this._save.inventory);
-    else for (const [name, count] of (this.creative ? CREATIVE_KIT : STARTER_KIT)) this.inventory.addItem(name, count);
+    // Hide & seek players carry nothing — the arena is fixed and there's no building.
+    else if (!this.hideseek) for (const [name, count] of (this.creative ? CREATIVE_KIT : STARTER_KIT)) this.inventory.addItem(name, count);
     this.itemDrops.onCollect = (name, count) => this.inventory.addItem(name, count);
 
     // Placing a block consumes one of the selected stack — except in creative,
     // where blocks are infinite.
     this.interaction.creative = this.creative;
+    // Hide & seek: the arena is fixed — no breaking or placing for anyone.
+    // (Seekers still "attack" to tag hiders; that goes through onAttack below.)
+    this.interaction.locked = this.hideseek;
     this.interaction.onPlaced = () => { if (!this.creative) this.inventory.consumeSelected(1); };
 
     // Survival stats + the damage/eat/death hooks. Creative = invulnerable,
     // no hunger, and start in flight for building.
     this.vitals = new Vitals(this.player, this.world);
-    this.vitals.godMode = this.creative;
+    // Creative + hide & seek players take no environmental damage — in hide &
+    // seek, elimination is a match concept handled by the round, not HP/hunger.
+    this.vitals.godMode = this.creative || this.hideseek;
     if (this.creative) this.player.flying = true;
     this.onDead = null; // React setter for the death overlay
     this.player.onLand = (fall) => this.vitals.applyFall(fall);
@@ -192,6 +206,10 @@ export class Game {
       net.onChessState = (view) => {
         if (view && view.key === this.activeChessKey && this.onChess) this.onChess(view);
       };
+      // Hide & seek: guests send intents to the host; the host broadcasts the
+      // authoritative round state, which everyone applies.
+      net.onMatch = (m) => { if (this.hideSeek && net.isHost) this.hideSeek.handleIntent(m.from, m); };
+      net.onMatchState = (s) => { if (this.hideSeek) this.hideSeek.applyState(s); };
       net.onHitPlayer = (dmg, kx, kz) => {
         this.vitals.damage(dmg);
         if (kx || kz) this.player.knockback(kx, kz);
@@ -200,12 +218,20 @@ export class Game {
         const mob = this.mobs.byId(m.i);
         if (mob) { mob.takeDamage(m.dmg, new THREE.Vector3(m.x, m.y, m.z)); Sound.mobHurt(); }
       };
-      net.onBecomeHost = () => this.ghostMobs.clear(); // our MobManager takes over
+      net.onBecomeHost = () => {
+        this.ghostMobs.clear(); // our MobManager takes over
+        // Take over the hide & seek simulation from our last-synced state.
+        if (this.hideSeek) this.hideSeek.authoritative = true;
+      };
       net.onTime = (t) => { this.dayNight.t = t; };
       this._netT = 0;     // player-state send accumulator (~15 Hz)
       this._mobNetT = 0;  // mob snapshot accumulator (~10 Hz)
       this._timeNetT = 0; // clock sync accumulator (every 5 s)
     }
+
+    // Solo Prop Hunt still renders its bots as remote avatars, so it needs a
+    // RemotePlayers pool even without a network connection.
+    if (this.hideseek && !this.remotePlayers) this.remotePlayers = new RemotePlayers(this.scene);
 
     // Dev-only (localhost): T cycles day/night, V teleports to the nearest
     // village (again = next one), G toggles a 3x speed boost.
@@ -226,6 +252,20 @@ export class Game {
     }
 
     this.interaction.onAttack = () => {
+      // Hide & seek: only a seeker acts, and only to tag a disguised hider
+      // during the seeking phase. A miss is a wrong guess (handled by tag()).
+      if (this.hideseek) {
+        if (!this.hideSeek) return false;
+        const st = this.hideSeek.state;
+        if (st.roles[this.hideSeek.selfId] !== 'seeker' || st.phase !== 'seeking') return false;
+        const d = new THREE.Vector3();
+        this.camera.getWorldDirection(d);
+        const hit = this.remotePlayers ? this.remotePlayers.raycast(this.camera.position, d, TAG_RANGE) : null;
+        Sound.swing();
+        this.hideSeek.tag(hit);
+        return true;
+      }
+
       // Holding a bow fires an arrow instead of meleeing.
       const stack = this.inventory.selectedStack();
       if (stack && stack.item === 'bow') { this._shootBow(); return true; }
@@ -304,6 +344,23 @@ export class Game {
       }
     };
 
+    // Hide & seek (Prop Hunt): the round manager + its solo/host bot filler.
+    // The manager owns match state; React reads it through onMatch.
+    this.hideSeek = null;
+    this.hsBots = null;
+    this.onMatch = null;
+    if (this.hideseek) {
+      // Bots are solo-only for now; multiplayer rounds use the real players.
+      if (!net) this.hsBots = new HideSeekBots(this);
+      this.hideSeek = new HideSeek(this);
+      this.hideSeek.onChanged = (state, received) => {
+        if (this.onMatch) this.onMatch(state);
+        if (this.net && this.net.isHost && !received) this.net.sendMatchState(state);
+      };
+      // Late joiner: adopt the round already in progress from the server.
+      if (this._save?.match) this.hideSeek.applyState(this._save.match);
+    }
+
     // First-person held view-model, parented to the camera so it tracks the
     // view. The camera must be in the scene graph to be lit/rendered.
     this.scene.add(this.camera);
@@ -321,6 +378,7 @@ export class Game {
     this.onScreenChange = null; // React setter
     this._bindHotbar();
     this._bindScreens();
+    if (this.hideseek) this._bindHideSeek();
 
     // Pre-generate spawn area so the player doesn't fall through ungenerated
     // chunks, then place the player. For a loaded game, generate around the
@@ -431,6 +489,30 @@ export class Game {
       else if (e.code === 'KeyM') Sound.toggle();
     });
   }
+
+  // Hide & seek keys: Enter starts/advances a round; number keys pick a disguise
+  // while hiding. (UI buttons can't be clicked under pointer-lock, so it's keys.)
+  _bindHideSeek() {
+    window.addEventListener('keydown', (e) => {
+      if (!this.hideSeek) return;
+      const phase = this.hideSeek.state.phase;
+      if (e.code === 'Enter' && (phase === 'lobby' || phase === 'roundEnd')) { this.hsStart(); return; }
+      if (phase === 'countdown') {
+        const n = parseInt(e.key, 10);
+        if (n >= 1 && n <= this.hideSeek.propIds.length) this.hsPickDisguise(this.hideSeek.propIds[n - 1]);
+      }
+    });
+  }
+
+  // ---- Hide & seek (Prop Hunt) controls, called by the HUD ----
+
+  hsStart() {
+    if (!this.hideSeek) return;
+    if (this.hideSeek.authoritative) this.hideSeek.start();
+    else this.net.sendMatch({ action: 'start' });
+  }
+
+  hsPickDisguise(blockId) { this.hideSeek?.pickDisguise(blockId); }
 
   setScreen(screen) {
     this.openScreen = screen;
@@ -687,12 +769,13 @@ export class Game {
     this.vitals.update(dt);
     this.dayNight.update(dt);
     this.torchLights.update(this.player.pos);
+    if (this.hideSeek) this.hideSeek.update(dt);
     const isGuest = this.net && !this.net.isHost;
     if (isGuest) {
       // Guests mirror the host's mob simulation instead of running their own.
       this.ghostMobs.update(dt);
-    } else if (!this.creative) {
-      // Creative worlds have no mobs at all, so the simulation is skipped.
+    } else if (!this.creative && !this.hideseek) {
+      // Creative + hide & seek worlds have no mobs at all, so the simulation is skipped.
       this.mobs.update(dt, {
         playerPos: this.player.pos,
         // Host: mobs hunt every player in the room.
@@ -733,8 +816,8 @@ export class Game {
 
     // Multiplayer sync: our transform at ~15 Hz; host adds mob snapshots
     // (~10 Hz) and the world clock (every 5 s).
+    if (this.remotePlayers) this.remotePlayers.update(dt);
     if (this.net) {
-      this.remotePlayers.update(dt);
       this._netT += dt;
       if (this._netT >= 1 / 15) {
         this._netT = 0;
@@ -788,6 +871,7 @@ export class Game {
         night: this.dayNight.isNight,
         mobs: this._mobApi().mobs.length,
         creative: this.creative,
+        hideseek: this.hideseek,
         dev: this.dev,
         devTime: ['Auto', 'Day', 'Night'][this._devTime],
         devBoost: this.player.speedBoost > 1,

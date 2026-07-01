@@ -62,6 +62,9 @@ export function MainMenu({ worlds, onPlay, onCreate, onDelete, onHome, onHost, o
                   {w.mode === 'creative' && (
                     <span style={{ marginLeft: 6, fontSize: 10, fontWeight: 700, color: '#d7c6ff', background: 'rgba(80,50,130,0.5)', padding: '1px 6px', borderRadius: 8, letterSpacing: 0.5 }}>CREATIVE</span>
                   )}
+                  {w.mode === 'hideseek' && (
+                    <span style={{ marginLeft: 6, fontSize: 10, fontWeight: 700, color: '#ffd9a8', background: 'rgba(130,90,46,0.5)', padding: '1px 6px', borderRadius: 8, letterSpacing: 0.5 }}>PROP HUNT</span>
+                  )}
                 </div>
                 <div style={{ fontSize: 12, opacity: 0.55 }}>seed {w.seed} · {fmtDate(w.lastPlayed)}</div>
               </div>
@@ -90,18 +93,22 @@ export function MainMenu({ worlds, onPlay, onCreate, onDelete, onHome, onHost, o
           {[
             ['survival', 'Survival', 'Mobs, mining, hunger & health'],
             ['creative', 'Creative', 'Infinite blocks, flight, no mobs'],
-          ].map(([val, label, desc]) => (
-            <button key={val} onClick={() => setMode(val)} title={desc}
-              style={{
-                flex: 1, font: '13px system-ui', padding: '7px 8px', cursor: 'pointer', borderRadius: 4,
-                background: mode === val ? (val === 'creative' ? '#5a3c8a' : '#3c6b3c') : '#2a2d33',
-                color: mode === val ? '#fff' : '#9aa', textAlign: 'center',
-                border: mode === val ? '2px solid #fff5' : '2px solid #3a3d44',
-              }}>
-              <div style={{ fontWeight: 700 }}>{label}</div>
-              <div style={{ fontSize: 10, opacity: 0.75 }}>{desc}</div>
-            </button>
-          ))}
+            ['hideseek', 'Prop Hunt', 'Hide as a block — or hunt the hiders'],
+          ].map(([val, label, desc]) => {
+            const accent = val === 'creative' ? '#5a3c8a' : val === 'hideseek' ? '#8a5a2e' : '#3c6b3c';
+            return (
+              <button key={val} onClick={() => setMode(val)} title={desc}
+                style={{
+                  flex: 1, font: '13px system-ui', padding: '7px 8px', cursor: 'pointer', borderRadius: 4,
+                  background: mode === val ? accent : '#2a2d33',
+                  color: mode === val ? '#fff' : '#9aa', textAlign: 'center',
+                  border: mode === val ? '2px solid #fff5' : '2px solid #3a3d44',
+                }}>
+                <div style={{ fontWeight: 700 }}>{label}</div>
+                <div style={{ fontSize: 10, opacity: 0.75 }}>{desc}</div>
+              </button>
+            );
+          })}
         </div>
 
         {onJoin && (

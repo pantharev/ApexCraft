@@ -8,7 +8,7 @@ import { generateOres } from './OreGen.js';
 import { generateTrees } from '../structures/Tree.js';
 import { generateVillages } from '../structures/Villages.js';
 import { generateDecorations } from '../structures/Decorations.js';
-import { generateArena, FLOOR_Y } from '../arenas/ArenaGen.js';
+import { generateArena, activeMap, FLOOR_Y } from '../arenas/index.js';
 
 const STONE = getBlockId('stone');
 const DIRT = getBlockId('dirt');
@@ -88,13 +88,15 @@ export function generateChunk(chunk) {
   chunk.dirty = true;
 }
 
-// Flat Prop Hunt base: bedrock floor, stone fill, a grass surface at FLOOR_Y,
-// air above — no caves/ores/villages/trees. The arena is stamped on top.
+// Flat Prop Hunt base: bedrock floor, stone fill, the map's surface block at
+// FLOOR_Y, air above — no caves/ores/villages/trees. The arena map is stamped
+// on top.
 function generateArenaChunk(chunk) {
+  const surface = getBlockId(activeMap().baseSurface) || GRASS;
   for (let x = 0; x < CHUNK_SIZE; x++) {
     for (let z = 0; z < CHUNK_SIZE; z++) {
       for (let y = 0; y <= FLOOR_Y; y++) {
-        chunk.set(x, y, z, y === 0 ? BEDROCK : y === FLOOR_Y ? GRASS : STONE);
+        chunk.set(x, y, z, y === 0 ? BEDROCK : y === FLOOR_Y ? surface : STONE);
       }
     }
   }

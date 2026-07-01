@@ -66,6 +66,8 @@ io.on('connection', (socket) => {
       seed: data?.seed ?? 0,
       time: data?.time ?? 0.3,
       mode: ['creative', 'hideseek'].includes(data?.mode) ? data.mode : 'survival',
+      map: typeof data?.map === 'string' ? data.map.slice(0, 24) : null, // Prop Hunt arena map id
+
       edits: data?.edits && typeof data.edits === 'object' ? data.edits : {},
       host: socket.id,
       match: null, // hide & seek round state (host-authoritative, see 'matchState')
@@ -88,7 +90,7 @@ io.on('connection', (socket) => {
     socket.to(c).emit('playerJoined', { id: socket.id, name });
     const players = [...r.players].map(([id, p]) => ({ id, name: p.name }));
     r.players.set(socket.id, { name });
-    ack({ code: c, seed: r.seed, time: r.time, mode: r.mode, edits: r.edits, match: r.match, players });
+    ack({ code: c, seed: r.seed, time: r.time, mode: r.mode, map: r.map, edits: r.edits, match: r.match, players });
   });
 
   // Player transform at ~15 Hz. Volatile: drop frames rather than queue them.

@@ -1,7 +1,7 @@
-import { getBlockId, getBlock } from '../blocks/BlockRegistry.js';
+import { getBlock } from '../blocks/BlockRegistry.js';
 import { buildBlockCube } from '../items/ItemModels.js';
 import { emojiSprite } from '../net/RemotePlayers.js';
-import { seekerSpawn, hiderSpawns, PROP_BLOCKS, FLOOR_Y } from '../world/arenas/index.js';
+import { seekerSpawn, hiderSpawns, propIds } from '../world/arenas/index.js';
 import { tauntById } from './taunts.js';
 
 // Prop Hunt round state machine. Host/solo-authoritative: it owns the match
@@ -21,8 +21,6 @@ const STUN_TIME = 3;    // seconds a seeker is frozen after a wrong guess
 const SEEKER_RATIO = 4; // ~1 seeker per this many players
 const TAUNT_COOLDOWN = 2.5; // seconds between a player's taunts
 
-const PROP_IDS = PROP_BLOCKS.map(getBlockId).filter(Boolean);
-
 export class HideSeek {
   constructor(game) {
     this.game = game;
@@ -30,7 +28,10 @@ export class HideSeek {
     // Solo and the multiplayer host run the simulation; guests only mirror it.
     this.authoritative = !this.net || this.net.isHost;
     this.selfId = this.net ? this.net.id : 'self';
-    this.propIds = PROP_IDS; // disguise palette (block ids), exposed for the HUD
+    // Disguise palette (block ids) of the active arena map, exposed for the
+    // HUD. Resolved here (not at module scope) so each world gets its own map's
+    // palette — a page session can open worlds with different maps.
+    this.propIds = propIds();
     this.state = this._emptyState();
     this._applied = { phase: null, role: null, alive: true }; // last applied to the local player
     this.onChanged = null; // set by Game: fires onMatch + (host) broadcasts
@@ -78,7 +79,7 @@ export class HideSeek {
     const spawns = {};
     hiderList.forEach((id, i) => {
       spawns[id] = hSpawns[i];
-      disguise[id] = PROP_IDS[Math.floor(Math.random() * PROP_IDS.length)];
+      disguise[id] = this.propIds[Math.floor(Math.random() * this.propIds.length)];
     });
     seekerList.forEach((id, i) => { spawns[id] = seekerSpawn(i); });
 

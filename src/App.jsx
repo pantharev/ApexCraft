@@ -54,7 +54,11 @@ export default function App() {
     let savedTimer = null;
     let hurtTimer = null;
     reseed(current.seed);
-    const save = { ...(current.save || {}), id: current.id, name: current.name, seed: current.seed, mode: current.save?.mode ?? current.mode ?? 'survival' };
+    const save = {
+      ...(current.save || {}), id: current.id, name: current.name, seed: current.seed,
+      mode: current.save?.mode ?? current.mode ?? 'survival',
+      map: current.save?.map ?? current.map,
+    };
     const game = new Game(containerRef.current, save, current.net || null);
     gameRef.current = game;
     if (game.dev) window.__apex = game; // debug handle on localhost only
@@ -105,11 +109,11 @@ export default function App() {
     setPhase('playing');
   };
 
-  const createNew = (name, mode = 'survival') => {
+  const createNew = (name, mode = 'survival', map = undefined) => {
     const seed = Math.floor(Math.random() * 1e9);
     const id = `w_${Date.now()}_${Math.floor(Math.random() * 1000)}`;
     setStats(null); setLocked(false); setOpenScreen(null); setDead(false); setTouchActive(false);
-    setCurrent({ id, name, seed, mode, save: null });
+    setCurrent({ id, name, seed, mode, map, save: null });
     setPhase('playing');
   };
 
@@ -130,6 +134,7 @@ export default function App() {
         edits: save?.edits || {},
         time: save?.time ?? 0.3,
         mode: save?.mode || meta.mode || 'survival',
+        map: save?.map || meta.map,
       });
       setStats(null); setLocked(false); setOpenScreen(null); setDead(false); setTouchActive(false);
       setCurrent({ id: meta.id, name: meta.name, seed: meta.seed, save, net });
@@ -151,7 +156,7 @@ export default function App() {
       setStats(null); setLocked(false); setOpenScreen(null); setDead(false); setTouchActive(false);
       setCurrent({
         id: `mp_${j.code}`, name: `Room ${j.code}`, seed: j.seed,
-        save: { edits: j.edits || {}, time: j.time, mode: j.mode || 'survival', match: j.match || null }, net,
+        save: { edits: j.edits || {}, time: j.time, mode: j.mode || 'survival', map: j.map, match: j.match || null }, net,
       });
       setPhase('playing');
     } catch (e) {

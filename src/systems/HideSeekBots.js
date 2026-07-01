@@ -1,4 +1,4 @@
-import { FLOOR_Y, ARENA_HALF } from '../world/arenas/index.js';
+import { FLOOR_Y, activeMap } from '../world/arenas/index.js';
 import { isSolid } from '../blocks/BlockRegistry.js';
 import { TAG_RANGE } from './HideSeek.js';
 
@@ -183,8 +183,15 @@ export class HideSeekBots {
     bot.yaw = Math.atan2(dx, dz);
   }
 
+  // A place to wander to: one of the map's patrol waypoints (jittered), or a
+  // random point in the arena square if the map doesn't define any.
   _randSpot() {
-    const R = ARENA_HALF - 6;
+    const spots = activeMap().botSpots;
+    if (spots && spots.length) {
+      const s = spots[Math.floor(Math.random() * spots.length)];
+      return { x: s.x + (Math.random() * 2 - 1) * 4, z: s.z + (Math.random() * 2 - 1) * 4 };
+    }
+    const R = activeMap().half - 6;
     return { x: (Math.random() * 2 - 1) * R, z: (Math.random() * 2 - 1) * R };
   }
 

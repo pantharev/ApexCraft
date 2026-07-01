@@ -25,6 +25,7 @@ import { villageForCell, VILLAGE_CELL } from '../world/structures/VillagePlan.js
 import { setGenMode } from '../world/generators/TerrainGen.js';
 import { HideSeek, TAG_RANGE } from '../systems/HideSeek.js';
 import { HideSeekBots } from '../systems/HideSeekBots.js';
+import { TAUNTS, tauntById } from '../systems/taunts.js';
 import { getBlockId } from '../blocks/BlockRegistry.js';
 import { getItem } from '../items/ItemRegistry.js';
 import { SEA_LEVEL } from '../config.js';
@@ -210,6 +211,8 @@ export class Game {
       // authoritative round state, which everyone applies.
       net.onMatch = (m) => { if (this.hideSeek && net.isHost) this.hideSeek.handleIntent(m.from, m); };
       net.onMatchState = (s) => { if (this.hideSeek) this.hideSeek.applyState(s); };
+      // Taunts: the host broadcasts them; every client renders the floating icon.
+      net.onTaunt = (m) => { if (m) this.playTauntFx(m.id, m.taunt); };
       net.onHitPlayer = (dmg, kx, kz) => {
         this.vitals.damage(dmg);
         if (kx || kz) this.player.knockback(kx, kz);
@@ -349,6 +352,9 @@ export class Game {
     this.hideSeek = null;
     this.hsBots = null;
     this.onMatch = null;
+    this.tauntWheel = { open: false, selected: -1 }; // radial taunt selector
+    this.onTauntWheel = null; // React setter
+    this._wheelDir = { x: 0, y: 0 };
     if (this.hideseek) {
       // Bots are solo-only for now; multiplayer rounds use the real players.
       if (!net) this.hsBots = new HideSeekBots(this);
@@ -378,7 +384,7 @@ export class Game {
     this.onScreenChange = null; // React setter
     this._bindHotbar();
     this._bindScreens();
-    if (this.hideseek) this._bindHideSeek();
+    if (this.hideseek) { this._bindHideSeek(); this._bindTauntWheel(); }
 
     // Pre-generate spawn area so the player doesn't fall through ungenerated
     // chunks, then place the player. For a loaded game, generate around the
@@ -428,6 +434,31 @@ export class Game {
       mobs: this.net && !this.net.isHost ? null : this.mobs,
       broadcast: this.net ? (x, y, z, r) => this.net.sendBoom(x, y, z, r) : null,
     };
+  }
+
+  // Cosmetic explosion for the exploding-llama taunt: fireball + sound + a fun
+  // shove, but never breaks the arena (applyEdits=false) and never costs health
+  // (godMode is on in hide & seek, so damage is absorbed — only knockback lands).
+  cosmeticBoom(x, y, z, r) {
+    this.explosions.boom(x, y, z, r, {
+      playerPos: this.player.pos,
+      damagePlayer: (dmg, kx, kz) => this.player.knockback(kx, kz, 6),
+      mobs: null,
+      broadcast: null,
+    }, false);
+    if (this.net && this.net.isHost) this.net.sendBoom(x, y, z, r);
+  }
+
+  // Render a taunt on this client: floating emoji over the taunter + sound + a
+  // little particle puff. Called locally by the authority and via net.onTaunt.
+  playTauntFx(playerId, tauntId) {
+    const def = tauntById[tauntId];
+    if (!def) return;
+    if (this.hideSeek && playerId === this.hideSeek.selfId) this.hideSeek.showLocalTaunt(def.emoji, def.duration);
+    else if (this.remotePlayers) this.remotePlayers.showTaunt(playerId, def.emoji, def.duration);
+    if (Sound[def.sound]) Sound[def.sound]();
+    const pos = this.hideSeek ? this.hideSeek._playerPos(playerId) : null;
+    if (pos) this.particles.burst(pos.x, pos.y + 2.3, pos.z, def.color, 14, 2.4);
   }
 
   // Dev (localhost, V key): jump to the nearest village; if already standing
@@ -491,15 +522,23 @@ export class Game {
   }
 
   // Hide & seek keys: Enter starts/advances a round; number keys pick a disguise
-  // while hiding. (UI buttons can't be clicked under pointer-lock, so it's keys.)
+  // while hiding (countdown) or fire a taunt (seeking). (UI buttons can't be
+  // clicked under pointer-lock, so it's keys.)
   _bindHideSeek() {
     window.addEventListener('keydown', (e) => {
       if (!this.hideSeek) return;
-      const phase = this.hideSeek.state.phase;
-      if (e.code === 'Enter' && (phase === 'lobby' || phase === 'roundEnd')) { this.hsStart(); return; }
-      if (phase === 'countdown') {
-        const n = parseInt(e.key, 10);
-        if (n >= 1 && n <= this.hideSeek.propIds.length) this.hsPickDisguise(this.hideSeek.propIds[n - 1]);
+      const st = this.hideSeek.state;
+      if (e.code === 'Enter' && (st.phase === 'lobby' || st.phase === 'roundEnd')) { this.hsStart(); return; }
+      const n = parseInt(e.key, 10);
+      if (!(n >= 1)) return;
+      if (st.phase === 'countdown') {
+        if (n <= this.hideSeek.propIds.length) this.hsPickDisguise(this.hideSeek.propIds[n - 1]);
+      } else if (st.phase === 'seeking') {
+        // Only alive hiders taunt.
+        const role = st.roles[this.hideSeek.selfId];
+        if (role === 'hider' && st.alive[this.hideSeek.selfId] !== false && n <= TAUNTS.length) {
+          this.hsTaunt(TAUNTS[n - 1].id);
+        }
       }
     });
   }
@@ -513,6 +552,80 @@ export class Game {
   }
 
   hsPickDisguise(blockId) { this.hideSeek?.pickDisguise(blockId); }
+
+  hsTaunt(tauntId) {
+    if (!this.hideSeek) return;
+    if (this.hideSeek.authoritative) this.hideSeek.taunt(tauntId);
+    else this.net.sendMatch({ action: 'taunt', id: tauntId });
+  }
+
+  // ---- Radial taunt wheel: hold R to fan the taunts out in a ring, aim with
+  // the mouse (camera-look pauses), release to fire the highlighted taunt. ----
+
+  _bindTauntWheel() {
+    window.addEventListener('keydown', (e) => {
+      if (e.code === 'KeyR' && !e.repeat && !this.tauntWheel.open && this._canTaunt()) this._openWheel();
+    });
+    window.addEventListener('keyup', (e) => {
+      if (e.code === 'KeyR' && this.tauntWheel.open) this._closeWheel(true);
+    });
+    document.addEventListener('mousemove', (e) => {
+      if (this.tauntWheel.open) this._aimWheel(e.movementX || 0, e.movementY || 0);
+    });
+  }
+
+  _canTaunt() {
+    if (!this.hideSeek) return false;
+    const s = this.hideSeek.state;
+    return s.phase === 'seeking'
+      && s.roles[this.hideSeek.selfId] === 'hider'
+      && s.alive[this.hideSeek.selfId] !== false;
+  }
+
+  _openWheel() {
+    this.tauntWheel = { open: true, selected: -1 };
+    this._wheelDir = { x: 0, y: 0 };
+    this.player.lookFrozen = true; // aim the wheel instead of the camera
+    if (this.onTauntWheel) this.onTauntWheel(this.tauntWheel);
+  }
+
+  _aimWheel(dx, dy) {
+    const MAX = 120;
+    let x = this._wheelDir.x + dx, y = this._wheelDir.y + dy;
+    const len = Math.hypot(x, y);
+    if (len > MAX) { x = (x / len) * MAX; y = (y / len) * MAX; }
+    this._wheelDir = { x, y };
+    const sel = this._wheelSelection();
+    if (sel !== this.tauntWheel.selected) {
+      this.tauntWheel = { open: true, selected: sel };
+      if (this.onTauntWheel) this.onTauntWheel(this.tauntWheel);
+    }
+  }
+
+  // The taunt the aim vector points at, or -1 inside the dead zone.
+  _wheelSelection() {
+    const { x, y } = this._wheelDir;
+    if (Math.hypot(x, y) < 16) return -1;
+    const aim = Math.atan2(y, x);
+    const n = TAUNTS.length;
+    let best = -1, bestD = Infinity;
+    for (let i = 0; i < n; i++) {
+      const a = -Math.PI / 2 + (i / n) * Math.PI * 2; // taunt i sits at this ring angle
+      let d = aim - a;
+      while (d > Math.PI) d -= Math.PI * 2;
+      while (d < -Math.PI) d += Math.PI * 2;
+      if (Math.abs(d) < bestD) { bestD = Math.abs(d); best = i; }
+    }
+    return best;
+  }
+
+  _closeWheel(fire) {
+    const sel = this.tauntWheel.selected;
+    this.tauntWheel = { open: false, selected: -1 };
+    this.player.lookFrozen = false;
+    if (this.onTauntWheel) this.onTauntWheel(this.tauntWheel);
+    if (fire && sel >= 0 && sel < TAUNTS.length) this.hsTaunt(TAUNTS[sel].id);
+  }
 
   setScreen(screen) {
     this.openScreen = screen;

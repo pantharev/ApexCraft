@@ -58,6 +58,7 @@ export class Net {
     this.onChessState = null;   // (view) — authoritative table state
     this.onMatch = null;        // ({from, action, ...}) — hide & seek intent, host only
     this.onMatchState = null;   // (state) — authoritative hide & seek round state
+    this.onTaunt = null;        // ({id, taunt}) — a taunt to render (host -> room)
     this.onHitPlayer = null;    // (dmg)
     this.onMobHit = null;       // ({i, dmg, x, y, z}) — host only
     this.onBecomeHost = null;   // ()
@@ -87,6 +88,7 @@ export class Net {
     this.socket.on('chessState', (v) => this.onChessState && this.onChessState(v));
     this.socket.on('match', (m) => this.onMatch && this.onMatch(m));
     this.socket.on('matchState', (s) => this.onMatchState && this.onMatchState(s));
+    this.socket.on('taunt', (m) => this.onTaunt && this.onTaunt(m));
     this.socket.on('hitPlayer', (m) => this.onHitPlayer && this.onHitPlayer(m.dmg, m.kx || 0, m.kz || 0));
     this.socket.on('mobHit', (m) => this.onMobHit && this.onMobHit(m));
     this.socket.on('time', (t) => this.onTime && this.onTime(t));
@@ -139,6 +141,7 @@ export class Net {
   sendChessState(view) { this.socket.emit('chessState', view); } // host -> room
   sendMatch(msg) { this.socket.emit('match', msg); }            // guest -> host
   sendMatchState(state) { this.socket.emit('matchState', state); } // host -> room
+  sendTaunt(msg) { this.socket.emit('taunt', msg); }            // host -> room
 
   get id() { return this.socket.id; }
   sendTime(t) { this.socket.emit('time', t); }

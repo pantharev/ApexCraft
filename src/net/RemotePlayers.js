@@ -71,6 +71,30 @@ function nameTag(name) {
   return sprite;
 }
 
+// A camera-facing emoji sprite, drawn to a canvas (color emoji glyph). Used for
+// Prop Hunt taunts floating above a player's head.
+export function emojiSprite(emoji) {
+  const c = document.createElement('canvas');
+  c.width = c.height = 128;
+  const ctx = c.getContext('2d');
+  ctx.font = '96px "Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji", system-ui, sans-serif';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText(emoji, 64, 72);
+  const tex = new THREE.CanvasTexture(c);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  const sprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, depthTest: false, transparent: true }));
+  sprite.scale.set(0.9, 0.9, 1);
+  return sprite;
+}
+
+function disposeTaunt(t, group) {
+  if (!t) return;
+  group.remove(t.sprite);
+  t.sprite.material.map.dispose();
+  t.sprite.material.dispose();
+}
+
 function buildAvatar(id, name) {
   const shirt = hashColor(id);
   const group = new THREE.Group();
@@ -129,6 +153,18 @@ export class RemotePlayers {
     for (const b of p.body) b.visible = !blockId;
   }
 
+  // Prop Hunt: float a taunt emoji above a peer's head for `ttl` seconds. Kept
+  // outside `p.body`, so it shows even over a disguise block.
+  showTaunt(id, emoji, ttl = 2) {
+    const p = this.map.get(id);
+    if (!p) return;
+    disposeTaunt(p.taunt, p.group);
+    const sprite = emojiSprite(emoji);
+    sprite.position.y = 2.9;
+    p.group.add(sprite);
+    p.taunt = { sprite, ttl, age: 0 };
+  }
+
   // Ray vs. each peer (sphere test) for seeker tagging: nearest hit id or null.
   raycast(origin, dir, maxDist = 5) {
     let bestId = null, bestT = Infinity;
@@ -149,6 +185,7 @@ export class RemotePlayers {
   remove(id) {
     const p = this.map.get(id);
     if (!p) return;
+    disposeTaunt(p.taunt, p.group);
     this.scene.remove(p.group);
     p.group.traverse((o) => o.geometry && o.geometry.dispose());
     this.map.delete(id);
@@ -189,6 +226,15 @@ export class RemotePlayers {
         }
       } else {
         for (const l of p.legs) l.rotation.x *= 0.8;
+      }
+
+      // Advance any floating taunt: drift up and fade, then remove.
+      if (p.taunt) {
+        p.taunt.age += dt;
+        const f = p.taunt.age / p.taunt.ttl;
+        p.taunt.sprite.position.y = 2.9 + f * 0.6;
+        p.taunt.sprite.material.opacity = Math.max(0, 1 - f);
+        if (f >= 1) { disposeTaunt(p.taunt, p.group); p.taunt = null; }
       }
     }
   }

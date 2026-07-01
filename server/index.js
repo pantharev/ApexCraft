@@ -171,6 +171,13 @@ io.on('connection', (socket) => {
     socket.to(code).emit('matchState', s);
   });
 
+  // Taunts: the host (round authority) broadcasts them to the room to render.
+  socket.on('taunt', (m) => {
+    const r = room();
+    if (!r || r.host !== socket.id || !m) return;
+    socket.to(code).emit('taunt', m);
+  });
+
   // A guest hit a mob; route to the host who owns the simulation.
   socket.on('mobHit', (m) => {
     const r = room();

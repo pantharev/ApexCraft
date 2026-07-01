@@ -127,6 +127,13 @@ try {
   ml.disconnect();
   await wait(50);
 
+  // --- taunt broadcast: host -> room; guest taunts are ignored ---
+  const tauntP = once(guest, 'taunt');
+  guest.emit('taunt', { id: guest.id, taunt: 'llama' }); // non-host: must NOT broadcast
+  host.emit('taunt', { id: 'someHider', taunt: 'laugh' });
+  const tt = await tauntP;
+  ok(tt.taunt === 'laugh' && tt.id === 'someHider', 'taunt broadcasts from host (guest taunts ignored)');
+
   // --- time sync (host only) ---
   const timeP = once(guest, 'time');
   host.emit('time', 0.77);

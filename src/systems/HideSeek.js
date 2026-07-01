@@ -222,14 +222,17 @@ export class HideSeek {
   }
 
   // Reflect every other participant's disguise onto their remote avatar so
-  // hiders look like blocks to everyone but themselves.
+  // hiders look like blocks to everyone but themselves. Fellow hiders keep the
+  // name tag over the block (so they know which props are friends — bots
+  // included); seekers never see it.
   _syncRemoteDisguises() {
     const rp = this.game.remotePlayers;
     if (!rp) return;
+    const selfHider = this.state.roles[this.selfId] === 'hider';
     for (const id of Object.keys(this.state.roles)) {
       if (id === this.selfId) continue;
       const hiding = this.state.roles[id] === 'hider' && this.state.alive[id] !== false;
-      rp.setDisguise(id, hiding ? (this.state.disguise[id] || 0) : 0);
+      rp.setDisguise(id, hiding ? (this.state.disguise[id] || 0) : 0, hiding && selfHider);
     }
   }
 

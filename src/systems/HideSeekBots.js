@@ -95,7 +95,10 @@ export class HideSeekBots {
         if (bot.role === 'hider' && bot.target) this._moveToward(bot, bot.target, HIDE_SPEED, dt);
       } else if (state.phase === 'seeking') {
         if (bot.role === 'seeker') this._seek(bot, state, dt);
-        // Hiders hold still once disguised.
+        // Hiders lock onto the block grid, exactly like a still disguised
+        // player — a bot caught mid-stride by the countdown ending would
+        // otherwise freeze off-centre and stick out among the real props.
+        else this._settle(bot);
       }
       this._render(bot);
     }
@@ -165,6 +168,13 @@ export class HideSeekBots {
     return true;
   }
 
+  // Snap a hiding bot to the centre of its block and stop moving.
+  _settle(bot) {
+    bot.x = Math.floor(bot.x) + 0.5;
+    bot.z = Math.floor(bot.z) + 0.5;
+    bot.target = null;
+  }
+
   _moveToward(bot, tgt, speed, dt) {
     const dx = tgt.x - bot.x, dz = tgt.z - bot.z;
     const d = Math.hypot(dx, dz);
@@ -200,7 +210,14 @@ export class HideSeekBots {
     if (!rp) return;
     rp.setState({ id: bot.id, x: bot.x, y: bot.y, z: bot.z, yaw: bot.yaw });
     // Disguise only while a live hider; caught hiders revert to their avatar.
-    if (rp.setDisguise) rp.setDisguise(bot.id, bot.role === 'hider' && bot.alive ? bot.disguise : 0);
+    // A local hider keeps the bot's name tag visible over the block (must match
+    // what HideSeek._syncRemoteDisguises passes, or the two calls fight).
+    if (rp.setDisguise) {
+      const hiding = bot.role === 'hider' && bot.alive;
+      const hs = this.game.hideSeek;
+      const selfHider = !!hs && hs.state.roles[hs.selfId] === 'hider';
+      rp.setDisguise(bot.id, hiding ? bot.disguise : 0, hiding && selfHider);
+    }
   }
 
   clearAll() {

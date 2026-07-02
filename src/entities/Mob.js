@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { isSolid } from '../blocks/BlockRegistry.js';
+import { WORLD_HEIGHT } from '../config.js';
 import { MOBS } from './mobTypes.js';
 import { buildMobModel } from './MobModels.js';
 import { Sound } from '../systems/Sound.js';
@@ -277,10 +278,16 @@ export class Mob {
       }
     }
 
-    // Daylight burning for undead.
+    // Daylight burning for undead — but only under open sky. Cave-spawned
+    // zombies/skeletons live under a rock roof and must not cook off
+    // underground in the middle of the day (half the cave pool would die in
+    // ~20 s and churn the spawn cap).
     if (def.burns && !ctx.isNight) {
       this.burnTimer += dt;
-      if (this.burnTimer >= 1) { this.takeDamage(1); this.burnTimer = 0; }
+      if (this.burnTimer >= 1) {
+        this.burnTimer = 0;
+        if (this._skyExposed()) this.takeDamage(1);
+      }
     }
 
     // Horizontal velocity from heading.
@@ -297,7 +304,16 @@ export class Mob {
     // Body turns smoothly toward where it wants to face.
     this.yaw += wrapAngle(this.targetYaw - this.yaw) * Math.min(1, dt * TURN_SPEED);
 
-    this.vel.y -= GRAVITY * dt;
+    if (def.flies) {
+      // Flying mobs (bats): no gravity. A sinusoidal flap bobs them through
+      // the air — climbing gently while moving, sinking slowly when idle so
+      // they drift down toward a roost instead of pinning to the ceiling.
+      this._flapT = (this._flapT || 0) + dt;
+      const targetVy = Math.sin(this._flapT * 3.2) * 1.4 + (this.heading ? 0.5 : -0.8);
+      this.vel.y += (targetVy - this.vel.y) * Math.min(1, dt * 6);
+    } else {
+      this.vel.y -= GRAVITY * dt;
+    }
 
     const blockedX = this._moveAxis('x', this.vel.x * dt);
     const blockedZ = this._moveAxis('z', this.vel.z * dt);
@@ -365,6 +381,18 @@ export class Mob {
     } else {
       for (const l of this.legs) l.rotation.x *= 0.8;
     }
+  }
+
+  // True when no solid block roofs this mob's column — the same top-down
+  // notion the skylight mesher uses for daylight. Runs at most once per
+  // second per burning mob, so the column scan is cheap.
+  _skyExposed() {
+    if (!this.world) return true;
+    const x = Math.floor(this.pos.x), z = Math.floor(this.pos.z);
+    for (let y = Math.ceil(this.pos.y + this.h); y < WORLD_HEIGHT; y++) {
+      if (isSolid(this.world.getBlock(x, y, z))) return false;
+    }
+    return true;
   }
 
   // AABB for ray/attack tests.

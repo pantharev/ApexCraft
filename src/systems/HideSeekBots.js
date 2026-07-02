@@ -84,7 +84,15 @@ export class HideSeekBots {
   }
 
   endRound() {
-    for (const bot of this.bots.values()) bot.target = null;
+    // Reveal everyone for the results screen. This must happen here: after the
+    // roundEnd → lobby reset empties state.roles, HideSeek._syncRemoteDisguises
+    // iterates nothing, so a surviving bot that didn't clear its own disguise
+    // would stay a nameless block through the whole lobby.
+    for (const bot of this.bots.values()) {
+      bot.target = null;
+      bot.disguise = 0;
+      this._render(bot);
+    }
   }
 
   update(dt, state) {
@@ -92,7 +100,10 @@ export class HideSeekBots {
     for (const bot of this.bots.values()) {
       if (!bot.alive) continue; // caught bots stay revealed where they fell
       if (state.phase === 'countdown') {
-        if (bot.role === 'hider' && bot.target) this._moveToward(bot, bot.target, HIDE_SPEED, dt);
+        // A hiding spot the bot can't reach (walled off) gets re-rolled.
+        if (bot.role === 'hider' && bot.target && !this._moveToward(bot, bot.target, HIDE_SPEED, dt)) {
+          bot.target = this._randSpot();
+        }
       } else if (state.phase === 'seeking') {
         if (bot.role === 'seeker') this._seek(bot, state, dt);
         // Hiders lock onto the block grid, exactly like a still disguised
@@ -128,9 +139,10 @@ export class HideSeekBots {
       }
       return;
     }
-    // Nobody in view: wander the arena searching.
+    // Nobody in view: wander the arena searching. A blocked waypoint (inside
+    // a building, behind a dead-end) is abandoned for a fresh one.
     if (!bot.roam || Math.hypot(bot.roam.x - bot.x, bot.roam.z - bot.z) < ARRIVE) bot.roam = this._randSpot();
-    this._moveToward(bot, bot.roam, WANDER_SPEED, dt);
+    if (!this._moveToward(bot, bot.roam, WANDER_SPEED, dt)) bot.roam = this._randSpot();
   }
 
   // The nearest hider this bot can actually see: within sight range (much
@@ -175,6 +187,10 @@ export class HideSeekBots {
     bot.target = null;
   }
 
+  // Move toward a target with per-axis wall collision (bots must not glide
+  // through buildings — the whole escape mechanic is breaking line of sight
+  // behind them). Sliding along the free axis walks them around corners.
+  // Returns false when fully blocked so callers can pick a new destination.
   _moveToward(bot, tgt, speed, dt) {
     const dx = tgt.x - bot.x, dz = tgt.z - bot.z;
     const d = Math.hypot(dx, dz);
@@ -185,12 +201,24 @@ export class HideSeekBots {
         bot.z = Math.floor(bot.z) + 0.5;
         bot.target = null;
       }
-      return;
+      return true;
     }
-    bot.x += (dx / d) * speed * dt;
-    bot.z += (dz / d) * speed * dt;
+    const nx = bot.x + (dx / d) * speed * dt;
+    const nz = bot.z + (dz / d) * speed * dt;
+    const canX = this._walkable(nx, bot.z);
+    const canZ = this._walkable(canX ? nx : bot.x, nz);
+    if (canX) bot.x = nx;
+    if (canZ) bot.z = nz;
     bot.y = SPAWN_Y;
     bot.yaw = Math.atan2(dx, dz);
+    return canX || canZ;
+  }
+
+  // A bot-sized body (2 blocks tall at floor level) fits at this position.
+  _walkable(x, z) {
+    const bx = Math.floor(x), bz = Math.floor(z);
+    const w = this.game.world;
+    return !isSolid(w.getBlock(bx, SPAWN_Y, bz)) && !isSolid(w.getBlock(bx, SPAWN_Y + 1, bz));
   }
 
   // A place to wander to: one of the map's patrol waypoints (jittered), or a

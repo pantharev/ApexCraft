@@ -27,7 +27,7 @@ import { setActiveMap, activeMap, MAPS } from '../world/arenas/index.js';
 import { HideSeek, TAG_RANGE } from '../systems/HideSeek.js';
 import { HideSeekBots } from '../systems/HideSeekBots.js';
 import { TAUNTS, tauntById } from '../systems/taunts.js';
-import { getBlockId } from '../blocks/BlockRegistry.js';
+import { getBlockId, isSolid } from '../blocks/BlockRegistry.js';
 import { getItem } from '../items/ItemRegistry.js';
 import { SEA_LEVEL } from '../config.js';
 
@@ -286,7 +286,11 @@ export class Game {
         if (st.roles[this.hideSeek.selfId] !== 'seeker' || st.phase !== 'seeking') return false;
         const d = new THREE.Vector3();
         this.camera.getWorldDirection(d);
-        const hit = this.remotePlayers ? this.remotePlayers.raycast(this.camera.position, d, TAG_RANGE) : null;
+        let hit = this.remotePlayers ? this.remotePlayers.raycast(this.camera.position, d, TAG_RANGE) : null;
+        // The avatar raycast is a pure sphere test — also require voxel line of
+        // sight, so a hider tucked behind a wall can't be tagged through it.
+        // A blocked swing is a plain miss (the wrong-guess stun applies).
+        if (hit && !this._tagVisible(this.remotePlayers.map.get(hit).cur)) hit = null;
         Sound.swing();
         this.hideSeek.tag(hit);
         return true;
@@ -444,6 +448,23 @@ export class Game {
 
     this.onStats = null;  // optional callback for HUD
     this.onSaved = null;  // optional callback when a save completes
+  }
+
+  // Voxel line of sight from the camera to a tag target (feet position, chest
+  // height). Sampling stops short of the target so the block face a disguised
+  // hider is hugging doesn't occlude them.
+  _tagVisible(target) {
+    const from = this.camera.position;
+    const tx = target.x - from.x, ty = (target.y + 0.9) - from.y, tz = target.z - from.z;
+    const steps = Math.ceil(Math.hypot(tx, ty, tz) / 0.25);
+    for (let i = 1; i <= steps - 3; i++) {
+      const t = i / steps;
+      const bx = Math.floor(from.x + tx * t);
+      const by = Math.floor(from.y + ty * t);
+      const bz = Math.floor(from.z + tz * t);
+      if (isSolid(this.world.getBlock(bx, by, bz))) return false;
+    }
+    return true;
   }
 
   // Mob interface for attacks/projectiles: guests target the ghost mirror of

@@ -77,21 +77,30 @@ export class Explosions {
     Sound.explode();
 
     if (applyEdits) {
-      const r = Math.ceil(radius);
-      for (let dx = -r; dx <= r; dx++) {
-        for (let dy = -r; dy <= r; dy++) {
-          for (let dz = -r; dz <= r; dz++) {
-            const d = Math.sqrt(dx * dx + dy * dy + dz * dz);
-            if (d > radius * (0.82 + Math.random() * 0.22)) continue; // ragged edge
-            const bx = Math.floor(x + dx), by = Math.floor(y + dy), bz = Math.floor(z + dz);
-            const id = this.world.getBlock(bx, by, bz);
-            if (id === 0 || id === BEDROCK || id === WATER) continue;
-            this.world.setBlock(bx, by, bz, 0);
-            // Chain reaction: nearby TNT of either kind cooks off on a short fuse.
-            if (id === TNT) this.prime(bx, by, bz, 0.3 + Math.random() * 0.4);
-            else if (id === MEGA_TNT) this.prime(bx, by, bz, 0.3 + Math.random() * 0.4, MEGA_TNT_RADIUS, 'mega_tnt');
+      // Bracket the blast so the game can batch the network sync (one 'edits'
+      // message instead of thousands of packets) and skip per-block break
+      // particles (the fireball below is the blast's visual). try/finally so a
+      // throwing setBlock can't leave the batch open.
+      if (ctx.beginEdits) ctx.beginEdits();
+      try {
+        const r = Math.ceil(radius);
+        for (let dx = -r; dx <= r; dx++) {
+          for (let dy = -r; dy <= r; dy++) {
+            for (let dz = -r; dz <= r; dz++) {
+              const d = Math.sqrt(dx * dx + dy * dy + dz * dz);
+              if (d > radius * (0.82 + Math.random() * 0.22)) continue; // ragged edge
+              const bx = Math.floor(x + dx), by = Math.floor(y + dy), bz = Math.floor(z + dz);
+              const id = this.world.getBlock(bx, by, bz);
+              if (id === 0 || id === BEDROCK || id === WATER) continue;
+              this.world.setBlock(bx, by, bz, 0);
+              // Chain reaction: nearby TNT of either kind cooks off on a short fuse.
+              if (id === TNT) this.prime(bx, by, bz, 0.3 + Math.random() * 0.4);
+              else if (id === MEGA_TNT) this.prime(bx, by, bz, 0.3 + Math.random() * 0.4, MEGA_TNT_RADIUS, 'mega_tnt');
+            }
           }
         }
+      } finally {
+        if (ctx.endEdits) ctx.endEdits();
       }
     }
 

@@ -111,6 +111,24 @@ io.on('connection', (socket) => {
     socket.to(code).emit('edit', { k: e.k, i, id });
   });
 
+  // Bulk block edits (explosions): the whole blast arrives as one message —
+  // record every edit for late joiners, relay the sanitized batch once.
+  // The cap comfortably covers a mega TNT crater (~3k blocks) while bounding
+  // what a hostile client can make the room replay.
+  socket.on('edits', (list) => {
+    const r = room();
+    if (!r || !Array.isArray(list) || list.length > 10000) return;
+    const out = [];
+    for (const e of list) {
+      if (!e || typeof e.k !== 'string') continue;
+      const i = e.i | 0, id = e.id | 0;
+      if (!r.edits[e.k]) r.edits[e.k] = {};
+      r.edits[e.k][i] = id;
+      out.push({ k: e.k, i, id });
+    }
+    if (out.length) socket.to(code).emit('edits', out);
+  });
+
   // Mob snapshots (host only) at ~10 Hz.
   socket.on('mobs', (snap) => {
     const r = room();

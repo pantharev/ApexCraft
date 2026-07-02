@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { CHUNK_SIZE } from '../config.js';
 
 // We split the light pool into two halves so torches (warm) and glow mushrooms
 // (cool/cyan) never compete for slots and the player always has reliable warm
@@ -89,8 +90,18 @@ export class TorchLights {
   _nearGlowSources(playerPos, buf) {
     buf.length = 0;
     const rangeSq = RANGE * RANGE;
+    // Chunk-level rejection: a chunk whose centre is farther than RANGE plus
+    // the chunk's half-diagonal can't contain an in-range light. This runs
+    // every frame over all ~200 loaded chunks, so skipping whole chunks (and
+    // their per-light distance math) matters in mushroom-dense cave regions.
+    const half = CHUNK_SIZE / 2;
+    const pad = RANGE + half * Math.SQRT2;
+    const padSq = pad * pad;
     for (const chunk of this.world.chunks.values()) {
       if (!chunk.lights || chunk.lights.length === 0) continue;
+      const cdx = chunk.cx * CHUNK_SIZE + half - playerPos.x;
+      const cdz = chunk.cz * CHUNK_SIZE + half - playerPos.z;
+      if (cdx * cdx + cdz * cdz > padSq) continue;
       for (const [wx, wy, wz] of chunk.lights) {
         const dx = wx + 0.5 - playerPos.x;
         const dy = wy + 0.7 - playerPos.y;
@@ -132,7 +143,10 @@ export class TorchLights {
     }
 
     // --- Glow mushroom lights (cool cyan) ---
-    const nearGlow = [];
+    // Persistent buffer — _nearGlowSources truncates and refills it, so no
+    // per-frame array allocation for the common (few lights nearby) case.
+    if (!this._glowBuf) this._glowBuf = [];
+    const nearGlow = this._glowBuf;
     this._nearGlowSources(playerPos, nearGlow);
 
     for (let i = 0; i < GLOW_POOL; i++) {

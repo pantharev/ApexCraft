@@ -176,8 +176,12 @@ export class Game {
 
     // Every block edit: spray break particles (local AND remote breaks), and
     // broadcast local edits in multiplayer (remote applies suppress the echo).
+    // _blastEdits suppresses the per-block bursts while an explosion applies
+    // its crater — a mega TNT removes ~3k blocks in one frame and its fireball
+    // already covers the visual.
+    this._blastEdits = false;
     this.world.onEdit = (x, y, z, id, prev) => {
-      if (id === 0 && prev) {
+      if (id === 0 && prev && !this._blastEdits) {
         this.particles.burst(x + 0.5, y + 0.5, z + 0.5, blockAverageColor(prev));
       }
       if (this.net && !this.net.applying) this.net.sendEdit(x, y, z, id);
@@ -195,6 +199,9 @@ export class Game {
         this.world.setBlock(x, y, z, id);
         net.applying = false;
       };
+      // A bulk edit message is an explosion crater: suppress per-block break
+      // particles while it applies (the 'boom' event renders the visuals).
+      net.onEditBatch = (active) => { this._blastEdits = active; };
       net.onPlayerJoined = (p) => this.remotePlayers.add(p.id, p.name);
       net.onPlayerLeft = (p) => {
         this.remotePlayers.remove(p.id);
@@ -456,6 +463,16 @@ export class Game {
       // Only the simulation owner damages real mobs.
       mobs: this.net && !this.net.isHost ? null : this.mobs,
       broadcast: this.net ? (x, y, z, r) => this.net.sendBoom(x, y, z, r) : null,
+      // Blast-edit bracketing: batch the network sync into one message and
+      // skip per-block break particles while the crater is carved.
+      beginEdits: () => {
+        this._blastEdits = true;
+        if (this.net) this.net.beginEditBatch();
+      },
+      endEdits: () => {
+        this._blastEdits = false;
+        if (this.net) this.net.endEditBatch();
+      },
     };
   }
 
@@ -972,8 +989,11 @@ export class Game {
         });
       }
       if (this.net.isHost) {
+        // Creative and Prop Hunt never simulate mobs — don't stream empty
+        // snapshots at 10 Hz for the whole session.
+        const simMobs = !this.creative && !this.hideseek;
         this._mobNetT += dt;
-        if (this._mobNetT >= 0.1) { this._mobNetT = 0; this.net.sendMobs(this.mobs.snapshot()); }
+        if (simMobs && this._mobNetT >= 0.1) { this._mobNetT = 0; this.net.sendMobs(this.mobs.snapshot()); }
         this._timeNetT += dt;
         if (this._timeNetT >= 5) { this._timeNetT = 0; this.net.sendTime(this.dayNight.t); }
       }

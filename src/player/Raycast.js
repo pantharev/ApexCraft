@@ -4,7 +4,8 @@ import { isSolid, getBlock } from '../blocks/BlockRegistry.js';
 // and stop at the first targetable block — solid, or a plant (flowers/grass
 // have no collision but can still be broken). Returns the hit block
 // coordinates plus the empty cell just before it (for placement), or null.
-export function raycastVoxel(world, origin, dir, maxDist = 6) {
+// hitLiquid additionally stops at water/lava cells (bucket targeting).
+export function raycastVoxel(world, origin, dir, maxDist = 6, hitLiquid = false) {
   let x = Math.floor(origin.x);
   let y = Math.floor(origin.y);
   let z = Math.floor(origin.z);
@@ -32,7 +33,7 @@ export function raycastVoxel(world, origin, dir, maxDist = 6) {
   while (t <= maxDist) {
     const id = world.getBlock(x, y, z);
     const def = getBlock(id);
-    if (isSolid(id) || def.plant || def.door) {
+    if (isSolid(id) || def.plant || def.door || (hitLiquid && def.liquid)) {
       return {
         block: { x, y, z },
         place: { x: x + face[0], y: y + face[1], z: z + face[2] },

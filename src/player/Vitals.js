@@ -1,8 +1,5 @@
-import { getBlockId } from '../blocks/BlockRegistry.js';
+import { liquidKind } from '../blocks/BlockRegistry.js';
 import { Sound } from '../systems/Sound.js';
-
-const WATER = getBlockId('water');
-const LAVA = getBlockId('lava');
 
 export const MAX_HEALTH = 20;
 export const MAX_HUNGER = 20;
@@ -74,7 +71,7 @@ export class Vitals {
 
     // Air: head submerged depletes the bubble bar, then drowns.
     const headBlock = this.world.getBlock(Math.floor(p.x), Math.floor(p.y + 1.6), Math.floor(p.z));
-    this.submerged = headBlock === WATER;
+    this.submerged = liquidKind(headBlock) === 'water'; // sources and flowing cells alike
     if (this.submerged) {
       this.air -= dt;
       if (this.air <= 0) {
@@ -90,7 +87,7 @@ export class Vitals {
     // Lava burns: standing in lava sears 3 HP every half second. (godMode
     // returned above, so creative players never reach this.)
     const bodyBlock = this.world.getBlock(Math.floor(p.x), Math.floor(p.y + 0.5), Math.floor(p.z));
-    if (bodyBlock === LAVA) {
+    if (liquidKind(bodyBlock) === 'lava') {
       this.lavaTimer += dt;
       if (this.lavaTimer >= 0.5) { this.damage(3); this.lavaTimer = 0; }
     } else {

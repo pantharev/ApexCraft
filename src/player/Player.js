@@ -1,9 +1,6 @@
 import * as THREE from 'three';
-import { isSolid, getBlock, getBlockId } from '../blocks/BlockRegistry.js';
+import { isSolid, getBlock, liquidKind } from '../blocks/BlockRegistry.js';
 import { Sound, soundCategory } from '../systems/Sound.js';
-
-const WATER = getBlockId('water');
-const LAVA = getBlockId('lava');
 
 // Player physics + first-person controls. Uses an AABB swept against the voxel
 // grid for collision. Pointer lock drives camera look; WASD drives movement.
@@ -199,8 +196,9 @@ export class Player {
       const bodyBlock = this.world.getBlock(
         Math.floor(this.pos.x), Math.floor(this.pos.y + 0.5), Math.floor(this.pos.z)
       );
-      this.inWater = bodyBlock === WATER;
-      this.inLava = bodyBlock === LAVA;
+      const bodyKind = liquidKind(bodyBlock); // sources and flowing cells alike
+      this.inWater = bodyKind === 'water';
+      this.inLava = bodyKind === 'lava';
       if (this.inWater && !this._wasInWater) Sound.splash(); // entered water
 
       const speed = (this.inWater ? SWIM_SPEED : this.inLava ? LAVA_SPEED : WALK_SPEED) * this.speedBoost;

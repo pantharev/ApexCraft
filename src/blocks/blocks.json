@@ -100,7 +100,8 @@
     "solid": false,
     "color": "#3a6dd1",
     "transparent": true,
-    "liquid": true
+    "liquid": true,
+    "liquidType": "water"
   },
   {
     "id": 7,
@@ -848,6 +849,7 @@
     "solid": false,
     "color": "#e2530f",
     "liquid": true,
+    "liquidType": "lava",
     "luminance": 15
   },
   {
@@ -865,5 +867,115 @@
         "count": [1, 1]
       }
     ]
+  },
+  {
+    "id": 54,
+    "name": "water_flow_7",
+    "solid": false,
+    "transparent": true,
+    "liquid": true,
+    "liquidType": "water",
+    "flowLevel": 7,
+    "liquidHeight": 0.81,
+    "color": "#3a6dd1"
+  },
+  {
+    "id": 55,
+    "name": "water_flow_6",
+    "solid": false,
+    "transparent": true,
+    "liquid": true,
+    "liquidType": "water",
+    "flowLevel": 6,
+    "liquidHeight": 0.71,
+    "color": "#3a6dd1"
+  },
+  {
+    "id": 56,
+    "name": "water_flow_5",
+    "solid": false,
+    "transparent": true,
+    "liquid": true,
+    "liquidType": "water",
+    "flowLevel": 5,
+    "liquidHeight": 0.62,
+    "color": "#3a6dd1"
+  },
+  {
+    "id": 57,
+    "name": "water_flow_4",
+    "solid": false,
+    "transparent": true,
+    "liquid": true,
+    "liquidType": "water",
+    "flowLevel": 4,
+    "liquidHeight": 0.52,
+    "color": "#3a6dd1"
+  },
+  {
+    "id": 58,
+    "name": "water_flow_3",
+    "solid": false,
+    "transparent": true,
+    "liquid": true,
+    "liquidType": "water",
+    "flowLevel": 3,
+    "liquidHeight": 0.43,
+    "color": "#3a6dd1"
+  },
+  {
+    "id": 59,
+    "name": "water_flow_2",
+    "solid": false,
+    "transparent": true,
+    "liquid": true,
+    "liquidType": "water",
+    "flowLevel": 2,
+    "liquidHeight": 0.33,
+    "color": "#3a6dd1"
+  },
+  {
+    "id": 60,
+    "name": "water_flow_1",
+    "solid": false,
+    "transparent": true,
+    "liquid": true,
+    "liquidType": "water",
+    "flowLevel": 1,
+    "liquidHeight": 0.24,
+    "color": "#3a6dd1"
+  },
+  {
+    "id": 61,
+    "name": "lava_flow_3",
+    "solid": false,
+    "liquid": true,
+    "liquidType": "lava",
+    "flowLevel": 3,
+    "liquidHeight": 0.72,
+    "luminance": 15,
+    "color": "#e2530f"
+  },
+  {
+    "id": 62,
+    "name": "lava_flow_2",
+    "solid": false,
+    "liquid": true,
+    "liquidType": "lava",
+    "flowLevel": 2,
+    "liquidHeight": 0.5,
+    "luminance": 15,
+    "color": "#e2530f"
+  },
+  {
+    "id": 63,
+    "name": "lava_flow_1",
+    "solid": false,
+    "liquid": true,
+    "liquidType": "lava",
+    "flowLevel": 1,
+    "liquidHeight": 0.28,
+    "luminance": 15,
+    "color": "#e2530f"
   }
 ]

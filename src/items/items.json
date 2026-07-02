@@ -624,5 +624,26 @@
     "color": "#40e8c8",
     "maxStack": 64,
     "placeBlock": "glow_mushroom"
+  },
+  {
+    "name": "bucket",
+    "display": "Bucket",
+    "color": "#c0c4cc",
+    "maxStack": 16,
+    "bucket": "empty"
+  },
+  {
+    "name": "water_bucket",
+    "display": "Water Bucket",
+    "color": "#3a6dd1",
+    "maxStack": 1,
+    "bucket": "water"
+  },
+  {
+    "name": "lava_bucket",
+    "display": "Lava Bucket",
+    "color": "#e2530f",
+    "maxStack": 1,
+    "bucket": "lava"
   }
 ]

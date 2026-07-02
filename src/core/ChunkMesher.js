@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { CHUNK_SIZE, WORLD_HEIGHT } from '../config.js';
-import { getBlock, isOpaque, isSolid, getBlockId } from '../blocks/BlockRegistry.js';
+import { getBlock, isOpaque, isSolid, getBlockId, liquidKind } from '../blocks/BlockRegistry.js';
 import { faceMaterialIndex, WATER_MATERIAL_INDEX } from '../textures/atlas.js';
 import { Noise } from '../world/noise.js';
 
@@ -30,6 +30,14 @@ const STAIR_DIR = {
 };
 const SPECIAL = new Set([...PLANTS, DOOR, DOOR_OPEN, BED, BED_HEAD, FENCE, LADDER, PANE,
   ...SLABS, ...Object.keys(STAIR_DIR).map(Number)]);
+// Flowing liquid blocks (see systems/Liquids.js): drawn in the special pass as
+// boxes whose height falls with flowLevel, so streams visibly thin as they
+// spread. id -> { kind: 'water'|'lava', height: rendered box height }.
+const FLOW = new Map();
+for (let id = 0; id < 256; id++) {
+  const d = getBlock(id);
+  if (d && d.id === id && d.flowLevel) FLOW.set(id, { kind: d.liquidType, height: d.liquidHeight });
+}
 
 // ---------------------------------------------------------------------------
 // Skylight system — gives caves genuine darkness while leaving the surface
@@ -292,7 +300,7 @@ export function buildChunkGeometry(chunk, worldGet) {
           for (let i = 0; i < du; i++) {
             cell[axis] = layer; cell[u] = i; cell[v] = j;
             const id = at(cell[0], cell[1], cell[2]);
-            if (id === 0 || id === TORCH || SPECIAL.has(id)) continue; // non-cubes drawn separately
+            if (id === 0 || id === TORCH || SPECIAL.has(id) || FLOW.has(id)) continue; // non-cubes drawn separately
             const nb = [cell[0], cell[1], cell[2]]; nb[axis] += dir;
             const neighbor = at(nb[0], nb[1], nb[2]);
             const block = getBlock(id);
@@ -377,7 +385,8 @@ export function buildChunkGeometry(chunk, worldGet) {
     for (let lz = 0; lz < CHUNK_SIZE; lz++) {
       for (let y = 1; y < WORLD_HEIGHT - 1; y++) {
         const id = chunk.get(lx, y, lz);
-        if (!SPECIAL.has(id)) continue;
+        const flow = FLOW.get(id);
+        if (!SPECIAL.has(id) && !flow) continue;
         const wx = baseX + lx, wz = baseZ + lz;
 
         // Per-cell skylight for the special pass (plants, boxes).  Same
@@ -386,7 +395,23 @@ export function buildChunkGeometry(chunk, worldGet) {
         const roofY = skyHeightMap[lz * CHUNK_SIZE + lx];
         const cellSl = skylightAt(y, roofY);
 
-        if (PLANTS.has(id)) {
+        if (flow) {
+          // Fed from above: draw the full cell so falling streams read as one
+          // continuous column instead of a stack of short boxes.
+          const above = at(lx, y + 1, lz);
+          const below = at(lx, y - 1, lz);
+          const h = liquidKind(above) === flow.kind ? 1 : flow.height;
+          // Water shares the translucent water buffer/material; lava flows use
+          // the emissive lava tile via the grouped material array.
+          const buf = flow.kind === 'water' ? water : bufFor(faceMaterialIndex(id, 'side'));
+          const open = (nb) => !isOpaque(nb) && liquidKind(nb) !== flow.kind;
+          pushLiquidBox(buf, wx, y, wz, h, {
+            top: liquidKind(above) !== flow.kind,
+            bottom: !isOpaque(below) && liquidKind(below) !== flow.kind,
+            px: open(at(lx + 1, y, lz)), nx: open(at(lx - 1, y, lz)),
+            pz: open(at(lx, y, lz + 1)), nz: open(at(lx, y, lz - 1)),
+          }, cellSl);
+        } else if (PLANTS.has(id)) {
           const tint = id === TALL_GRASS ? climateTint(wx, wz) : [1, 1, 1];
           pushCross(bufFor(faceMaterialIndex(id, 'side')), wx, y, wz, tint, cellSl);
         } else if (id === DOOR || id === DOOR_OPEN) {
@@ -481,6 +506,34 @@ function pushBox(bufFor, x0, y0, z0, x1, y1, z1, matTop, matSide, matBottom, sl 
   ];
   for (const [mat, n, c, shade, su, sv] of faces) {
     const buf = bufFor(mat);
+    const vi = buf.positions.length / 3;
+    const uvs = [[0, 0], [su, 0], [su, sv], [0, sv]];
+    const bright = shade * sl;
+    for (let k = 0; k < 4; k++) {
+      buf.positions.push(c[k][0], c[k][1], c[k][2]);
+      buf.normals.push(n[0], n[1], n[2]);
+      buf.uvs.push(uvs[k][0], uvs[k][1]);
+      buf.colors.push(bright, bright, bright);
+    }
+    buf.indices.push(vi, vi + 1, vi + 2, vi, vi + 2, vi + 3);
+  }
+}
+
+// Push a unit-footprint box of height h into a single buffer, drawing only the
+// requested faces (neighbouring same-liquid cells and opaque walls are culled
+// by the caller). Used for flowing-liquid cells.
+function pushLiquidBox(buf, x, y, z, h, faces, sl = 1.0) {
+  const x0 = x, x1 = x + 1, z0 = z, z1 = z + 1, y0 = y, y1 = y + h;
+  const defs = [
+    ['px', [1, 0, 0], [[x1, y0, z1], [x1, y0, z0], [x1, y1, z0], [x1, y1, z1]], SHADE.side, 1, h],
+    ['nx', [-1, 0, 0], [[x0, y0, z0], [x0, y0, z1], [x0, y1, z1], [x0, y1, z0]], SHADE.side, 1, h],
+    ['top', [0, 1, 0], [[x0, y1, z1], [x1, y1, z1], [x1, y1, z0], [x0, y1, z0]], SHADE.top, 1, 1],
+    ['bottom', [0, -1, 0], [[x0, y0, z0], [x1, y0, z0], [x1, y0, z1], [x0, y0, z1]], SHADE.bottom, 1, 1],
+    ['pz', [0, 0, 1], [[x0, y0, z1], [x1, y0, z1], [x1, y1, z1], [x0, y1, z1]], SHADE.side, 1, h],
+    ['nz', [0, 0, -1], [[x1, y0, z0], [x0, y0, z0], [x0, y1, z0], [x1, y1, z0]], SHADE.side, 1, h],
+  ];
+  for (const [face, n, c, shade, su, sv] of defs) {
+    if (!faces[face]) continue;
     const vi = buf.positions.length / 3;
     const uvs = [[0, 0], [su, 0], [su, sv], [0, sv]];
     const bright = shade * sl;

@@ -224,7 +224,9 @@ export class RemotePlayers {
       c.yaw += dyaw * k;
 
       p.group.position.set(c.x, c.y, c.z);
-      p.group.rotation.y = c.yaw;
+      // Disguised hiders render axis-aligned like a real placed block — a cube
+      // rotated to the player's yaw would stick out of the grid instantly.
+      p.group.rotation.y = p.disguiseId ? 0 : c.yaw;
 
       // Swing legs while the avatar is moving horizontally.
       const speed = Math.hypot(dx, dz) / Math.max(dt, 1e-4);

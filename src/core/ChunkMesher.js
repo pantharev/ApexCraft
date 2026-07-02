@@ -252,6 +252,31 @@ export function buildChunkGeometry(chunk, worldGet) {
   // skyHeight[lz * CHUNK_SIZE + lx] = y of the first solid block from top.
   const skyHeightMap = buildSkyHeightMap(chunk);
 
+  // Sky-roof height for any column, including the one-block ring outside this
+  // chunk: border faces sample the *neighbour's* column, and clamping back into
+  // the local chunk (whose roof is the terrain surface above the face) painted
+  // dark seams on daylight cliff walls at every chunk boundary. Neighbour
+  // columns are scanned on demand via worldGet and cached — at most the 4×16
+  // border ring per mesh build (World.update generates neighbours first, so the
+  // scan always sees real terrain).
+  const borderRoof = new Map();
+  const roofAt = (lx, lz) => {
+    if (lx >= 0 && lx < CHUNK_SIZE && lz >= 0 && lz < CHUNK_SIZE) {
+      return skyHeightMap[lz * CHUNK_SIZE + lx];
+    }
+    const k = (lx + 1) * (CHUNK_SIZE + 2) + (lz + 1); // lx/lz ∈ -1..CHUNK_SIZE
+    let r = borderRoof.get(k);
+    if (r === undefined) {
+      r = WORLD_HEIGHT; // open sky unless an opaque roof is found
+      const wx = baseX + lx, wz = baseZ + lz;
+      for (let y = WORLD_HEIGHT - 1; y >= 0; y--) {
+        if (isOpaque(worldGet(wx, y, wz))) { r = y; break; }
+      }
+      borderRoof.set(k, r);
+    }
+    return r;
+  };
+
   for (let axis = 0; axis < 3; axis++) {
     const u = (axis + 1) % 3, v = (axis + 2) % 3;
     const du = DIMS[u], dv = DIMS[v];
@@ -292,18 +317,13 @@ export function buildChunkGeometry(chunk, worldGet) {
               }
             }
 
-            // Skylight bucket: use the cell's own column (x = cell[0] for axis
-            // 1 & 2; the face y coordinate for the bucket). For axis 0 (x-faces)
-            // the relevant column is the neighbour's column since the face
-            // surface is at nb position.
-            const faceLx = (axis === 0) ? Math.max(0, Math.min(CHUNK_SIZE - 1, nb[0])) : cell[0];
-            const faceLz = (axis === 2) ? Math.max(0, Math.min(CHUNK_SIZE - 1, nb[2])) : cell[2];
-            const faceY  = cell[1];
-            let roofY = WORLD_HEIGHT; // fallback: open sky
-            if (faceLx >= 0 && faceLx < CHUNK_SIZE && faceLz >= 0 && faceLz < CHUNK_SIZE) {
-              roofY = skyHeightMap[faceLz * CHUNK_SIZE + faceLx];
-            }
-            const sl = skylightAt(faceY, roofY);
+            // Skylight bucket: side faces (axis 0/2) sample the neighbour air
+            // cell's column — the face surface lives at nb, so it's lit by
+            // whatever sky reaches that column, even across a chunk border.
+            // Top/bottom faces use the cell's own column.
+            const faceLx = (axis === 0) ? nb[0] : cell[0];
+            const faceLz = (axis === 2) ? nb[2] : cell[2];
+            const sl = skylightAt(cell[1], roofAt(faceLx, faceLz));
             const slB = slBucket(sl);
 
             mask[j * du + i] = id | (aoBits << ID_BITS) | (slB << SL_SHIFT);

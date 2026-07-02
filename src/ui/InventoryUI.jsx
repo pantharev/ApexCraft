@@ -239,6 +239,11 @@ function CraftingScreen({ inventory, gridSize, title }) {
   // (e.g. a touch swap: drop on target, then return the displaced block to source).
   const setCur = (c) => { cursorRef.current = c; setCursor(c); };
   const gridRef = useRef(grid); gridRef.current = grid;
+  // Same synchronous-ref treatment for the grid: unlike inventory/furnace slots
+  // (shared mutable objects), the grid is React state, so the second slot op of
+  // a touch swap would otherwise read a stale grid and clobber the first op —
+  // duplicating one stack and destroying the other.
+  const setGridSync = (g) => { gridRef.current = g; setGrid(g); };
 
   useEffect(() => () => {
     const c = cursorRef.current;
@@ -253,14 +258,14 @@ function CraftingScreen({ inventory, gridSize, title }) {
 
   const invLeft = (i) => setCur(inventory.clickSlot(i, cursorRef.current));
   const invRight = (i) => setCur(inventory.rightClickSlot(i, cursorRef.current));
-  const cellLeft = (j) => { const r = leftClick(grid[j], cursorRef.current); const g = grid.slice(); g[j] = r.slot; setGrid(g); setCur(r.cursor); };
-  const cellRight = (j) => { const r = rightClick(grid[j], cursorRef.current); const g = grid.slice(); g[j] = r.slot; setGrid(g); setCur(r.cursor); };
+  const cellLeft = (j) => { const g = gridRef.current.slice(); const r = leftClick(g[j], cursorRef.current); g[j] = r.slot; setGridSync(g); setCur(r.cursor); };
+  const cellRight = (j) => { const g = gridRef.current.slice(); const r = rightClick(g[j], cursorRef.current); g[j] = r.slot; setGridSync(g); setCur(r.cursor); };
   const consumeOnce = (g) => g.map((s) => (s ? (s.count > 1 ? { ...s, count: s.count - 1 } : null) : null));
 
   const takeOutput = (shift) => {
     if (!result) return;
     if (shift) {
-      let g = grid;
+      let g = gridRef.current;
       let res = matchRecipe(g.map((s) => (s ? s.item : null)), gridSize);
       let guard = 0;
       while (res && inventory.canFit(res.item, res.count) && guard++ < 999) {
@@ -268,13 +273,13 @@ function CraftingScreen({ inventory, gridSize, title }) {
         g = consumeOnce(g);
         res = matchRecipe(g.map((s) => (s ? s.item : null)), gridSize);
       }
-      setGrid(g);
+      setGridSync(g);
       return;
     }
     const c = cursorRef.current;
     if (c && (c.item !== result.item || c.count + result.count > maxStackOf(result.item))) return;
     setCur(c ? { item: c.item, count: c.count + result.count } : { ...result });
-    setGrid(consumeOnce(grid));
+    setGridSync(consumeOnce(gridRef.current));
   };
 
   // Touch pointer routing by slot key.

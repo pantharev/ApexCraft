@@ -127,6 +127,31 @@ export class HideSeek {
     else if (msg.action === 'taunt') this._applyTaunt(fromId, msg.id);
   }
 
+  // A player disconnected mid-match: drop them from the roster. Without this a
+  // departed hider is an untaggable ghost — seekers could never clear the round
+  // and would always time out to "hiders win". Runs on every client (the local
+  // state is corrected immediately; on guests the next host broadcast agrees),
+  // but only the authority may decide the round from it.
+  playerLeft(id) {
+    const s = this.state;
+    if (!(id in s.roles)) return;
+    delete s.roles[id];
+    delete s.alive[id];
+    delete s.disguise[id];
+    delete s.stun[id];
+    delete s.spawns[id];
+    if (this.authoritative && s.phase === 'seeking') this._checkWin();
+    this._changed();
+  }
+
+  // Host migration: this client now owns the simulation. The departed host may
+  // still be in the roster (leave/migration event order isn't guaranteed), so
+  // re-check the win condition on takeover rather than waiting for the next tag.
+  becomeAuthority() {
+    this.authoritative = true;
+    if (this.state.phase === 'seeking') this._checkWin();
+  }
+
   // Authoritative: award style points, alert nearby seekers, play + broadcast
   // the effect, and queue the llama's cosmetic blast.
   _applyTaunt(playerId, tauntId) {

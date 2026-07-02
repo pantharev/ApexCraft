@@ -55,7 +55,25 @@ export class World {
   _applyEdits(k, chunk) {
     const e = this.edits.get(k);
     if (!e) return;
-    for (const [index, id] of e) chunk.blocks[index] = id;
+    for (const [index, id] of e) {
+      // Keep chunk.lights (glow-source list for the dynamic light pool) in sync,
+      // same as the live setBlock path: a broken generated mushroom must not
+      // leave a phantom light behind, and a player-placed one must glow again
+      // after a reload / LRU regen / late join.
+      const prev = chunk.blocks[index];
+      if (id === GLOW || prev === GLOW) {
+        const lx = index % CHUNK_SIZE;
+        const lz = Math.floor(index / CHUNK_SIZE) % CHUNK_SIZE;
+        const wy = Math.floor(index / (CHUNK_SIZE * CHUNK_SIZE));
+        const wx = chunk.cx * CHUNK_SIZE + lx;
+        const wz = chunk.cz * CHUNK_SIZE + lz;
+        if (!chunk.lights) chunk.lights = [];
+        const li = chunk.lights.findIndex((p) => p[0] === wx && p[1] === wy && p[2] === wz);
+        if (id === GLOW && li < 0) chunk.lights.push([wx, wy, wz]);
+        else if (id !== GLOW && li >= 0) chunk.lights.splice(li, 1);
+      }
+      chunk.blocks[index] = id;
+    }
     chunk.dirty = true;
   }
 

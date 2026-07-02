@@ -62,6 +62,11 @@ const CREATIVE_KIT = [
 export class Game {
   constructor(container, save = null, net = null) {
     this.container = container;
+    // Every window/document listener goes through _on() so dispose() can remove
+    // it — Game instances come and go per world, and a leaked handler on a
+    // disposed game keeps firing (e.g. Enter starting a Prop Hunt round in a
+    // scene that's no longer rendered).
+    this._listeners = [];
     this._save = save || null;
     this.net = net; // multiplayer connection (null = single-player)
     // Guests (and migrated hosts) play someone else's world — don't persist it.
@@ -191,7 +196,12 @@ export class Game {
         net.applying = false;
       };
       net.onPlayerJoined = (p) => this.remotePlayers.add(p.id, p.name);
-      net.onPlayerLeft = (p) => this.remotePlayers.remove(p.id);
+      net.onPlayerLeft = (p) => {
+        this.remotePlayers.remove(p.id);
+        // Prop Hunt: drop them from the round roster too, or a departed hider
+        // becomes an untaggable ghost and the round can never be won.
+        if (this.hideSeek) this.hideSeek.playerLeft(p.id);
+      };
       net.onPlayerState = (s) => this.remotePlayers.setState(s);
       net.onMobs = (snap) => { if (!net.isHost) this.ghostMobs.apply(snap); };
       net.onProjectile = (p) => {
@@ -230,7 +240,7 @@ export class Game {
       net.onBecomeHost = () => {
         this.ghostMobs.clear(); // our MobManager takes over
         // Take over the hide & seek simulation from our last-synced state.
-        if (this.hideSeek) this.hideSeek.authoritative = true;
+        if (this.hideSeek) this.hideSeek.becomeAuthority();
       };
       net.onTime = (t) => { this.dayNight.t = t; };
       this._netT = 0;     // player-state send accumulator (~15 Hz)
@@ -245,7 +255,7 @@ export class Game {
     // Dev-only (localhost): T cycles day/night, V teleports to the nearest
     // village (again = next one), G toggles a 3x speed boost.
     if (this.dev) {
-      window.addEventListener('keydown', (e) => {
+      this._on(window, 'keydown', (e) => {
         if (e.code === 'KeyT') {
           this._devTime = (this._devTime + 1) % 3;
           if (this._devTime === 1) { this.dayNight.t = 0.25; this.dayNight.frozen = true; }
@@ -505,6 +515,13 @@ export class Game {
     this.player._peakY = this.player.pos.y; // no fall damage from the jump
   }
 
+  // addEventListener that dispose() undoes. Use for anything on window or
+  // document (targets that outlive this Game instance).
+  _on(target, type, fn) {
+    target.addEventListener(type, fn);
+    this._listeners.push([target, type, fn]);
+  }
+
   _onResize() {
     // Fall back to the window if the container hasn't been laid out yet, and
     // guard against a zero height (which would make the aspect NaN).
@@ -516,7 +533,7 @@ export class Game {
   }
 
   _bindHotbar() {
-    window.addEventListener('keydown', (e) => {
+    this._on(window, 'keydown', (e) => {
       const n = parseInt(e.key, 10);
       if (n >= 1 && n <= 9) this.inventory.setSelected(n - 1);
     });
@@ -527,7 +544,7 @@ export class Game {
   }
 
   _bindScreens() {
-    window.addEventListener('keydown', (e) => {
+    this._on(window, 'keydown', (e) => {
       if (e.code === 'KeyE') this.setScreen(this.openScreen ? null : 'inventory');
       else if (e.code === 'Escape' && this.openScreen) this.setScreen(null);
       else if (e.code === 'KeyM') Sound.toggle();
@@ -538,7 +555,7 @@ export class Game {
   // while hiding (countdown) or fire a taunt (seeking). (UI buttons can't be
   // clicked under pointer-lock, so it's keys.)
   _bindHideSeek() {
-    window.addEventListener('keydown', (e) => {
+    this._on(window, 'keydown', (e) => {
       if (!this.hideSeek) return;
       const st = this.hideSeek.state;
       if (e.code === 'Enter' && (st.phase === 'lobby' || st.phase === 'roundEnd')) { this.hsStart(); return; }
@@ -576,13 +593,13 @@ export class Game {
   // the mouse (camera-look pauses), release to fire the highlighted taunt. ----
 
   _bindTauntWheel() {
-    window.addEventListener('keydown', (e) => {
+    this._on(window, 'keydown', (e) => {
       if (e.code === 'KeyR' && !e.repeat && !this.tauntWheel.open && this._canTaunt()) this._openWheel();
     });
-    window.addEventListener('keyup', (e) => {
+    this._on(window, 'keyup', (e) => {
       if (e.code === 'KeyR' && this.tauntWheel.open) this._closeWheel(true);
     });
-    document.addEventListener('mousemove', (e) => {
+    this._on(document, 'mousemove', (e) => {
       if (this.tauntWheel.open) this._aimWheel(e.movementX || 0, e.movementY || 0);
     });
   }
@@ -1031,6 +1048,8 @@ export class Game {
     this._running = false;
     window.removeEventListener('resize', this._onResize);
     window.removeEventListener('beforeunload', this._onUnload);
+    for (const [target, type, fn] of this._listeners) target.removeEventListener(type, fn);
+    this._listeners.length = 0;
     if (this._resizeObserver) this._resizeObserver.disconnect();
     this.torchLights.dispose();
     this.renderer.dispose();

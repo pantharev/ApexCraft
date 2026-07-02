@@ -1,6 +1,5 @@
 import React from 'react';
-import { PROP_BLOCKS } from '../world/arenas/index.js';
-import { getBlockId } from '../blocks/BlockRegistry.js';
+import { getBlock } from '../blocks/BlockRegistry.js';
 import { TAUNTS } from '../systems/taunts.js';
 
 // Prop Hunt HUD. Purely informational: round control (start) and disguise
@@ -8,7 +7,14 @@ import { TAUNTS } from '../systems/taunts.js';
 // clicked while the mouse is pointer-locked. Reads the match state pushed by
 // the HideSeek manager through game.onMatch.
 
-const PROPS = PROP_BLOCKS.map((n) => ({ name: n, id: getBlockId(n), label: prettify(n) }));
+// Disguise palette comes from the game's HideSeek manager (per-map), not a
+// module constant — different worlds can use different arena maps.
+function propsFor(game) {
+  return (game?.hideSeek?.propIds || []).map((id) => {
+    const name = getBlock(id).name;
+    return { id, name, label: prettify(name) };
+  });
+}
 function prettify(s) { return s.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase()); }
 
 const IS_TOUCH = typeof window !== 'undefined' &&
@@ -20,6 +26,7 @@ const shadow = { textShadow: '1px 1px 2px #000' };
 
 export function HideSeekHUD({ game, match }) {
   const m = match || { phase: 'lobby', roles: {}, alive: {}, disguise: {}, stun: {}, score: {}, timeLeft: 0, round: 0, winner: null };
+  const PROPS = React.useMemo(() => propsFor(game), [game]);
   const selfId = game?.hideSeek ? game.hideSeek.selfId : 'self';
   const role = m.roles[selfId];
   const alive = m.alive[selfId] !== false;
@@ -125,6 +132,7 @@ export function HideSeekHUD({ game, match }) {
 // taunt) since mobile has no keyboard. Rendered only on touch devices.
 export function HideSeekTouch({ game, match }) {
   const [menu, setMenu] = React.useState(false);
+  const PROPS = React.useMemo(() => propsFor(game), [game]);
   const m = match || {};
   const selfId = game?.hideSeek ? game.hideSeek.selfId : 'self';
   const role = (m.roles || {})[selfId];

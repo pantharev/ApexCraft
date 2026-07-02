@@ -110,8 +110,8 @@ export class Net {
   }
 
   // Host the given world. Resolves with the shareable room code.
-  async host({ name, seed, edits, time, mode }) {
-    const res = await this._ack('host', { name, seed, edits, time, mode });
+  async host({ name, seed, edits, time, mode, map }) {
+    const res = await this._ack('host', { name, seed, edits, time, mode, map });
     this.code = res.code;
     this.isHost = true;
     this.isOrigin = true;

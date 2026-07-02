@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { MAPS, MAP_LIST } from '../world/arenas/index.js';
 
 const panel = {
   background: '#1b1d22', border: '3px solid #3a3d44', borderRadius: 8,
@@ -31,6 +32,7 @@ const btnBlue = { ...btn, background: '#2e5d8e', border: '2px solid #1c3a59' };
 export function MainMenu({ worlds, onPlay, onCreate, onDelete, onHome, onHost, onJoin, netError, netBusy }) {
   const [name, setName] = useState('');
   const [mode, setMode] = useState('survival');
+  const [map, setMap] = useState(MAP_LIST[0].id); // Prop Hunt arena map
   const [joinCode, setJoinCode] = useState('');
   const [playerName, setPlayerName] = useState(
     () => (typeof localStorage !== 'undefined' && localStorage.getItem('apex_player_name')) || ''
@@ -66,7 +68,9 @@ export function MainMenu({ worlds, onPlay, onCreate, onDelete, onHome, onHost, o
                     <span style={{ marginLeft: 6, fontSize: 10, fontWeight: 700, color: '#ffd9a8', background: 'rgba(130,90,46,0.5)', padding: '1px 6px', borderRadius: 8, letterSpacing: 0.5 }}>PROP HUNT</span>
                   )}
                 </div>
-                <div style={{ fontSize: 12, opacity: 0.55 }}>seed {w.seed} · {fmtDate(w.lastPlayed)}</div>
+                <div style={{ fontSize: 12, opacity: 0.55 }}>
+                  seed {w.seed}{w.map && MAPS[w.map] ? ` · ${MAPS[w.map].name}` : ''} · {fmtDate(w.lastPlayed)}
+                </div>
               </div>
               <button style={btn} onClick={() => onPlay(w)}>Play</button>
               {onHost && (
@@ -84,9 +88,9 @@ export function MainMenu({ worlds, onPlay, onCreate, onDelete, onHome, onHost, o
             onChange={(e) => setName(e.target.value)}
             placeholder="New world name"
             style={{ ...input, flex: 1 }}
-            onKeyDown={(e) => { if (e.key === 'Enter' && name.trim()) { onCreate(name.trim(), mode); setName(''); } }}
+            onKeyDown={(e) => { if (e.key === 'Enter' && name.trim()) { onCreate(name.trim(), mode, map); setName(''); } }}
           />
-          <button style={btn} onClick={() => { if (name.trim()) { onCreate(name.trim(), mode); setName(''); } }}>Create</button>
+          <button style={btn} onClick={() => { if (name.trim()) { onCreate(name.trim(), mode, map); setName(''); } }}>Create</button>
         </div>
         {/* Game mode picker for the new world. */}
         <div style={{ display: 'flex', gap: 6, marginTop: 8 }}>
@@ -110,6 +114,23 @@ export function MainMenu({ worlds, onPlay, onCreate, onDelete, onHome, onHost, o
             );
           })}
         </div>
+        {/* Arena map picker (Prop Hunt worlds only). */}
+        {mode === 'hideseek' && (
+          <div style={{ display: 'flex', gap: 6, marginTop: 6 }}>
+            {MAP_LIST.map((m) => (
+              <button key={m.id} onClick={() => setMap(m.id)} title={m.desc}
+                style={{
+                  flex: 1, font: '13px system-ui', padding: '7px 8px', cursor: 'pointer', borderRadius: 4,
+                  background: map === m.id ? '#8a5a2e' : '#2a2d33',
+                  color: map === m.id ? '#fff' : '#9aa', textAlign: 'center',
+                  border: map === m.id ? '2px solid #fff5' : '2px solid #3a3d44',
+                }}>
+                <div style={{ fontWeight: 700 }}>{m.name}</div>
+                <div style={{ fontSize: 10, opacity: 0.75 }}>{m.desc}</div>
+              </button>
+            ))}
+          </div>
+        )}
 
         {onJoin && (
           <div style={{ marginTop: 18, paddingTop: 14, borderTop: '1px solid #2a2d33' }}>

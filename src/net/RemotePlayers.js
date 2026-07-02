@@ -107,8 +107,10 @@ function buildAvatar(id, name) {
   group.add(box(0.18, 0.66, 0.24, shirt, -0.36, 1.1, 0));  // arms
   group.add(box(0.18, 0.66, 0.24, shirt, 0.36, 1.1, 0));
   group.add(box(0.46, 0.46, 0.46, '#caa17e', 0, 1.72, 0)); // head
-  group.add(nameTag(name));
+  const tag = nameTag(name);
+  group.add(tag);
   group.userData.legs = legs;
+  group.userData.tag = tag;
   return group;
 }
 
@@ -126,9 +128,11 @@ export class RemotePlayers {
     this.map.set(id, {
       id, group,
       legs: group.userData.legs,
+      tag: group.userData.tag,
       body: group.children.slice(), // humanoid parts + name tag (hidden when disguised)
       disguiseMesh: null,
       disguiseId: 0,
+      tagShown: false,
       cur: { x: 0, y: 0, z: 0, yaw: 0 },
       target: null,
       walkPhase: 0,
@@ -137,12 +141,16 @@ export class RemotePlayers {
 
   // Prop Hunt: swap a peer's humanoid avatar for a textured block cube (or back
   // when blockId is 0/null). Cheap to call every frame — only rebuilds on change.
-  setDisguise(id, blockId) {
+  // `showTag` keeps the name tag floating over the disguise block: fellow hiders
+  // get it (so they know which props are friends); seekers never do.
+  setDisguise(id, blockId, showTag = false) {
     const p = this.map.get(id);
     if (!p) return;
     blockId = blockId || 0;
-    if (p.disguiseId === blockId) return;
+    showTag = !!showTag;
+    if (p.disguiseId === blockId && p.tagShown === showTag) return;
     p.disguiseId = blockId;
+    p.tagShown = showTag;
     if (p.disguiseMesh) { p.group.remove(p.disguiseMesh); p.disguiseMesh = null; }
     if (blockId) {
       // Full block size so it matches the arena's real placed blocks.
@@ -150,7 +158,8 @@ export class RemotePlayers {
       p.disguiseMesh.position.y = 0.5; // sit the block on the ground
       p.group.add(p.disguiseMesh);
     }
-    for (const b of p.body) b.visible = !blockId;
+    for (const b of p.body) b.visible = !blockId || (showTag && b === p.tag);
+    p.tag.position.y = blockId ? 1.5 : 2.25; // hover just over the block
   }
 
   // Prop Hunt: float a taunt emoji above a peer's head for `ttl` seconds. Kept
@@ -215,7 +224,9 @@ export class RemotePlayers {
       c.yaw += dyaw * k;
 
       p.group.position.set(c.x, c.y, c.z);
-      p.group.rotation.y = c.yaw;
+      // Disguised hiders render axis-aligned like a real placed block — a cube
+      // rotated to the player's yaw would stick out of the grid instantly.
+      p.group.rotation.y = p.disguiseId ? 0 : c.yaw;
 
       // Swing legs while the avatar is moving horizontally.
       const speed = Math.hypot(dx, dz) / Math.max(dt, 1e-4);

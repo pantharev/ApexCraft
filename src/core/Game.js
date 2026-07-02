@@ -23,6 +23,7 @@ import { saveWorld } from '../systems/Storage.js';
 import { WORLD_SEED } from '../config.js';
 import { villageForCell, VILLAGE_CELL } from '../world/structures/VillagePlan.js';
 import { setGenMode } from '../world/generators/TerrainGen.js';
+import { setActiveMap, activeMap, MAPS } from '../world/arenas/index.js';
 import { HideSeek, TAG_RANGE } from '../systems/HideSeek.js';
 import { HideSeekBots } from '../systems/HideSeekBots.js';
 import { TAUNTS, tauntById } from '../systems/taunts.js';
@@ -74,6 +75,11 @@ export class Game {
     this.mode = ['creative', 'hideseek'].includes(save?.mode) ? save.mode : 'survival';
     this.creative = this.mode === 'creative';
     this.hideseek = this.mode === 'hideseek';
+    // Prop Hunt worlds play on a named arena map, fixed at creation like the
+    // seed. Select it before any chunk generates (unknown/legacy ids fall back
+    // to the default map inside setActiveMap).
+    this.map = this.hideseek ? (MAPS[save?.map] ? save.map : 'town') : null;
+    if (this.hideseek) setActiveMap(this.map);
     // Tell the chunk generator which world to build before any chunk generates
     // (flat Prop Hunt arena for hide & seek, procedural terrain otherwise).
     setGenMode(this.hideseek ? 'hideseek' : null);
@@ -392,6 +398,13 @@ export class Game {
     if (this._save?.player) {
       this._restorePlayer(this._save.player);
       this.world.update(this.player.pos.x, this.player.pos.z, 80);
+    } else if (this.hideseek) {
+      // Arena maps define their lobby spawn explicitly — spawnAtSurface scans
+      // top-down and would drop the player onto a roof (or a future ceiling).
+      this.world.update(0, 0, 80);
+      const s = activeMap().lobbySpawn();
+      this.player.pos.set(s.x, s.y, s.z);
+      this.player._peakY = s.y;
     } else {
       this.world.update(0, 0, 80);
       this.player.spawnAtSurface();
@@ -687,6 +700,7 @@ export class Game {
       seed: this.seed,
       lastPlayed: Date.now(),
       mode: this.mode,
+      ...(this.map ? { map: this.map } : {}),
       edits: this.world.serializeEdits(),
       player: { x: p.x, y: p.y, z: p.z, yaw: this.player.yaw, pitch: this.player.pitch },
       vitals: this.vitals.serialize(),

@@ -70,9 +70,21 @@ try {
   const ed = await editP;
   ok(ed.k === '1,2' && ed.i === 999 && ed.id === 4, 'block edit relays to the room');
 
+  // --- bulk edits (explosions): relay as one message + accumulate ---
+  const bulkP = once(host, 'edits');
+  guest.emit('edits', [
+    { k: '3,4', i: 100, id: 0 },
+    { k: '3,4', i: 101, id: 0 },
+    { k: '-1,0', i: 55, id: 0 },
+    null, // malformed entries are dropped, not fatal
+  ]);
+  const bulk = await bulkP;
+  ok(bulk.length === 3 && bulk[0].k === '3,4' && bulk[2].i === 55, 'bulk edits relay as a single message');
+
   const late = io(URL);
   const j2 = await ack(late, 'join', { code: h.code, name: 'Late' });
   ok(j2.edits['1,2'] && j2.edits['1,2'][999] === 4, 'late joiner receives accumulated edits');
+  ok(j2.edits['3,4'] && j2.edits['3,4'][100] === 0 && j2.edits['-1,0'][55] === 0, 'late joiner receives bulk-applied edits');
   ok(j2.players.length === 2, 'late joiner sees both players');
 
   // --- mob snapshots: host-only, relayed to guests ---

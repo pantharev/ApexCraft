@@ -29,6 +29,35 @@ const smoothstep = (a, b, x) => {
   return t * t * (3 - 2 * t);
 };
 
+// Chunk-level rejection for the landmark pass. The gating field is so
+// low-frequency that a coarse 3×3×5 sample grid over the chunk's landmark band
+// (y 8-55) bounds it tightly: the nearest grid sample is ≤ ~0.04 noise-space
+// units from any voxel, so the field can't climb more than a small fraction
+// between samples. The 0.2 margin is deliberately generous — skipping must
+// never alter generation (terrain is deterministic from the seed and saves
+// only store edits), it may only skip chunks that provably can't pass the
+// 0.78 threshold. That's the vast majority: 45 samples replace the ~12k
+// per-voxel samples the pass would otherwise burn inside the frame budget.
+function landmarkPossible(baseX, baseZ) {
+  let max = -Infinity;
+  for (let xi = 0; xi <= 2; xi++) {
+    for (let zi = 0; zi <= 2; zi++) {
+      for (let yi = 0; yi <= 4; yi++) {
+        const wx = baseX + (xi * (CHUNK_SIZE - 1)) / 2;
+        const wz = baseZ + (zi * (CHUNK_SIZE - 1)) / 2;
+        const y = 8 + (yi * 47) / 4;
+        const v = Noise.cavern(
+          wx * LANDMARK_FREQ_XZ + 200,
+          y  * LANDMARK_FREQ_Y  + 200,
+          wz * LANDMARK_FREQ_XZ + 200,
+        );
+        if (v > max) max = v;
+      }
+    }
+  }
+  return max > LANDMARK_THRESH - 0.2;
+}
+
 // Underground carving pass, run after surface generation. Four systems:
 //
 //   • Spaghetti tunnels — air where TWO independent 3D fields are both near
@@ -50,6 +79,8 @@ export function carveCaves(chunk) {
   const baseX = chunk.cx * CHUNK_SIZE;
   const baseZ = chunk.cz * CHUNK_SIZE;
   const TF = 0.017, TY = 0.028; // tunnel field frequencies
+  // Most chunks can't contain a landmark cavern — decide once, not per voxel.
+  const landmark = landmarkPossible(baseX, baseZ);
 
   for (let x = 0; x < CHUNK_SIZE; x++) {
     for (let z = 0; z < CHUNK_SIZE; z++) {
@@ -114,7 +145,7 @@ export function carveCaves(chunk) {
         // cheese caverns so they feel like genuine discoveries.  Their threshold
         // is deliberately tighter (0.78 vs 0.66) so they're rarer; y-weighting
         // bias pushes them to depth 8–56 where they're darkest.
-        if (y >= 8 && y < 56) {
+        if (landmark && y >= 8 && y < 56) {
           const lv = Noise.cavern(
             wx * LANDMARK_FREQ_XZ + 200,
             y  * LANDMARK_FREQ_Y  + 200,
@@ -126,8 +157,19 @@ export function carveCaves(chunk) {
     }
   }
 
-  fillLiquids(chunk);
-  placeGlowMushrooms(chunk);
+  // Per-column pool mask, computed once and shared: fillLiquids and
+  // placeGlowMushrooms previously each sampled this identical noise
+  // (256 redundant 3D calls per chunk).
+  const poolMask = new Float32Array(CHUNK_SIZE * CHUNK_SIZE);
+  for (let x = 0; x < CHUNK_SIZE; x++) {
+    for (let z = 0; z < CHUNK_SIZE; z++) {
+      poolMask[z * CHUNK_SIZE + x] =
+        Noise.cavern((baseX + x) * 0.012 + 500, 0, (baseZ + z) * 0.012 + 500);
+    }
+  }
+
+  fillLiquids(chunk, poolMask);
+  placeGlowMushrooms(chunk, poolMask);
 }
 
 // Second pass (after carving): settle static liquids onto cave floors. Lava
@@ -136,19 +178,12 @@ export function carveCaves(chunk) {
 // a solid (or same-liquid) floor means liquids rest on the ground and stack a
 // few blocks deep, never hang as floating sheets. Deterministic (Noise only),
 // so every client generates identical pools with no network sync.
-function fillLiquids(chunk) {
-  const baseX = chunk.cx * CHUNK_SIZE;
-  const baseZ = chunk.cz * CHUNK_SIZE;
-
+function fillLiquids(chunk, poolMask) {
   for (let x = 0; x < CHUNK_SIZE; x++) {
     for (let z = 0; z < CHUNK_SIZE; z++) {
-      const wx = baseX + x;
-      const wz = baseZ + z;
-
       // Per-column pool mask: only columns over a high-noise region get liquid,
       // so pools cluster into occasional lakes instead of coating every cave.
-      const pool = Noise.cavern(wx * 0.012 + 500, 0, wz * 0.012 + 500);
-      if (pool < 0.35) continue;
+      if (poolMask[z * CHUNK_SIZE + x] < 0.35) continue;
 
       // Bottom-up so a liquid cell can rest on the liquid it just placed below
       // (a settled pool), as well as on solid ground.
@@ -187,7 +222,7 @@ function fillLiquids(chunk) {
 //     below y=SEA_LEVEL to stay underground.
 //   • Proximity to water: columns with a pool mask > 0.35 (same threshold as
 //     fillLiquids) get twice the cluster density so pools visually glow.
-function placeGlowMushrooms(chunk) {
+function placeGlowMushrooms(chunk, poolMask) {
   const baseX = chunk.cx * CHUNK_SIZE;
   const baseZ = chunk.cz * CHUNK_SIZE;
 
@@ -209,8 +244,7 @@ function placeGlowMushrooms(chunk) {
       if (clusterMask < 0.30) continue; // outside a cluster
 
       // Proximity bonus: near water pools → denser clusters (pool threshold 0.35).
-      const poolMask = Noise.cavern(wx * 0.012 + 500, 0, wz * 0.012 + 500);
-      const densityBoost = poolMask > 0.35 ? 1.5 : 1.0;
+      const densityBoost = poolMask[z * CHUNK_SIZE + x] > 0.35 ? 1.5 : 1.0;
 
       // Scan underground column for valid floor positions.
       for (let y = 4; y < SEA_LEVEL - 2; y++) {

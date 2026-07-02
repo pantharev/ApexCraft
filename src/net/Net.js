@@ -64,11 +64,26 @@ export class Net {
     this.onBecomeHost = null;   // ()
     this.onTime = null;         // (t)
     this.onPeers = null;        // () — player list changed
+    this.onEditBatch = null;    // (active) — brackets a bulk edit apply
+    this._editBatch = null;     // accumulator while a local batch is open
 
     this.socket.on('edit', (e) => {
       if (!this.onEdit || !e) return;
       const { x, y, z } = decodeEdit(e.k, e.i);
       this.onEdit(x, y, z, e.id);
+    });
+    // Bulk edits (explosions): one message carrying the whole blast.
+    // onEditBatch(true/false) brackets the apply so the game can skip
+    // per-block effects (the receiver re-runs the boom visuals separately).
+    this.socket.on('edits', (list) => {
+      if (!this.onEdit || !Array.isArray(list)) return;
+      if (this.onEditBatch) this.onEditBatch(true);
+      for (const e of list) {
+        if (!e || typeof e.k !== 'string') continue;
+        const { x, y, z } = decodeEdit(e.k, e.i);
+        this.onEdit(x, y, z, e.id);
+      }
+      if (this.onEditBatch) this.onEditBatch(false);
     });
     this.socket.on('playerState', (s) => this.onPlayerState && this.onPlayerState(s));
     this.socket.on('playerJoined', (p) => {
@@ -131,7 +146,19 @@ export class Net {
 
   sendEdit(x, y, z, id) {
     const { k, i } = encodeEdit(x, y, z);
-    this.socket.emit('edit', { k, i, id });
+    if (this._editBatch) this._editBatch.push({ k, i, id });
+    else this.socket.emit('edit', { k, i, id });
+  }
+
+  // Batch mode for mass edits (explosions): a mega TNT blast removes thousands
+  // of blocks in one frame, and sending each as its own 'edit' packet floods
+  // the socket, the relay, and every guest. Between begin/end, sendEdit
+  // accumulates and the whole blast leaves as a single 'edits' message.
+  beginEditBatch() { this._editBatch = []; }
+  endEditBatch() {
+    const batch = this._editBatch;
+    this._editBatch = null;
+    if (batch && batch.length) this.socket.emit('edits', batch);
   }
 
   sendMobs(snap) { this.socket.volatile.emit('mobs', snap); }

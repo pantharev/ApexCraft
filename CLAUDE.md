@@ -66,3 +66,4 @@ Blocks, items, recipes, smelting, and mobs are defined in JSON / small JS tables
 - No CSS files — all styling is inline style objects in JSX.
 - Dev-only affordances (T cycle day/night, V teleport to village, G speed boost, `window.__apex` handle) are gated on `this.dev` = running on localhost.
 - When adding a whole new subsystem, wire it into `Game.js`: construct it in the constructor, tick it in `_loop`, and add it to `serialize()` if it must persist.
+- **After every merged PR, update both changelogs**: add a compact technical entry (key decisions, file pointers, gotchas) to `changelog.md` — it is the handoff document between machines and Claude Code instances, read it at the start of a session to catch up — and prepend a short player-facing `{ date, title, body }` entry to the `CHANGELOG` array in `src/ui/Changelog.jsx` (feeds the in-game "What's New" page).

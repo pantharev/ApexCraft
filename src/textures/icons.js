@@ -360,6 +360,26 @@ function drawNugget(ctx, color) {
   px(ctx, 5, 6, lighten(color, 0.4)); px(ctx, 6, 6, lighten(color, 0.3));
 }
 
+// Tapered tin pail with a handle arc; fillHex tops it up with liquid.
+function drawBucket(ctx, fillHex) {
+  const tin = '#b8bcc4', dark = shade(tin, 0.68), lite = lighten(tin, 0.3);
+  for (let y = 6; y <= 13; y++) {
+    const inset = y >= 10 ? 1 : 0; // body tapers toward the base
+    for (let x = 3 + inset; x <= 12 - inset; x++) {
+      px(ctx, x, y, x <= 4 + inset ? lite : x >= 11 - inset ? dark : tin);
+    }
+  }
+  for (let x = 3; x <= 12; x++) px(ctx, x, 5, lite); // rim
+  // Handle arc over the top.
+  px(ctx, 3, 4, dark); px(ctx, 4, 3, dark); px(ctx, 5, 2, dark);
+  for (let x = 6; x <= 9; x++) px(ctx, x, 2, dark);
+  px(ctx, 10, 2, dark); px(ctx, 11, 3, dark); px(ctx, 12, 4, dark);
+  if (fillHex) {
+    for (let x = 4; x <= 11; x++) px(ctx, x, 6, fillHex);
+    for (let x = 5; x <= 10; x++) px(ctx, x, 7, shade(fillHex, 0.85));
+  }
+}
+
 const MEATS = new Set(['raw_porkchop', 'cooked_porkchop', 'raw_beef', 'cooked_beef', 'raw_mutton', 'cooked_mutton', 'rotten_flesh']);
 const GEMS = new Set(['diamond', 'emerald', 'lapis', 'redstone']);
 const LUMPS = new Set(['coal', 'charcoal', 'raw_iron', 'raw_gold', 'clay_ball', 'gunpowder']);
@@ -384,6 +404,9 @@ function drawItem(def) {
   else if (name === 'feather') drawFeather(ctx);
   else if (name === 'bone') drawBone(ctx);
   else if (name === 'string') drawString(ctx);
+  else if (name === 'bucket') drawBucket(ctx, null);
+  else if (name === 'water_bucket') drawBucket(ctx, '#3a6dd1');
+  else if (name === 'lava_bucket') drawBucket(ctx, '#ff7a1e');
   else if (name === 'wool') drawWool(ctx, color);
   else if (name === 'leather') drawLeather(ctx, color);
   else if (name.endsWith('_ingot')) drawIngot(ctx, color);

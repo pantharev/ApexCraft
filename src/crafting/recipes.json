@@ -678,5 +678,20 @@
       "item": "chess_table",
       "count": 1
     }
+  },
+  {
+    "id": "bucket",
+    "type": "shaped",
+    "pattern": [
+      "I I",
+      " I "
+    ],
+    "key": {
+      "I": "iron_ingot"
+    },
+    "result": {
+      "item": "bucket",
+      "count": 1
+    }
   }
 ]

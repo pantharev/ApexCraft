@@ -599,6 +599,11 @@ const FACE_TILES = {
   chess_table: { top: 'chess_top', side: 'crafting_side', bottom: 'planks' },
   // Cave flora: rendered as crossed quads (PLANTS set in ChunkMesher).
   glow_mushroom: t('glow_mushroom'),
+  // Flowing liquids reuse their source tiles (drawn shorter by the mesher).
+  water_flow_7: t('water'), water_flow_6: t('water'), water_flow_5: t('water'),
+  water_flow_4: t('water'), water_flow_3: t('water'), water_flow_2: t('water'),
+  water_flow_1: t('water'),
+  lava_flow_3: t('lava'), lava_flow_2: t('lava'), lava_flow_1: t('lava'),
 };
 for (const name of Object.keys(ORE_COLORS)) FACE_TILES[name] = t(name);
 

@@ -14,6 +14,7 @@ import { TorchLights } from '../systems/TorchLights.js';
 import { Projectiles } from '../systems/Projectiles.js';
 import { Particles } from '../systems/Particles.js';
 import { Explosions, MEGA_TNT_RADIUS } from '../systems/Explosions.js';
+import { Liquids } from '../systems/Liquids.js';
 import { ChessGames } from '../chess/ChessGames.js';
 import { RemotePlayers } from '../net/RemotePlayers.js';
 import { GhostMobs } from '../net/GhostMobs.js';
@@ -27,7 +28,7 @@ import { setActiveMap, activeMap, MAPS } from '../world/arenas/index.js';
 import { HideSeek, TAG_RANGE } from '../systems/HideSeek.js';
 import { HideSeekBots } from '../systems/HideSeekBots.js';
 import { TAUNTS, tauntById } from '../systems/taunts.js';
-import { getBlockId, isSolid } from '../blocks/BlockRegistry.js';
+import { getBlockId, isSolid, liquidKind } from '../blocks/BlockRegistry.js';
 import { getItem } from '../items/ItemRegistry.js';
 import { SEA_LEVEL } from '../config.js';
 
@@ -55,6 +56,8 @@ const CREATIVE_KIT = [
   ['diamond_pickaxe', 1],
   ['diamond_axe', 1],
   ['diamond_sword', 1],
+  ['water_bucket', 1],
+  ['lava_bucket', 1],
 ];
 
 // Owns the Three.js renderer/scene/camera, the World, and the Player, plus the
@@ -157,6 +160,13 @@ export class Game {
         Sound.eat();
       }
     };
+    // Buckets: scooping swaps in the filled bucket, pouring returns the empty
+    // one. Creative buckets are bottomless, like block placement.
+    this.interaction.onBucket = (action, kind) => {
+      if (this.creative) return;
+      this.inventory.consumeSelected(1);
+      this.inventory.addItem(action === 'fill' ? `${kind}_bucket` : 'bucket', 1);
+    };
     this.vitals.onDeath = () => this._handleDeath();
     this.onPlayerHurt = null; // React red-flash callback
     this.vitals.onDamage = () => { if (this.onPlayerHurt) this.onPlayerHurt(); };
@@ -172,6 +182,7 @@ export class Game {
     this.projectiles = new Projectiles(this.world, this.scene);
     this.particles = new Particles(this.scene);
     this.explosions = new Explosions(this.world, this.scene, this.particles);
+    this.liquids = new Liquids(this.world);
     this._waterT = 0; // water texture scroll clock
 
     // Every block edit: spray break particles (local AND remote breaks), and
@@ -181,9 +192,13 @@ export class Game {
     // already covers the visual.
     this._blastEdits = false;
     this.world.onEdit = (x, y, z, id, prev) => {
-      if (id === 0 && prev && !this._blastEdits) {
+      // No break burst when a liquid drains — flow is constant block churn.
+      if (id === 0 && prev && !this._blastEdits && !liquidKind(prev)) {
         this.particles.burst(x + 0.5, y + 0.5, z + 0.5, blockAverageColor(prev));
       }
+      // Wake the flow sim around every edit, whatever its source (player,
+      // explosion, or a remote peer) — guests enqueue too but never process.
+      this.liquids.touch(x, y, z);
       if (this.net && !this.net.applying) this.net.sendEdit(x, y, z, id);
     };
 
@@ -1021,6 +1036,9 @@ export class Game {
     }
     this.particles.update(dt);
     this.explosions.update(dt, this._boomCtx());
+    // Liquid flow: only the authority simulates; guests receive the edits.
+    this.liquids.enabled = !this.net || this.net.isHost;
+    this.liquids.update(dt);
     // Drift the shared water texture for a gentle current.
     this._waterT += dt;
     const waterMap = this.world.waterMaterial.map;

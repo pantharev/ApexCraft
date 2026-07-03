@@ -29,6 +29,7 @@ export class Interaction {
     this.onBlockBroken = null; // called after a block is removed (name, coords)
     this.heldFood = 0; // food value of the held item (0 if not food)
     this.onEat = null; // called to consume held food
+    this.onBucket = null; // called after a bucket fills ('fill', kind) or pours ('pour', kind)
     this.onAttack = null; // returns true if a mob was hit (suppresses mining)
     this.target = null; // last raycast result
     this.breaking = false;
@@ -114,10 +115,39 @@ export class Interaction {
         return;
       }
     }
-    if (this.selectedBlock) {
+    if (this.heldItem && this.heldItem.bucket) {
+      this._useBucket(this.heldItem);
+    } else if (this.selectedBlock) {
       this._place();
     } else if (this.heldFood > 0 && this.onEat) {
       this.onEat();
+    }
+  }
+
+  // Buckets scoop liquid sources and pour them back out. They need their own
+  // raycast: the normal targeting ray passes straight through liquids.
+  _useBucket(item) {
+    const origin = this.camera.position;
+    const dir = new THREE.Vector3();
+    this.camera.getWorldDirection(dir);
+    const hit = raycastVoxel(this.world, origin, dir, REACH, true);
+    if (!hit) return;
+    const b = hit.block;
+    const def = getBlock(this.world.getBlock(b.x, b.y, b.z));
+
+    if (item.bucket === 'empty') {
+      // Only still sources can be scooped — flowing liquid slips through.
+      if (!def.liquidType || def.flowLevel) return;
+      this.world.setBlock(b.x, b.y, b.z, 0);
+      Sound.splash();
+      if (this.onBucket) this.onBucket('fill', def.liquidType);
+    } else {
+      // Pour into the liquid cell we hit, or against the face of a solid.
+      const p = def.liquid ? b : hit.place;
+      if (isSolid(this.world.getBlock(p.x, p.y, p.z))) return;
+      this.world.setBlock(p.x, p.y, p.z, getBlockId(item.bucket));
+      Sound.splash();
+      if (this.onBucket) this.onBucket('pour', item.bucket);
     }
   }
 

@@ -52,3 +52,14 @@ export function isOpaque(id) {
   const b = byId[id];
   return b ? b.solid && !b.transparent : false;
 }
+
+// 'water' | 'lava' for any liquid block (source or flowing), else null.
+export function liquidKind(id) {
+  const b = byId[id];
+  return b && b.liquidType ? b.liquidType : null;
+}
+
+export function isLiquid(id) {
+  const b = byId[id];
+  return b ? b.liquid === true : false;
+}

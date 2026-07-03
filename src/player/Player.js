@@ -300,9 +300,21 @@ export class Player {
     );
     if (this.thirdPerson) {
       // Orbit behind/above the feet so the player can see their own disguise
-      // block. Pull back along the look direction, clamped above the floor.
+      // block. Pull back along the look direction, clamped above the floor and
+      // short of any solid block — inside a building the camera must stay in
+      // the room, or a hiding player could watch seekers through the wall.
       const target = new THREE.Vector3(this.pos.x, this.pos.y + 0.6, this.pos.z);
-      this.camera.position.copy(target).addScaledVector(dirVec, -this.camDist);
+      let dist = this.camDist;
+      for (let d = 0.4; d <= this.camDist; d += 0.2) {
+        const px = target.x - dirVec.x * d;
+        const py = target.y - dirVec.y * d;
+        const pz = target.z - dirVec.z * d;
+        if (isSolid(this.world.getBlock(Math.floor(px), Math.floor(py), Math.floor(pz)))) {
+          dist = Math.max(0.4, d - 0.3);
+          break;
+        }
+      }
+      this.camera.position.copy(target).addScaledVector(dirVec, -dist);
       this.camera.position.y = Math.max(this.camera.position.y, this.pos.y + 0.4);
       this.camera.lookAt(target);
     } else {

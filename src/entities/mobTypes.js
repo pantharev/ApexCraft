@@ -127,11 +127,12 @@ export const MOBS = {
 
   // ---- Cave ambient ----
   // Bats are harmless ambient creatures that flutter through dark underground
-  // pockets. They spawn near ceiling air (headroom = ceiling block above), move
-  // erratically, never attack, and despawn at the normal distance. Their tiny
-  // box parts keep the draw cost negligible.
+  // pockets. `category: 'ambient'` keeps them out of the surface passive
+  // spawner (they spawn via the cave pass in MobManager), and `flies` swaps
+  // gravity for a flapping bob in Mob physics. Their tiny box parts keep the
+  // draw cost negligible.
   bat: {
-    category: 'passive', health: 6, speed: 3.5, hw: 0.25, h: 0.5,
+    category: 'ambient', health: 6, speed: 3.5, hw: 0.25, h: 0.5, flies: true,
     drops: [],
     // Compact folded-wing silhouette: body, two small ear nubs, two wing panels.
     parts: [
@@ -146,7 +147,8 @@ export const MOBS = {
 
 export const PASSIVE = Object.keys(MOBS).filter((k) => MOBS[k].category === 'passive');
 export const HOSTILE = Object.keys(MOBS).filter((k) => MOBS[k].category === 'hostile');
-// Cave-hostile pool: existing hostile types that work underground (no burns — bats
-// never attack, spiders climb, creepers don't burn).  Zombies/skeletons burn in
-// daylight but underground they're always in darkness so burns never triggers.
+// Cave-hostile pool: existing hostile types that work underground. Zombies and
+// skeletons burn in daylight, but the burn check requires open sky, so a rock
+// roof keeps them safe down here. Bats spawn through the same cave pass but as
+// harmless ambience, outside this pool.
 export const CAVE_HOSTILE = ['zombie', 'skeleton', 'creeper', 'spider'];

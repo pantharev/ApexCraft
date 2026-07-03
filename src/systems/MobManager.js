@@ -13,6 +13,8 @@ const VILLAGER_CAP = 4; // per village
 // budget and vice-versa.  8 means a player caving in a moderate area will feel
 // threatened but not overwhelmed.
 const CAVE_HOSTILE_CAP = 8;
+// Ambient cave bats: a small separate cap so they never eat the hostile budget.
+const BAT_CAP = 4;
 const DESPAWN = 70;
 const SPAWN_MIN = 16;
 const SPAWN_MAX = 34;
@@ -131,7 +133,9 @@ export class MobManager {
   // This matches the intuition used in the skylight mesher: sky-exposed = above
   // the first opaque roof.
   _trySpawnCave(playerPos) {
-    if (this.countCaveHostile() >= CAVE_HOSTILE_CAP) return;
+    const hostilesFull = this.countCaveHostile() >= CAVE_HOSTILE_CAP;
+    const batsFull = this.count('ambient') >= BAT_CAP;
+    if (hostilesFull && batsFull) return;
 
     // Pick a random horizontal position in a ring around the player, same
     // distance range as surface spawning so the player can't out-run them.
@@ -153,9 +157,14 @@ export class MobManager {
       const head1  = this.world.getBlock(wx, y + 1, wz);
       const head2  = this.world.getBlock(wx, y + 2, wz);
       if (!isSolid(floor))   continue; // need solid floor
-      if (isSolid(head1) || isSolid(head2)) continue; // need 2-block headroom
+      // Headroom must be genuinely empty — water/lava aren't solid, so a pool
+      // floor would otherwise pass and spawn mobs submerged in cave lakes.
+      if (head1 !== 0 || head2 !== 0) continue;
 
-      const type = CAVE_HOSTILE[Math.floor(Math.random() * CAVE_HOSTILE.length)];
+      // Mostly hostiles, the occasional bat for ambience (each capped
+      // independently, so one pool being full routes spawns to the other).
+      const wantBat = !batsFull && (hostilesFull || Math.random() < 0.2);
+      const type = wantBat ? 'bat' : CAVE_HOSTILE[Math.floor(Math.random() * CAVE_HOSTILE.length)];
       const mob = this._spawn(type, wx + 0.5, y + 1, wz + 0.5);
       mob._caveSpawned = true; // tag so countCaveHostile() tracks them separately
       return; // one mob per call

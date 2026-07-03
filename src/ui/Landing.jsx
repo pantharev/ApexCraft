@@ -1,4 +1,5 @@
-import React from 'react';
+import React, { useState } from 'react';
+import { Changelog } from './Changelog.jsx';
 
 // In-app landing / title screen shown before the world menu. A self-contained
 // hero with a Play call-to-action. (Can be replaced later by a standalone
@@ -14,6 +15,8 @@ const FEATURES = [
 ];
 
 export function Landing({ onPlay }) {
+  const [showLog, setShowLog] = useState(false);
+  if (showLog) return <Changelog onClose={() => setShowLog(false)} />;
   return (
     <div style={{
       position: 'absolute', inset: 0, overflowY: 'auto', zIndex: 5,
@@ -39,6 +42,15 @@ export function Landing({ onPlay }) {
         }}
       >▶ Play</button>
       <div style={{ fontSize: 13, opacity: 0.7, marginTop: 10 }}>No install · free · works on phones</div>
+
+      <button
+        onClick={() => setShowLog(true)}
+        style={{
+          font: 'bold 14px system-ui', padding: '8px 22px', cursor: 'pointer', color: '#eaf2ff',
+          background: 'rgba(255,255,255,0.1)', border: '1px solid rgba(255,255,255,0.3)',
+          borderRadius: 8, marginTop: 16,
+        }}
+      >★ What&apos;s New</button>
 
       <div style={{
         display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 14,

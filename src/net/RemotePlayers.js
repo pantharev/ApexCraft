@@ -195,8 +195,20 @@ export class RemotePlayers {
     const p = this.map.get(id);
     if (!p) return;
     disposeTaunt(p.taunt, p.group);
+    // The disguise cube's geometry/material come from ItemModels' shared cache
+    // (every other disguised player references the same GPU buffers) — detach
+    // it so the traverse below can't dispose resources still in use.
+    if (p.disguiseMesh) { p.group.remove(p.disguiseMesh); p.disguiseMesh = null; }
     this.scene.remove(p.group);
-    p.group.traverse((o) => o.geometry && o.geometry.dispose());
+    p.group.traverse((o) => {
+      if (o.geometry) o.geometry.dispose();
+      // Avatar body parts and the name tag own per-avatar canvas textures;
+      // bot churn builds a fresh avatar every round, so free them too.
+      if (o.material) {
+        if (o.material.map) o.material.map.dispose();
+        o.material.dispose();
+      }
+    });
     this.map.delete(id);
   }
 

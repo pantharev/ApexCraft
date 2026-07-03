@@ -61,6 +61,14 @@ export class HideSeek {
     }
     const ids = [...humans, ...botIds];
 
+    // A round needs both sides. Bots only fill in where they exist (solo);
+    // a lone multiplayer host would otherwise start a 1-seeker/0-hider round
+    // that can only run out the 170 s clock.
+    if (ids.length < 2) {
+      if (this.game.onToast) this.game.onToast('Need at least 2 players to start a round');
+      return;
+    }
+
     // Assign roles: ~1 seeker per SEEKER_RATIO players, at least one.
     const shuffled = this._shuffle(ids.slice());
     const numSeekers = Math.max(1, Math.floor(ids.length / SEEKER_RATIO));
@@ -122,7 +130,12 @@ export class HideSeek {
     if (!this.authoritative || !msg) return;
     if (msg.action === 'start') this.start();
     else if (msg.action === 'disguise') {
-      if (this.state.roles[fromId] === 'hider') { this.state.disguise[fromId] = msg.blockId; this._changed(); }
+      // Palette blocks only: anything else is either the arena's own material
+      // (near-perfect camouflage) or an invalid id rendered as thin air.
+      if (this.state.roles[fromId] === 'hider' && this.propIds.includes(msg.blockId)) {
+        this.state.disguise[fromId] = msg.blockId;
+        this._changed();
+      }
     } else if (msg.action === 'tag') this._resolveTag(fromId, msg.target);
     else if (msg.action === 'taunt') this._applyTaunt(fromId, msg.id);
   }
@@ -196,6 +209,12 @@ export class HideSeek {
     if (this._stunned(seekerId)) return;
     const hit = targetId && this.state.roles[targetId] === 'hider' && this.state.alive[targetId];
     if (hit) {
+      // Sanity-check the claim against last-known positions: a real tag is
+      // within TAG_RANGE of the seeker, plus generous lag slack. Anything
+      // farther is a modified/buggy client — drop it outright (no stun, so
+      // latency can never punish an honest seeker).
+      const sp = this._playerPos(seekerId), tp = this._playerPos(targetId);
+      if (sp && tp && Math.hypot(tp.x - sp.x, tp.y - sp.y, tp.z - sp.z) > TAG_RANGE + 2.5) return;
       this.state.alive[targetId] = false;
       if (this.game.hsBots) this.game.hsBots.onEliminated(targetId);
       this._checkWin();

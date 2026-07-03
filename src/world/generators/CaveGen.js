@@ -201,7 +201,13 @@ function fillLiquids(chunk, poolMask) {
         }
         if (floorDist >= POOL_DEPTH) continue; // too far above the rock floor
 
-        const liquid = y < LAVA_MAX_Y ? LAVA : WATER;
+        // A pool keeps the liquid of the cell below it: a floor at y 8-11
+        // would otherwise start in lava and flip to water at the y=12 band
+        // boundary, stacking water directly on lava (and z-fighting where the
+        // two surfaces meet).
+        const liquid = (below === LAVA || below === WATER)
+          ? below
+          : (y < LAVA_MAX_Y ? LAVA : WATER);
         chunk.set(x, y, z, liquid);
       }
     }

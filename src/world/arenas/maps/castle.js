@@ -174,8 +174,10 @@ function emitWall(chunk, baseX, baseZ) {
     }
   }
   // Ladders up to the wall-walk, hung on the inner face at the midpoints.
+  // They run one block past the walk surface: the climb check reads the block
+  // at feet+0.6, so a ladder that stops level with a floor can't top out.
   for (const [x, z] of [[0, -(WALL_IN - 1)], [WALL_IN - 1, 0], [-(WALL_IN - 1), 0]]) {
-    for (let y = FY + 1; y <= WALL_TOP + 1; y++) put(chunk, baseX, baseZ, x, y, z, LADDER);
+    for (let y = FY + 1; y <= WALL_TOP + 2; y++) put(chunk, baseX, baseZ, x, y, z, LADDER);
   }
 }
 
@@ -216,7 +218,8 @@ function emitTower(chunk, sx, sz, baseX, baseZ) {
       if (shell && ((wx + wz) & 1) === 0) chunk.set(lx, top + 1, lz, masonry(wx, top + 1, wz));
       if (wx === ladX && wz === ladZ) {
         chunk.set(lx, top, lz, 0);          // hatch in the roof floor
-        for (let y = FY + 1; y <= top; y++) chunk.set(lx, y, lz, LADDER);
+        // One block past the roof surface so the climb can top out of the hatch.
+        for (let y = FY + 1; y <= top + 1; y++) chunk.set(lx, y, lz, LADDER);
       }
     }
   }
@@ -431,7 +434,8 @@ function emitCrypt(chunk, baseX, baseZ) {
   // Ladder shaft from the mausoleum floor down to the vault, with a stone
   // pillar beside it inside the vault so the ladder has a wall to hang on.
   fillBox(chunk, baseX, baseZ, MAUS.x, CRYPT_Y, MAUS.z - 1, MAUS.x, CRYPT_Y + 2, MAUS.z - 1, STONE);
-  for (let y = CRYPT_Y; y <= FY; y++) {
+  // One block past the mausoleum floor surface so the climb tops out of the shaft.
+  for (let y = CRYPT_Y; y <= FY + 1; y++) {
     put(chunk, baseX, baseZ, MAUS.x, y, MAUS.z, LADDER);
   }
 

@@ -946,6 +946,21 @@
     "color": "#3a6dd1"
   },
   {
+    "id": 64,
+    "name": "jukebox",
+    "solid": true,
+    "color": "#7a5733",
+    "hardness": 2,
+    "preferredTool": "axe",
+    "interactive": true,
+    "drops": [
+      {
+        "item": "jukebox",
+        "count": [1, 1]
+      }
+    ]
+  },
+  {
     "id": 61,
     "name": "lava_flow_3",
     "solid": false,

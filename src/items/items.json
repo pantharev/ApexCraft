@@ -645,5 +645,61 @@
     "color": "#e2530f",
     "maxStack": 1,
     "bucket": "lava"
+  },
+  {
+    "name": "jukebox",
+    "display": "Jukebox",
+    "color": "#7a5733",
+    "maxStack": 16,
+    "placeBlock": "jukebox"
+  },
+  {
+    "name": "music_disc_sunfields",
+    "display": "Music Disc — Sunfields",
+    "color": "#3ad14a",
+    "maxStack": 1,
+    "disc": "sunfields"
+  },
+  {
+    "name": "music_disc_wanderlight",
+    "display": "Music Disc — Wanderlight",
+    "color": "#f0c040",
+    "maxStack": 1,
+    "disc": "wanderlight"
+  },
+  {
+    "name": "music_disc_moonveil",
+    "display": "Music Disc — Moonveil",
+    "color": "#3a5dd1",
+    "maxStack": 1,
+    "disc": "moonveil"
+  },
+  {
+    "name": "music_disc_hollow",
+    "display": "Music Disc — Hollow",
+    "color": "#8a8a94",
+    "maxStack": 1,
+    "disc": "hollow"
+  },
+  {
+    "name": "music_disc_deepglow",
+    "display": "Music Disc — Deepglow",
+    "color": "#40e8c8",
+    "maxStack": 1,
+    "disc": "deepglow"
+  },
+  {
+    "name": "music_disc_sunburst",
+    "display": "Music Disc — Sunburst",
+    "color": "#e2530f",
+    "maxStack": 1,
+    "disc": "sunburst"
+  },
+  {
+    "name": "music_disc_voyage",
+    "display": "Music Disc — Voyage",
+    "color": "#c8ccd4",
+    "maxStack": 1,
+    "disc": "voyage"
   }
 ]

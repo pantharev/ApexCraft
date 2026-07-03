@@ -360,6 +360,23 @@ function drawNugget(ctx, color) {
   px(ctx, 5, 6, lighten(color, 0.4)); px(ctx, 6, 6, lighten(color, 0.3));
 }
 
+// Vinyl music disc: dark platter, groove ring, coloured label at the centre.
+function drawDisc(ctx, color) {
+  for (let y = 2; y <= 13; y++) {
+    for (let x = 2; x <= 13; x++) {
+      const dx = x - 7.5, dy = y - 7.5;
+      const d = Math.sqrt(dx * dx + dy * dy);
+      if (d > 6) continue;
+      px(ctx, x, y, d > 5.2 ? '#101014' : '#1c1c22'); // rim slightly darker
+    }
+  }
+  px(ctx, 5, 4, '#3a3a44'); px(ctx, 4, 5, '#3a3a44'); px(ctx, 6, 3, '#3a3a44'); // shine
+  for (let y = 6; y <= 9; y++) for (let x = 6; x <= 9; x++) {
+    const d = Math.hypot(x - 7.5, y - 7.5);
+    if (d <= 2) px(ctx, x, y, d > 1.2 ? color : shade(color, 0.7)); // label + spindle
+  }
+}
+
 // Tapered tin pail with a handle arc; fillHex tops it up with liquid.
 function drawBucket(ctx, fillHex) {
   const tin = '#b8bcc4', dark = shade(tin, 0.68), lite = lighten(tin, 0.3);
@@ -404,6 +421,7 @@ function drawItem(def) {
   else if (name === 'feather') drawFeather(ctx);
   else if (name === 'bone') drawBone(ctx);
   else if (name === 'string') drawString(ctx);
+  else if (name.startsWith('music_disc')) drawDisc(ctx, color);
   else if (name === 'bucket') drawBucket(ctx, null);
   else if (name === 'water_bucket') drawBucket(ctx, '#3a6dd1');
   else if (name === 'lava_bucket') drawBucket(ctx, '#ff7a1e');

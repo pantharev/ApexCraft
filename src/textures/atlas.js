@@ -378,6 +378,21 @@ const DRAW = {
     c.fillRect(6, 6, 1, 3); c.fillRect(9, 6, 1, 3); c.fillRect(6, 6, 4, 1); c.fillRect(9, 8, 1, 1);
     c.fillRect(11, 6, 3, 1); c.fillRect(12, 6, 1, 3);
   },
+  jukebox_side: (c, r) => {
+    DRAW.planks(c, r);
+    c.strokeStyle = 'rgba(52,36,18,0.95)'; c.strokeRect(0.5, 0.5, 15, 15);
+    c.fillStyle = 'rgba(42,30,16,0.9)'; c.fillRect(3, 4, 10, 8); // speaker inset
+    c.fillStyle = 'rgba(150,150,158,0.85)';
+    for (let y = 5; y <= 10; y += 2) c.fillRect(4, y, 8, 1);     // grille slats
+  },
+  jukebox_top: (c, r) => {
+    DRAW.planks(c, r);
+    c.strokeStyle = 'rgba(52,36,18,0.95)'; c.strokeRect(0.5, 0.5, 15, 15);
+    c.fillStyle = '#181818';
+    c.beginPath(); c.arc(8, 8, 5, 0, Math.PI * 2); c.fill();     // the disc
+    c.fillStyle = '#d8a838';
+    c.beginPath(); c.arc(8, 8, 1.6, 0, Math.PI * 2); c.fill();   // label
+  },
   tnt_top: (c, r) => {
     paint(c, '#d8c694', null, 10, r);
     c.fillStyle = '#c43c2a';
@@ -599,6 +614,7 @@ const FACE_TILES = {
   chess_table: { top: 'chess_top', side: 'crafting_side', bottom: 'planks' },
   // Cave flora: rendered as crossed quads (PLANTS set in ChunkMesher).
   glow_mushroom: t('glow_mushroom'),
+  jukebox: { top: 'jukebox_top', side: 'jukebox_side', bottom: 'planks' },
   // Flowing liquids reuse their source tiles (drawn shorter by the mesher).
   water_flow_7: t('water'), water_flow_6: t('water'), water_flow_5: t('water'),
   water_flow_4: t('water'), water_flow_3: t('water'), water_flow_2: t('water'),

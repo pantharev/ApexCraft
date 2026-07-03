@@ -214,6 +214,38 @@ class SoundEngine {
     this.burst(jit(1900), 0.8, 'highpass', 0.07, 0.12, 0.02);
   }
 
+  // ---- Cave ambience one-shots (triggered by Music.js while underground) ----
+
+  // Water droplet: a bright falling blip, then its fainter cave echo.
+  drip() {
+    this.tone(jit(1500), 0.06, 'sine', 0.14, 640);
+    this.tone(jit(950), 0.09, 'sine', 0.07, 480, 0.22);
+    this.tone(jit(900), 0.09, 'sine', 0.04, 460, 0.45);
+  }
+
+  // Low airy draft moving through the tunnels: slow-swelling filtered noise
+  // (burst()'s 5 ms attack is too abrupt for wind, so shape the envelope here).
+  caveWind() {
+    if (!this._ready()) return;
+    const t = this.ctx.currentTime;
+    const dur = 2.6;
+    const src = this._noise(dur);
+    const filt = this.ctx.createBiquadFilter();
+    filt.type = 'lowpass'; filt.frequency.value = 340; filt.Q.value = 0.5;
+    const g = this.ctx.createGain();
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.exponentialRampToValueAtTime(0.13, t + dur * 0.45); // slow swell in
+    g.gain.exponentialRampToValueAtTime(0.0001, t + dur);      // sigh back out
+    src.connect(filt); filt.connect(g); g.connect(this.master);
+    src.start(t); src.stop(t + dur + 0.02);
+  }
+
+  // Distant earth groan: a deep sine sag under a soft low noise wash.
+  rumble() {
+    this.tone(52, 2.4, 'sine', 0.13, 30);
+    this.burst(140, 0.8, 'lowpass', 0.1, 1.8, 0.15);
+  }
+
   // ---- Prop Hunt taunts ----
 
   // Cackle: four quick rising triangle blips.

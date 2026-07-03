@@ -1,6 +1,7 @@
 import { getBlockId } from '../../blocks/BlockRegistry.js';
 import * as town from './maps/town.js';
 import * as castle from './maps/castle.js';
+import * as playroom from './maps/playroom.js';
 
 // Prop Hunt arena map registry. A map is a module exporting { id, name, desc,
 // half, baseSurface, propBlocks, botSpots, generate(chunk), seekerSpawn(i),
@@ -12,8 +13,8 @@ export { FLOOR_Y } from './lib.js';
 
 const DEFAULT_MAP = 'town';
 
-export const MAPS = { [town.id]: town, [castle.id]: castle };
-export const MAP_LIST = [town, castle]; // menu order
+export const MAPS = { [town.id]: town, [castle.id]: castle, [playroom.id]: playroom };
+export const MAP_LIST = [town, castle, playroom]; // menu order
 
 let active = MAPS[DEFAULT_MAP];
 

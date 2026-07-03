@@ -693,5 +693,64 @@
       "item": "bucket",
       "count": 1
     }
+  },
+  {
+    "id": "jukebox",
+    "type": "shaped",
+    "pattern": [
+      "PPP",
+      "PDP",
+      "PPP"
+    ],
+    "key": {
+      "P": "oak_planks",
+      "D": "diamond"
+    },
+    "result": {
+      "item": "jukebox",
+      "count": 1
+    }
+  },
+  {
+    "id": "music_disc_sunfields",
+    "type": "shapeless",
+    "ingredients": ["diamond", "emerald"],
+    "result": { "item": "music_disc_sunfields", "count": 1 }
+  },
+  {
+    "id": "music_disc_wanderlight",
+    "type": "shapeless",
+    "ingredients": ["diamond", "gold_ingot"],
+    "result": { "item": "music_disc_wanderlight", "count": 1 }
+  },
+  {
+    "id": "music_disc_moonveil",
+    "type": "shapeless",
+    "ingredients": ["diamond", "lapis"],
+    "result": { "item": "music_disc_moonveil", "count": 1 }
+  },
+  {
+    "id": "music_disc_hollow",
+    "type": "shapeless",
+    "ingredients": ["diamond", "coal"],
+    "result": { "item": "music_disc_hollow", "count": 1 }
+  },
+  {
+    "id": "music_disc_deepglow",
+    "type": "shapeless",
+    "ingredients": ["diamond", "glow_mushroom"],
+    "result": { "item": "music_disc_deepglow", "count": 1 }
+  },
+  {
+    "id": "music_disc_sunburst",
+    "type": "shapeless",
+    "ingredients": ["diamond", "redstone"],
+    "result": { "item": "music_disc_sunburst", "count": 1 }
+  },
+  {
+    "id": "music_disc_voyage",
+    "type": "shapeless",
+    "ingredients": ["diamond", "iron_ingot"],
+    "result": { "item": "music_disc_voyage", "count": 1 }
   }
 ]

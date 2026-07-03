@@ -15,6 +15,7 @@ import { Projectiles } from '../systems/Projectiles.js';
 import { Particles } from '../systems/Particles.js';
 import { Explosions, MEGA_TNT_RADIUS } from '../systems/Explosions.js';
 import { Liquids } from '../systems/Liquids.js';
+import { Music } from '../systems/Music.js';
 import { ChessGames } from '../chess/ChessGames.js';
 import { RemotePlayers } from '../net/RemotePlayers.js';
 import { GhostMobs } from '../net/GhostMobs.js';
@@ -58,6 +59,14 @@ const CREATIVE_KIT = [
   ['diamond_sword', 1],
   ['water_bucket', 1],
   ['lava_bucket', 1],
+  ['jukebox', 1],
+  ['music_disc_sunfields', 1],
+  ['music_disc_wanderlight', 1],
+  ['music_disc_moonveil', 1],
+  ['music_disc_hollow', 1],
+  ['music_disc_deepglow', 1],
+  ['music_disc_sunburst', 1],
+  ['music_disc_voyage', 1],
 ];
 
 // Owns the Three.js renderer/scene/camera, the World, and the Player, plus the
@@ -183,6 +192,17 @@ export class Game {
     this.particles = new Particles(this.scene);
     this.explosions = new Explosions(this.world, this.scene, this.particles);
     this.liquids = new Liquids(this.world);
+    // Context-aware music (day/night/cave rotation + jukebox discs). Purely
+    // local — every player hears their own soundtrack, like the SFX bed.
+    this.music = new Music();
+    this.music.onTrack = (name, disc) => {
+      if (disc && this.onToast) this.onToast(`♪ Now playing: ${name}`);
+    };
+    this._musicCtx = 'day';
+    this._musicCtxT = 0; // recompute the context a couple of times per second
+    // Jukebox contents: "x,y,z" -> disc item name. Local + saved, like chests.
+    this.jukeboxes = new Map(Object.entries(this._save?.jukeboxes || {}));
+    this._discBoxKey = null; // which jukebox the playing disc sits in
     this._waterT = 0; // water texture scroll clock
 
     // Every block edit: spray break particles (local AND remote breaks), and
@@ -364,6 +384,8 @@ export class Game {
         this.explosions.prime(pos.x, pos.y, pos.z, 3.0, MEGA_TNT_RADIUS, 'mega_tnt');
       } else if (name === 'chess_table') {
         this._openChess(pos);
+      } else if (name === 'jukebox') {
+        this._useJukebox(pos);
       }
     };
     this.onSleep = null; // React fade-to-black overlay
@@ -386,6 +408,8 @@ export class Game {
           for (const s of c.slots) if (s) this.itemDrops.spawn(s.item, s.count, pos.x, pos.y, pos.z);
           this.chests.remove(pos.x, pos.y, pos.z);
         }
+      } else if (name === 'jukebox') {
+        this._ejectDisc(pos, `${pos.x},${pos.y},${pos.z}`);
       }
     };
 
@@ -600,7 +624,7 @@ export class Game {
     this._on(window, 'keydown', (e) => {
       if (e.code === 'KeyE') this.setScreen(this.openScreen ? null : 'inventory');
       else if (e.code === 'Escape' && this.openScreen) this.setScreen(null);
-      else if (e.code === 'KeyM') Sound.toggle();
+      else if (e.code === 'KeyM') { const on = Sound.toggle(); if (this.music.enabled !== on) this.music.toggle(); }
     });
   }
 
@@ -777,6 +801,7 @@ export class Game {
       inventory: this.inventory.serialize(),
       furnaces: this.furnaces.serialize(),
       chests: this.chests.serialize(),
+      jukeboxes: Object.fromEntries(this.jukeboxes),
       chess: this.chessGames.serialize(),
       time: this.dayNight.t,
     };
@@ -926,6 +951,35 @@ export class Game {
     } catch (_) { /* user can click to re-lock */ }
   }
 
+  // Right-clicking a jukebox: with a disc inside, eject it; with a disc in
+  // hand, drop it in and let it spin.
+  _useJukebox(pos) {
+    const key = `${pos.x},${pos.y},${pos.z}`;
+    if (this.jukeboxes.get(key)) {
+      this._ejectDisc(pos, key);
+      return;
+    }
+    const stack = this.inventory.selectedStack();
+    const item = stack ? getItem(stack.item) : null;
+    if (!item || !item.disc) return;
+    this.jukeboxes.set(key, item.name);
+    if (!this.creative) this.inventory.consumeSelected(1);
+    this._discBoxKey = key;
+    this.music.playDisc(item.disc, pos);
+  }
+
+  // Pop the disc out (use again / block broken) and stop its music.
+  _ejectDisc(pos, key) {
+    const inside = this.jukeboxes.get(key);
+    if (!inside) return;
+    this.jukeboxes.delete(key);
+    if (this._discBoxKey === key) {
+      this.music.stopDisc();
+      this._discBoxKey = null;
+    }
+    this.itemDrops.spawn(inside, 1, pos.x, pos.y + 1, pos.z);
+  }
+
   // Sync the held view-model + interaction targets to the selected hotbar slot.
   _syncHeld() {
     const stack = this.inventory.selectedStack();
@@ -1039,6 +1093,17 @@ export class Game {
     // Liquid flow: only the authority simulates; guests receive the edits.
     this.liquids.enabled = !this.net || this.net.isHost;
     this.liquids.update(dt);
+    // Music context (cave when well below the surface, else day/night),
+    // recomputed a couple of times per second — surfaceHeight scans a column.
+    this._musicCtxT -= dt;
+    if (this._musicCtxT <= 0) {
+      this._musicCtxT = 0.6;
+      const p = this.player.pos;
+      const surf = this.world.surfaceHeight(Math.floor(p.x), Math.floor(p.z));
+      const cave = surf - p.y >= 8 && p.y < SEA_LEVEL + 2;
+      this._musicCtx = cave ? 'cave' : this.dayNight.isNight ? 'night' : 'day';
+    }
+    this.music.update(dt, { context: this._musicCtx, playerPos: this.player.pos });
     // Drift the shared water texture for a gentle current.
     this._waterT += dt;
     const waterMap = this.world.waterMaterial.map;
@@ -1111,6 +1176,7 @@ export class Game {
     this._listeners.length = 0;
     if (this._resizeObserver) this._resizeObserver.disconnect();
     this.torchLights.dispose();
+    this.music.dispose();
     this.renderer.dispose();
     if (this.renderer.domElement.parentNode) {
       this.renderer.domElement.parentNode.removeChild(this.renderer.domElement);

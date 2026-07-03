@@ -7,6 +7,11 @@ import React from 'react';
 const CHANGELOG = [
   {
     date: 'July 3, 2026',
+    title: 'New Prop Hunt arena: The Playroom',
+    body: 'Shrink down to mouse size in a giant child’s bedroom: hide under a colossal table (or climb its leg to the fruit bowl and chess set on top), crawl beneath the bed, walk the bookshelf shelves among giant books, or lurk in the toy castle by the glow-mushroom night lights. A beamed glass skylight roof pours daylight in stripes across the floorboards, and the fireplace crackles with real lava behind its guard rail. Seekers start penned on the rug.',
+  },
+  {
+    date: 'July 3, 2026',
     title: 'New Prop Hunt arena: Castle Dracul',
     body: 'A brooding fortress joins Little Town in the map picker — crenellated walls you can patrol from above, four climbable towers, a torch-lit gatehouse with molten lava trenches, a throne-room keep, and a graveyard whose mausoleum hides a ladder down into a glow-lit crypt. The high ground and the crypt are safe from seeker bots, which can’t climb. Ladders everywhere now top out onto floors properly, just like Minecraft.',
   },

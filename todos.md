@@ -74,7 +74,9 @@ Working task list (near-term, actionable). Bigger-picture brainstorm lives in
   Old procedural box arena retired. New maps = one module in
   `src/world/arenas/maps/` + registry entry in `index.js`; copy town.js's
   seed-cached-layout + per-chunk-stamping idiom.
-- [ ] **Castle Dracul map** (`half=44`, base grass) — separate PR.
+- [x] **Castle Dracul map** (`half=44`, base grass) — shipped (PR #42),
+  `src/world/arenas/maps/castle.js`. Ladders end level with floors; the
+  engine's climb feet-check handles the top-out (same PR). Original spec:
   - Crenellated 2-thick stone curtain wall h≈9 (~30% deterministic mossy
     weathering via `cellHash`), stone_slab wall-walk, ladders up at midpoints.
   - Four hollow 7×7 corner towers h≈15, ladder to top, glass_pane arrow slits.
@@ -94,8 +96,12 @@ Working task list (near-term, actionable). Bigger-picture brainstorm lives in
   - propBlocks: mossy_cobblestone, chest, furnace, hay_bale, crafting_table,
     pumpkin. Bots can't climb/descend → botSpots stay on the main floor
     (courtyard/keep/gate/graveyard); crypt + parapets are human territory.
-- [ ] **The Playroom (giant room) map** (`half=40`, base oak_planks
-  floorboards, ~7× furniture scale) — separate PR.
+- [x] **The Playroom (giant room) map** — shipped,
+  `src/world/arenas/maps/playroom.js`. Deviation from spec: ceiling ratio
+  flipped (plank beams over a glass skylight roof) — skylight is per-column
+  with no horizontal bleed, so a plank-major ceiling would leave the floor
+  cave-dark. Original spec (`half=40`, base oak_planks floorboards, ~7×
+  furniture scale):
   - Enclosed shell: h≈26 walls (sandstone wainscot, wool wallpaper), plank
     **ceiling** with 2-wide glass skylight strips (daylight carries the room).
     Roofed ⇒ relies on the map `lobbySpawn()` (already framework-supported).

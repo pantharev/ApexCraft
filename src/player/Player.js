@@ -212,10 +212,15 @@ export class Player {
 
       // Ladders: grab on when the body overlaps one — climb with W/Space,
       // descend with S/Shift, otherwise slide down slowly. No gravity.
-      const midBlock = this.world.getBlock(
-        Math.floor(this.pos.x), Math.floor(this.pos.y + 0.6), Math.floor(this.pos.z)
-      );
-      const onLadder = !this.inWater && !this.inLava && getBlock(midBlock).climbable;
+      // Checked at mid-body AND feet: the feet sample keeps the climb alive
+      // until the body has cleared a ladder that ends level with a floor, so
+      // (with the climb momentum carrying into the next frames) you pop out
+      // over the lip Minecraft-style — maps never need an extra ladder block
+      // above the landing.
+      const climbAt = (dy) => getBlock(this.world.getBlock(
+        Math.floor(this.pos.x), Math.floor(this.pos.y + dy), Math.floor(this.pos.z)
+      )).climbable;
+      const onLadder = !this.inWater && !this.inLava && (climbAt(0.6) || climbAt(0.1));
 
       if (onLadder) {
         if (this.enabled && (this.keys['KeyW'] || this.keys['Space'])) this.vel.y = 3.6;

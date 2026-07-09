@@ -9,6 +9,17 @@ updated with every merged PR** (and mirror a short player-facing entry in the
 
 ---
 
+## 2026-07-08 — Mega Nuke block
+
+Third explosive tier above TNT and Mega TNT: `mega_nuke` (block id 65), radius
+`MEGA_NUKE_RADIUS = 10.6` in `src/systems/Explosions.js` — 30× TNT's blast
+volume ((10.6/3.4)³ ≈ 30, vs Mega TNT's ~18×), ~5k blocks removed in one
+batched edit (the existing begin/endEdits bracket handles the sync). 5s fuse
+(`Game.js` interact handler); chains when caught in another blast like the
+other TNTs. Crafted from 8 Mega TNT around a diamond. Olive-drab
+radiation-trefoil texture in `atlas.js` (`mega_nuke_side`/`_top`). Data-driven
+add per `docs/MODDING.md` — no engine changes.
+
 ## 2026-07-03 — #44 Prop Hunt arena: The Playroom
 
 `src/world/arenas/maps/playroom.js` — third arena: mouse-scale players in a

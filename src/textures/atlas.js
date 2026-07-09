@@ -412,6 +412,42 @@ const DRAW = {
     c.fillStyle = '#141414'; c.fillRect(5, 5, 6, 6);
     c.fillStyle = '#f2c200'; c.fillRect(7, 7, 2, 2);                  // fuse glow
   },
+  mega_nuke_side: (c, r) => {
+    paint(c, '#3a4a2e', (x, y) => (y < 3 || y > 12 ? -24 : 0), 12, r); // olive-drab casing
+    c.fillStyle = '#f2c200'; c.fillRect(2, 4, 12, 8);                  // warning plate
+    c.fillStyle = '#141414';                                           // radiation trefoil
+    c.fillRect(7, 7, 2, 2);                                            // hub
+    c.fillRect(6, 4, 4, 2);                                            // top blade
+    c.fillRect(3, 9, 3, 2);                                            // lower-left blade
+    c.fillRect(10, 9, 3, 2);                                           // lower-right blade
+    c.fillStyle = '#1a2414'; c.fillRect(0, 3, 16, 1); c.fillRect(0, 12, 16, 1); // rivet trim
+  },
+  mega_nuke_top: (c, r) => {
+    paint(c, '#3a4a2e', null, 12, r);
+    c.fillStyle = '#f2c200';
+    c.beginPath(); c.arc(8, 8, 5.5, 0, Math.PI * 2); c.fill();         // warning cap
+    c.fillStyle = '#141414';
+    c.beginPath(); c.arc(8, 8, 2.5, 0, Math.PI * 2); c.fill();
+    c.fillStyle = '#ff5a1f'; c.fillRect(7, 7, 2, 2);                   // armed core glow
+  },
+  giga_nuke_side: (c, r) => {
+    paint(c, '#26262c', (x, y) => (y < 3 || y > 12 ? -26 : 0), 10, r); // charcoal casing
+    c.fillStyle = '#b81c1c'; c.fillRect(2, 4, 12, 8);                  // red warning plate
+    c.fillStyle = '#f2c200';                                           // radiation trefoil
+    c.fillRect(7, 7, 2, 2);                                            // hub
+    c.fillRect(6, 4, 4, 2);                                            // top blade
+    c.fillRect(3, 9, 3, 2);                                            // lower-left blade
+    c.fillRect(10, 9, 3, 2);                                           // lower-right blade
+    c.fillStyle = '#101014'; c.fillRect(0, 3, 16, 1); c.fillRect(0, 12, 16, 1); // rivet trim
+  },
+  giga_nuke_top: (c, r) => {
+    paint(c, '#26262c', null, 10, r);
+    c.fillStyle = '#b81c1c';
+    c.beginPath(); c.arc(8, 8, 5.5, 0, Math.PI * 2); c.fill();         // red warning cap
+    c.fillStyle = '#f2c200';
+    c.beginPath(); c.arc(8, 8, 2.5, 0, Math.PI * 2); c.fill();
+    c.fillStyle = '#ffffff'; c.fillRect(7, 7, 2, 2);                   // white-hot core
+  },
   wool_block: (c, r) => {
     const vn = valueNoise(r, 4);
     // Soft weave: gentle diagonal crosshatch.
@@ -603,6 +639,8 @@ const FACE_TILES = {
   fence: t('planks'),
   tnt: { top: 'tnt_top', side: 'tnt_side', bottom: 'tnt_top' },
   mega_tnt: { top: 'mega_tnt_top', side: 'mega_tnt_side', bottom: 'mega_tnt_top' },
+  mega_nuke: { top: 'mega_nuke_top', side: 'mega_nuke_side', bottom: 'mega_nuke_top' },
+  giga_nuke: { top: 'giga_nuke_top', side: 'giga_nuke_side', bottom: 'giga_nuke_top' },
   wool: t('wool_block'),
   pumpkin: { top: 'pumpkin_top', side: 'pumpkin_side', bottom: 'pumpkin_top' },
   melon: { top: 'melon_side', side: 'melon_side', bottom: 'melon_side' },

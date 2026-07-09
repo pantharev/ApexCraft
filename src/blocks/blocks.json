@@ -659,6 +659,40 @@
     ]
   },
   {
+    "id": 65,
+    "name": "mega_nuke",
+    "solid": true,
+    "transparent": false,
+    "interactive": true,
+    "hardness": 0,
+    "drops": [
+      {
+        "item": "mega_nuke",
+        "count": [
+          1,
+          1
+        ]
+      }
+    ]
+  },
+  {
+    "id": 66,
+    "name": "giga_nuke",
+    "solid": true,
+    "transparent": false,
+    "interactive": true,
+    "hardness": 0,
+    "drops": [
+      {
+        "item": "giga_nuke",
+        "count": [
+          1,
+          1
+        ]
+      }
+    ]
+  },
+  {
     "id": 40,
     "name": "wool",
     "solid": true,

@@ -9,6 +9,29 @@ updated with every merged PR** (and mirror a short player-facing entry in the
 
 ---
 
+## 2026-07-08 — Giga Nuke block
+
+Fourth explosive tier: `giga_nuke` (block id 66), `GIGA_NUKE_RADIUS = 33` —
+30× the Mega Nuke's blast volume, ~900× TNT. Removes ~150k blocks across ~30
+chunks; the batched-edit bracket makes it one network message and the
+budgeted remesh queue in `World.update` spreads the rebuild over frames, but
+the carve loop itself (~300k voxel visits) causes a one-beat hitch — accepted
+as the price of an apocalypse block. `Liquids.touch` per-edit cost checked:
+only real liquid cells enqueue, and the flood-in is budgeted (96 cells/frame).
+10s fuse; damage reaches ~66 blocks, so shelter beats sprinting. Crafted from
+8 Mega Nukes around a diamond (i.e. 64 Mega TNT + 9 diamonds end-to-end).
+
+## 2026-07-08 — Mega Nuke block
+
+Third explosive tier above TNT and Mega TNT: `mega_nuke` (block id 65), radius
+`MEGA_NUKE_RADIUS = 10.6` in `src/systems/Explosions.js` — 30× TNT's blast
+volume ((10.6/3.4)³ ≈ 30, vs Mega TNT's ~18×), ~5k blocks removed in one
+batched edit (the existing begin/endEdits bracket handles the sync). 5s fuse
+(`Game.js` interact handler); chains when caught in another blast like the
+other TNTs. Crafted from 8 Mega TNT around a diamond. Olive-drab
+radiation-trefoil texture in `atlas.js` (`mega_nuke_side`/`_top`). Data-driven
+add per `docs/MODDING.md` — no engine changes.
+
 ## 2026-07-03 — #44 Prop Hunt arena: The Playroom
 
 `src/world/arenas/maps/playroom.js` — third arena: mouse-scale players in a

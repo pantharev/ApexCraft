@@ -578,6 +578,40 @@
     }
   },
   {
+    "id": "mega_nuke",
+    "type": "shaped",
+    "pattern": [
+      "MMM",
+      "MDM",
+      "MMM"
+    ],
+    "key": {
+      "M": "mega_tnt",
+      "D": "diamond"
+    },
+    "result": {
+      "item": "mega_nuke",
+      "count": 1
+    }
+  },
+  {
+    "id": "giga_nuke",
+    "type": "shaped",
+    "pattern": [
+      "NNN",
+      "NDN",
+      "NNN"
+    ],
+    "key": {
+      "N": "mega_nuke",
+      "D": "diamond"
+    },
+    "result": {
+      "item": "giga_nuke",
+      "count": 1
+    }
+  },
+  {
     "id": "sandstone",
     "type": "shaped",
     "pattern": [

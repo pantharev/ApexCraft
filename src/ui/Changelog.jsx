@@ -6,6 +6,16 @@ import React from 'react';
 
 const CHANGELOG = [
   {
+    date: 'July 8, 2026',
+    title: 'The Giga Nuke',
+    body: 'The arms race continues: the Giga Nuke erupts with thirty times the blast of a Mega Nuke — nine hundred TNT in one detonation, levelling everything for thirty-three blocks in every direction. Even the ten-second fuse may not be enough to outrun it: the shockwave hurts out to sixty-six blocks, so dig a bunker or get behind a mountain. Crafting one takes eight Mega Nukes around a diamond. Use responsibly. Or don’t.',
+  },
+  {
+    date: 'July 8, 2026',
+    title: 'The Mega Nuke',
+    body: 'A new top-tier explosive: the Mega Nuke detonates with thirty times the blast of regular TNT — enough to hollow out an entire hillside in one shot. Craft one from eight Mega TNT around a diamond, light it, and use every second of the long fuse to get very, very far away. Like its smaller siblings, it chains when caught in another explosion.',
+  },
+  {
     date: 'July 3, 2026',
     title: 'New Prop Hunt arena: The Playroom',
     body: 'Shrink down to mouse size in a giant child’s bedroom: hide under a colossal table (or climb its leg to the fruit bowl and chess set on top), crawl beneath the bed, walk the bookshelf shelves among giant books, or lurk in the toy castle by the glow-mushroom night lights. A beamed glass skylight roof pours daylight in stripes across the floorboards, and the fireplace crackles with real lava behind its guard rail. Seekers start penned on the rug.',

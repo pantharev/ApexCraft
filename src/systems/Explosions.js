@@ -6,6 +6,7 @@ import { Sound } from './Sound.js';
 const TNT = getBlockId('tnt');
 const MEGA_TNT = getBlockId('mega_tnt');
 const MEGA_NUKE = getBlockId('mega_nuke');
+const GIGA_NUKE = getBlockId('giga_nuke');
 const WATER = getBlockId('water');
 const BEDROCK = getBlockId('bedrock');
 
@@ -16,6 +17,12 @@ export const MEGA_TNT_RADIUS = 9;
 // Mega Nuke: 30× the blast volume of TNT ((10.6/3.4)³ ≈ 30). Removes ~5k
 // blocks in one batched edit — get very clear before it goes off.
 export const MEGA_NUKE_RADIUS = 10.6;
+// Giga Nuke: 30× the Mega Nuke ((33/10.6)³ ≈ 30, ~900× TNT). Carves a
+// ~150k-block crater across ~30 chunks; edits are one batched sync and the
+// remesh queue in World.update spreads the rebuild over a few frames, but
+// expect a beat of hitching. Outrunning the ~66-block damage range on foot
+// is barely possible — dig in or get behind terrain.
+export const GIGA_NUKE_RADIUS = 33;
 
 // Explosions: primed TNT entities (flashing, falling, fused) and the blast
 // itself — a roughened sphere of block removal, a fireball of particles, and
@@ -101,6 +108,7 @@ export class Explosions {
               if (id === TNT) this.prime(bx, by, bz, 0.3 + Math.random() * 0.4);
               else if (id === MEGA_TNT) this.prime(bx, by, bz, 0.3 + Math.random() * 0.4, MEGA_TNT_RADIUS, 'mega_tnt');
               else if (id === MEGA_NUKE) this.prime(bx, by, bz, 0.3 + Math.random() * 0.4, MEGA_NUKE_RADIUS, 'mega_nuke');
+              else if (id === GIGA_NUKE) this.prime(bx, by, bz, 0.3 + Math.random() * 0.4, GIGA_NUKE_RADIUS, 'giga_nuke');
             }
           }
         }

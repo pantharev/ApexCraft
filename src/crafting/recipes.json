@@ -595,6 +595,23 @@
     }
   },
   {
+    "id": "giga_nuke",
+    "type": "shaped",
+    "pattern": [
+      "NNN",
+      "NDN",
+      "NNN"
+    ],
+    "key": {
+      "N": "mega_nuke",
+      "D": "diamond"
+    },
+    "result": {
+      "item": "giga_nuke",
+      "count": 1
+    }
+  },
+  {
     "id": "sandstone",
     "type": "shaped",
     "pattern": [

@@ -171,6 +171,13 @@
     "maxStack": 16
   },
   {
+    "name": "giga_nuke",
+    "display": "Giga Nuke",
+    "color": "#26262c",
+    "placeBlock": "giga_nuke",
+    "maxStack": 16
+  },
+  {
     "name": "gunpowder",
     "display": "Gunpowder",
     "color": "#6e6e6e",

@@ -971,6 +971,33 @@
     "drops": []
   },
   {
+    "id": 66,
+    "name": "wallbuy_m14",
+    "solid": true,
+    "color": "#6a6458",
+    "hardness": -1,
+    "interactive": true,
+    "drops": []
+  },
+  {
+    "id": 67,
+    "name": "wallbuy_ak74u",
+    "solid": true,
+    "color": "#6a6458",
+    "hardness": -1,
+    "interactive": true,
+    "drops": []
+  },
+  {
+    "id": 68,
+    "name": "wallbuy_galil",
+    "solid": true,
+    "color": "#6a6458",
+    "hardness": -1,
+    "interactive": true,
+    "drops": []
+  },
+  {
     "id": 61,
     "name": "lava_flow_3",
     "solid": false,

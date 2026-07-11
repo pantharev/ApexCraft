@@ -8,7 +8,7 @@ const CHANGELOG = [
   {
     date: 'July 11, 2026',
     title: 'Zombies: guns & the Mystery Box',
-    body: 'The armory is open. Buy an M14, AK-74u, or Galil from the between-wave shop — semi-auto snaps or full-auto sprays, each with its own magazine, reserve ammo, and recoil; press R to reload before the horde reaches you. Feeling lucky? The glowing crate in the keep is the Mystery Box: one spin for a random gun, and it’s the only place the legendary Ray Gun drops — a green-bolt monster whose splash blast shreds crowds without ever harming your barricades.',
+    body: 'The armory is open — on the walls, just like the classics. Chalk outlines around the castle mark where each gun is sold for your zombie-kill points: the M14 waits safely inside the keep, the AK-74u across the courtyard, and the Galil out on the curtain wall where buying it mid-wave takes nerve. Bought guns come with magazine and reserve (R to reload); return to the outline for half-price ammo, even while the horde is pouring in. Feeling lucky? The glowing crate in the keep is the Mystery Box: one spin for a random gun, and it’s the only place the legendary Ray Gun drops — a green-bolt monster whose splash blast shreds crowds without ever harming your barricades.',
   },
   {
     date: 'July 10, 2026',

@@ -454,6 +454,9 @@ export class Game {
         this._useJukebox(pos);
       } else if (name === 'mystery_box') {
         this._useMysteryBox();
+      } else if (name.startsWith('wallbuy_')) {
+        const err = this.zombiesMode?.buyWall(name.slice(8));
+        if (err && this.onToast) this.onToast(err);
       }
     };
     this.onSleep = null; // React fade-to-black overlay
@@ -1092,13 +1095,14 @@ export class Game {
   // My id in match/attribution space ('self' single-player, socket id online).
   _selfPid() { return this.net ? this.net.id : 'self'; }
 
-  // The Mystery Box block: a shop spin at the crate, with reasons on refusal.
+  // The Mystery Box block: a spin at the crate (works mid-wave too — running
+  // a gamble under pressure is the point), with reasons on refusal.
   _useMysteryBox() {
     const zm = this.zombiesMode;
     if (!zm) return;
     const st = zm.state;
-    if (st.phase !== 'build') {
-      if (this.onToast) this.onToast('The Mystery Box only opens between waves');
+    if (st.phase !== 'build' && st.phase !== 'wave') {
+      if (this.onToast) this.onToast('Start the match to use the Mystery Box');
       return;
     }
     if (!zm.buy('box') && this.onToast) this.onToast('Not enough points for the Mystery Box');

@@ -37,11 +37,22 @@ Mechanisms & gotchas:
   broadcast). Tracers are new `bullet`/`ray` entries in `Projectiles.mats` +
   a `scales` map — peers get them via the existing cosmetic `sendProjectile
   {kind}`. **Zero new net messages in this PR.**
-- **Shop/Mystery Box**: `SHOP` gained gun entries + `box` (95⭐, weights in
-  `BOX_WEIGHTS`, ray_gun 0.15 and box-exclusive) + `gunammo` (refills the HELD
-  gun; refuses without one). `buy()` grant logic extracted to
+- **Wall-buys (CoD style), not menu buys**: guns live on physical
+  `wallbuy_m14/ak74u/galil` blocks (ids 66–68, unbreakable, interactive,
+  chalk-outline tiles via `wallbuyBase`/`chalkGun` in atlas.js), stamped by
+  `bastion.js emitWallBuys` — M14 on the keep's north wall (starter), AK-74u
+  on the south wall, Galil out on the curtain wall by the east gate
+  (risk-priced). Right-click → `Game` onUseBlock → `ZombiesMode.buyWall(gun)`:
+  first purchase = the gun; owned = its ammo at ~half price (`ammoFor`
+  entries: 30/75/125). SHOP entries carry `wall: true` — hidden from the B
+  menu (`SHOP.filter(!s.wall)` in ZombiesUI) and **purchasable mid-wave**
+  (menu entries stay build-only). GOTCHA: the phase rule lives in BOTH
+  `buy()` and the host's `handleIntent` buy branch — they must stay
+  identical or guest wall-buys silently stop decrementing points.
+- **Mystery Box**: `box` entry (95⭐, weights in `BOX_WEIGHTS`, ray_gun 0.15
+  and box-exclusive), usable mid-wave too. `buy()` grant logic extracted to
   `_grant`/`_grantGun` — grants must stay client-local (host `handleIntent`
-  only decrements points). Rebuy/dupe = full refill.
+  only decrements points). Rebuy/dupe = full refill. Ray Gun ammo = respin.
 - **`mystery_box` block** (id 65, `hardness: -1` unbreakable, `luminance: 6`,
   interactive): tiles in atlas.js (`mystery_box_top/_side`), placed in the
   bastion supply corner at (4, FY+1, −10), used via `interaction.onUseBlock`

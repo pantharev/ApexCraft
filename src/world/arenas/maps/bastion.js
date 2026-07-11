@@ -38,6 +38,9 @@ const CHEST = getBlockId('chest');
 const TABLE = getBlockId('crafting_table');
 const FURNACE = getBlockId('furnace');
 const MYSTERY_BOX = getBlockId('mystery_box');
+const WALLBUY_M14 = getBlockId('wallbuy_m14');
+const WALLBUY_AK74U = getBlockId('wallbuy_ak74u');
+const WALLBUY_GALIL = getBlockId('wallbuy_galil');
 
 const FY = FLOOR_Y;                // grass floor level (64)
 
@@ -92,6 +95,7 @@ export function generate(chunk) {
   emitWall(chunk, baseX, baseZ);
   emitTunnels(chunk, baseX, baseZ);
   emitKeep(chunk, baseX, baseZ);
+  emitWallBuys(chunk, baseX, baseZ);
   for (const s of L.scatter) {
     put(chunk, baseX, baseZ, s.x, FY + 1, s.z, s.block);
     if (s.tall) put(chunk, baseX, baseZ, s.x, FY + 2, s.z, s.block);
@@ -228,6 +232,17 @@ function emitKeep(chunk, baseX, baseZ) {
     if (!chunk.lights) chunk.lights = [];
     chunk.lights.push([gx, FY + 1, gz]);
   }
+}
+
+// Wall-buy gun stations, priced by how dangerous they are to reach: the M14
+// on the keep's inner north wall (safe starter), the AK-74u across on the
+// south wall, and the Galil out on the curtain wall beside the east gate — a
+// risky sprint once a wave is running. Stamped last so they overwrite the
+// masonry/bedrock cell they sit in.
+function emitWallBuys(chunk, baseX, baseZ) {
+  put(chunk, baseX, baseZ, 4, FY + 2, -KEEP_R, WALLBUY_M14);
+  put(chunk, baseX, baseZ, -4, FY + 2, KEEP_R, WALLBUY_AK74U);
+  put(chunk, baseX, baseZ, WALL_IN, FY + 2, 6, WALLBUY_GALIL);
 }
 
 // ---- Spawns ----

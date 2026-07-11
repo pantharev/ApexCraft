@@ -109,6 +109,14 @@ for (const seed of [12345, 987654321]) {
   // The Mystery Box sits in the supply corner (gun spins between waves).
   ok(get(4, FY + 1, -10) === getBlockId('mystery_box'), `${tag}: mystery box in the supply corner`);
 
+  // Wall-buy gun stations: M14 + AK-74u in the keep ring, Galil out on the
+  // curtain wall by the east gate, each reachable (air in front at eye level).
+  ok(get(4, FY + 2, -12) === getBlockId('wallbuy_m14'), `${tag}: M14 wall-buy on the keep north wall`);
+  ok(get(-4, FY + 2, 12) === getBlockId('wallbuy_ak74u'), `${tag}: AK-74u wall-buy on the keep south wall`);
+  ok(get(46, FY + 2, 6) === getBlockId('wallbuy_galil'), `${tag}: Galil wall-buy on the curtain wall`);
+  ok(get(4, FY + 2, -11) === 0 && get(-4, FY + 2, 11) === 0 && get(45, FY + 2, 6) === 0,
+    `${tag}: wall-buy stations are reachable`);
+
   // Archer platforms: deck present, ladder continuous and level with the deck.
   ok(get(9, FY + 4, 9) === STONE, `${tag}: archer platform deck`);
   let ladderOk = true;

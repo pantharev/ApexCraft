@@ -33,14 +33,18 @@ export const SHOP = [
   { id: 'venom', label: 'Venom ×2', item: 'arrow_venom', count: 2, cost: 50 },
   { id: 'apples', label: 'Apples ×3', item: 'apple', count: 3, cost: 10 },
   { id: 'heal', label: 'Full heal', item: null, count: 0, cost: 25 },
-  // Guns (rebuying one you own = full mag + reserve refill, wall-buy style).
-  { id: 'm14', label: 'M14', gun: 'm14', cost: 60 },
-  { id: 'ak74u', label: 'AK-74u', gun: 'ak74u', cost: 150 },
-  { id: 'galil', label: 'Galil', gun: 'galil', cost: 250 },
-  { id: 'gunammo', label: 'Ammo (held gun)', cost: 30 },
-  // The Mystery Box: a random gun — the ONLY source of the Ray Gun. Also
-  // usable via the physical box block in the keep's supply corner.
-  { id: 'box', label: 'Mystery Box 🎲', cost: 95 },
+  // Guns are wall-buys, CoD Zombies style: chalk-outline blocks in the arena
+  // (see bastion emitWallBuys), NOT the B menu — `wall: true` hides them from
+  // the shop screen and lets them be bought mid-wave at their station.
+  // Buying a wall gun you own delivers its ammo instead (half price, full
+  // reserve). The Mystery Box block is the ONLY source of the Ray Gun.
+  { id: 'm14', label: 'M14', gun: 'm14', cost: 60, wall: true },
+  { id: 'ak74u', label: 'AK-74u', gun: 'ak74u', cost: 150, wall: true },
+  { id: 'galil', label: 'Galil', gun: 'galil', cost: 250, wall: true },
+  { id: 'm14_ammo', label: 'M14 ammo', ammoFor: 'm14', cost: 30, wall: true },
+  { id: 'ak74u_ammo', label: 'AK-74u ammo', ammoFor: 'ak74u', cost: 75, wall: true },
+  { id: 'galil_ammo', label: 'Galil ammo', ammoFor: 'galil', cost: 125, wall: true },
+  { id: 'box', label: 'Mystery Box 🎲', cost: 95, wall: true },
 ];
 export const shopById = Object.fromEntries(SHOP.map((s) => [s.id, s]));
 
@@ -125,14 +129,17 @@ export class ZombiesMode {
     else this.net.sendMatch({ action: 'died' });
   }
 
-  // Buy from the between-wave shop. Optimistic: the buyer grants itself the
-  // goods now; the authority decrements the points (see SHOP note above).
+  // Buy from the shop or a wall station. Optimistic: the buyer grants itself
+  // the goods now; the authority decrements the points (see SHOP note above).
+  // Menu entries are build-phase only; wall entries (guns/ammo/box) can also
+  // be bought mid-wave — the CoD loop of sprinting for ammo under pressure.
   buy(id) {
     const entry = shopById[id];
     const s = this.state;
-    if (!entry || s.phase !== 'build') return false;
+    if (!entry) return false;
+    if (s.phase !== 'build' && !(entry.wall && s.phase === 'wave')) return false;
     if ((s.points[this.selfId] || 0) < entry.cost) return false;
-    if (!this._grant(entry)) return false; // grant can refuse (e.g. no held gun)
+    if (!this._grant(entry)) return false; // grant can refuse (e.g. ammo for an unowned gun)
     Sound.eat();
     if (this.authoritative) {
       s.points[this.selfId] = Math.max(0, (s.points[this.selfId] || 0) - entry.cost);
@@ -144,6 +151,23 @@ export class ZombiesMode {
       this.net.sendMatch({ action: 'buy', id });
     }
     return true;
+  }
+
+  // A wall-buy station was used: first purchase is the gun, after that the
+  // station sells its ammo at roughly half price. Returns a refusal reason
+  // string (for the toast) or null on success.
+  buyWall(gunName) {
+    const owned = !!this.game.guns[gunName];
+    const entry = shopById[owned ? `${gunName}_ammo` : gunName];
+    if (!entry) return 'Nothing for sale here';
+    const s = this.state;
+    if (s.phase !== 'build' && s.phase !== 'wave') return 'Start the match first';
+    if ((s.points[this.selfId] || 0) < entry.cost) {
+      return `${entry.label} costs ⭐${entry.cost} — you have ⭐${s.points[this.selfId] || 0}`;
+    }
+    this.buy(entry.id);
+    this.game.onToast?.(`${owned ? '🔋' : '🔫'} ${entry.label} — ⭐${entry.cost}`);
+    return null;
   }
 
   // Hand over what a shop entry sells. Gun state lives on the buying client
@@ -160,11 +184,10 @@ export class ZombiesMode {
       for (const [name, w] of BOX_WEIGHTS) { acc += w; if (r < acc) { roll = name; break; } }
       this._grantGun(roll);
       game.onToast?.(`🎲 The box reveals… ${getItem(roll).display}!`);
-    } else if (entry.id === 'gunammo') {
-      const held = game.interaction.heldItem;
-      if (!held || !held.gun) { game.onToast?.('Hold a gun to buy its ammo'); return false; }
-      const g = game.guns[held.name] || (game.guns[held.name] = { mag: held.gun.mag, reserve: 0 });
-      g.reserve = held.gun.reserve;
+    } else if (entry.ammoFor) {
+      const g = game.guns[entry.ammoFor];
+      if (!g) return false; // no ammo for a gun you don't own
+      g.reserve = getItem(entry.ammoFor).gun.reserve;
     } else {
       game.inventory.addItem(entry.item, entry.count);
       game.inventory.notify();
@@ -196,7 +219,9 @@ export class ZombiesMode {
     else if (msg.action === 'buy') {
       const entry = shopById[msg.id];
       const s = this.state;
-      if (!entry || s.phase !== 'build') return;
+      // Same phase rule as buy(): menu entries between waves only, wall
+      // entries (guns/ammo/box) also mid-wave.
+      if (!entry || (s.phase !== 'build' && !(entry.wall && s.phase === 'wave'))) return;
       s.points[fromId] = Math.max(0, (s.points[fromId] || 0) - entry.cost);
       this._changed();
     }

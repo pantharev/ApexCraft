@@ -73,6 +73,15 @@ Mechanisms & gotchas:
   (`WALL_TOP = ROOF_LEVEL`) so there's no sky slot around the roof rim. Note:
   the roofed arena makes `surfaceHeight`-based cave detection kick in — cave
   ambience/music inside the fortress is accepted as thematic.
+- **Castle interior, not outdoors**: `groundPass` paves the ENTIRE interior
+  (r < WALL_IN) in patchwork flagstone (stone/mossy/andesite by cellHash;
+  gravel lanes kept, now full crosses). Both curtain rings carry a **slab
+  gallery roof** (`GALLERY_Y = FY+7`, 3-wide band r±1 in `emitRuinRing`),
+  torn open over every breach span (side/off recomputed per band cell —
+  corners resolve by the larger axis). Parapet walkers clear the gallery
+  (slab stand 4.5 + 1.8 < 7); gates and mid towers are covered. arenaTest
+  asserts flagstone samples, lane gravel, covered gates, and that gallery
+  holes exactly match rubble columns.
 - **Enclosed keep**: `KEEP_WALL_TOP` raised FY+2 → FY+6 with pane arrow-slit
   windows (every 4th column at FY+4, visual only — panes are solid), arched
   2-high entries (wall continues above the doorway), and its own roof at

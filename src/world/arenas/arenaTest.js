@@ -97,6 +97,12 @@ for (const seed of [12345, 987654321]) {
     ok(get(dx * 51, FY, dz * 51) === GRAVEL, `${tag}: ${side} tunnel gravel bed`);
   }
 
+  // Castle flooring: the interior is flagstone (never grass), lanes gravel.
+  const floorIds = new Set([STONE, getBlockId('mossy_cobblestone'), getBlockId('andesite')]);
+  ok([[20, 20], [-33, 17], [8, -42]].every(([x, z]) => floorIds.has(get(x, FY, z))),
+    `${tag}: interior floor is flagstone`);
+  ok(get(0, FY, 20) === GRAVEL, `${tag}: gravel lanes survive the paving`);
+
   // Spawns: all gate pads, four player spawns, and the lobby are standable.
   for (const [i, g] of bastion.zombieGates().entries()) {
     ok(standable(get, g), `${tag}: zombie gate pad ${i} standable`);
@@ -155,18 +161,20 @@ for (const seed of [12345, 987654321]) {
     for (let y = FY + 1; y <= FY + 4; y++) if (get(sx * (MID - 2), y, sz * (MID - 1)) !== LADDER) tl = false;
     ok(tl, `${tag}: tower ladder continuous`);
   }
-  let intact = 0, rubble = 0, cells = 0;
+  let intact = 0, rubble = 0, cells = 0, holed = 0;
   for (let off = -MID + 1; off < MID; off++) {
     if (Math.abs(off) <= 2) continue; // gates
     for (const [x, z] of [[off, -MID], [off, MID], [-MID, off], [MID, off]]) {
       cells++;
       const low = get(x, FY + 1, z), high = get(x, FY + 2, z);
       if (isSolid(low) && isSolid(high)) intact++;
-      else if (isSolid(low) && high === 0) rubble++;
+      else if (isSolid(low) && high === 0) { rubble++; if (get(x, FY + 7, z) === 0) holed++; }
     }
   }
   ok(intact / cells > 0.6, `${tag}: mid wall mostly intact (${intact}/${cells})`);
   ok(rubble >= 8, `${tag}: mid wall has hop-able breaches (${rubble} rubble cells)`);
+  ok(holed === rubble, `${tag}: mid gallery roof torn open over every breach`);
+  ok(get(0, FY + 7, MID) === getBlockId('stone_slab'), `${tag}: mid gallery covers its gate`);
 
   // The outer curtain wall (r=38): narrower gates, heavier ruin.
   const OUT = 38;
@@ -180,18 +188,20 @@ for (const seed of [12345, 987654321]) {
     }
     ok(open, `${tag}: outer-wall ${side} gate open`);
   }
-  let oIntact = 0, oRubble = 0, oCells = 0;
+  let oIntact = 0, oRubble = 0, oCells = 0, oHoled = 0;
   for (let off = -OUT + 1; off < OUT; off++) {
     if (Math.abs(off) <= 1) continue; // gates
     for (const [x, z] of [[off, -OUT], [off, OUT], [-OUT, off], [OUT, off]]) {
       oCells++;
       const low = get(x, FY + 1, z), high = get(x, FY + 2, z);
       if (isSolid(low) && isSolid(high)) oIntact++;
-      else if (isSolid(low) && high === 0) oRubble++;
+      else if (isSolid(low) && high === 0) { oRubble++; if (get(x, FY + 7, z) === 0) oHoled++; }
     }
   }
   ok(oIntact / oCells > 0.55, `${tag}: outer wall mostly intact (${oIntact}/${oCells})`);
   ok(oRubble >= 16, `${tag}: outer wall heavily breached (${oRubble} rubble cells)`);
+  ok(oHoled === oRubble, `${tag}: outer gallery roof torn open over every breach`);
+  ok(get(0, FY + 7, OUT) === getBlockId('stone_slab'), `${tag}: outer gallery covers its gate`);
 }
 
 console.log(fails === 0 ? 'ARENA TESTS PASSED' : `ARENA TESTS FAILED (${fails})`);

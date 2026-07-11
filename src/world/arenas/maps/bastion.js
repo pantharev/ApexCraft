@@ -166,22 +166,22 @@ export function generate(chunk) {
   }
 }
 
-// Gravel cross-paths from each gate to the keep, stone paving inside the keep.
+// Castle flooring: the entire interior is patchwork flagstone — the arena is
+// the inside of the fortress, not an outdoor field. Gravel lanes still run
+// gate → keep for wayfinding.
 function groundPass(chunk, baseX, baseZ) {
   for (let lx = 0; lx < CHUNK_SIZE; lx++) {
     for (let lz = 0; lz < CHUNK_SIZE; lz++) {
       const wx = baseX + lx, wz = baseZ + lz;
       const r = Math.max(Math.abs(wx), Math.abs(wz));
-      if (r > half + TUNNEL_LEN) continue;
-      if (r <= KEEP_R) {
-        // Patchy keep paving: mostly stone, mossy veins, worn grass gaps.
-        const h = cellHash(wx, wz);
-        if (h < 0.25) chunk.set(lx, FY, lz, MOSSY);
-        else if (h < 0.8) chunk.set(lx, FY, lz, STONE);
-      } else if ((Math.abs(wx) <= 1 && Math.abs(wz) < WALL_IN) ||
-                 (Math.abs(wz) <= 1 && Math.abs(wx) < WALL_IN)) {
+      if (r >= WALL_IN) continue; // the shell + outside keep the flat base
+      if ((Math.abs(wx) <= 1 || Math.abs(wz) <= 1)) {
         chunk.set(lx, FY, lz, GRAVEL); // gate ways
+        continue;
       }
+      // Patchy paving: mostly stone, mossy veins, andesite slabs of wear.
+      const h = cellHash(wx, wz);
+      chunk.set(lx, FY, lz, h < 0.22 ? MOSSY : h < 0.85 ? STONE : ANDESITE);
     }
   }
 }
@@ -236,14 +236,30 @@ function emitTunnels(chunk, baseX, baseZ) {
   }
 }
 
+// Height of the covered galleries roofing the curtain walls. Parapet walkers
+// (standing on the FY+4 slab) clear it: 4.5 + 1.8 < 7.
+const GALLERY_Y = FY + 7;
+
 // A ruined curtain-wall ring: intact spans carry a slab parapet, weathered
 // columns sag a block, breach spans are down to hop-able rubble (zombies can
-// climb one block, so the horde keeps flowing).
+// climb one block, so the horde keeps flowing). A slab gallery roof spans the
+// wall line three wide — the walls read as covered castle corridors — with
+// the roof torn open over every breach.
 function emitRuinRing(chunk, baseX, baseZ, { r, top, gateHalf, breaches, sagP, skipCorners }) {
   for (let lx = 0; lx < CHUNK_SIZE; lx++) {
     for (let lz = 0; lz < CHUNK_SIZE; lz++) {
       const wx = baseX + lx, wz = baseZ + lz;
-      if (Math.max(Math.abs(wx), Math.abs(wz)) !== r) continue;
+      const m = Math.max(Math.abs(wx), Math.abs(wz));
+
+      // Gallery roof band (r±1), holed over breaches.
+      if (m >= r - 1 && m <= r + 1) {
+        const gOnZ = Math.abs(wz) >= Math.abs(wx);
+        const gOff = gOnZ ? wx : wz;
+        const gSide = gOnZ ? (wz < 0 ? 0 : 1) : (wx < 0 ? 2 : 3);
+        if (!inBreach(breaches, gSide, gOff)) chunk.set(lx, GALLERY_Y, lz, STONE_SLAB);
+      }
+
+      if (m !== r) continue;
       if (skipCorners && Math.abs(wx) === r && Math.abs(wz) === r) continue;
       // Which side of the ring, and how far along it?
       const onZ = Math.abs(wz) === r; // north/south run

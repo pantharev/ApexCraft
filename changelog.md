@@ -54,8 +54,10 @@ Mechanisms & gotchas:
 - Ammo HUD rides a `gunAmmo` field in the 60 Hz `onStats` snapshot (tiny),
   rendered in App.jsx bottom-right; match HUD stays on `onMatch`.
 - **Ops note**: `git push` hung via the Windows credential manager this
-  session; pushing with `git -c "credential.helper=!gh auth git-credential"
-  push …` works (gh CLI is authed).
+  session; pushing with `git -c credential.helper= -c
+  "credential.helper=!gh auth git-credential" push …` works (gh CLI is
+  authed). Both `-c` flags are required — the empty one clears the hanging
+  default helper first.
 
 ## 2026-07-10 — #46 Zombies gamemode: co-op wave defense
 

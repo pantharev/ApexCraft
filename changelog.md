@@ -73,6 +73,15 @@ Mechanisms & gotchas:
   (`WALL_TOP = ROOF_LEVEL`) so there's no sky slot around the roof rim. Note:
   the roofed arena makes `surfaceHeight`-based cave detection kick in — cave
   ambience/music inside the fortress is accepted as thematic.
+- **Enclosed keep**: `KEEP_WALL_TOP` raised FY+2 → FY+6 with pane arrow-slit
+  windows (every 4th column at FY+4, visual only — panes are solid), arched
+  2-high entries (wall continues above the doorway), and its own roof at
+  `KEEP_ROOF = FY+7`: plank beams on a 4-grid over glass, masonry rim over
+  the wall ring, slab eaves overhanging at r=KEEP_R+1. Merlons/top torches
+  removed (roofed). Archer platforms keep exactly enough headroom (deck
+  FY+4, stand FY+5, head < roof at FY+7 — asserted in arenaTest). Side
+  effect: spiders can no longer climb INTO the keep — creepers remain the
+  anti-turtle counter for a sealed keep.
 - **`mystery_box` block** (id 65, `hardness: -1` unbreakable, `luminance: 6`,
   interactive): tiles in atlas.js (`mystery_box_top/_side`), placed in the
   bastion supply corner at (4, FY+1, −10), used via `interaction.onUseBlock`

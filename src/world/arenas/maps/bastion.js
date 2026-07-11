@@ -26,6 +26,7 @@ export const botSpots = [];
 const STONE = getBlockId('stone');
 const PLANKS = getBlockId('oak_planks');
 const GLASS = getBlockId('glass');
+const PANE = getBlockId('glass_pane');
 const ANDESITE = getBlockId('andesite');
 const MOSSY = getBlockId('mossy_cobblestone');
 const STONE_SLAB = getBlockId('stone_slab');
@@ -57,9 +58,12 @@ const GATE_TOP = FY + 3;
 // Outer gate tunnels extend this far beyond the wall.
 const TUNNEL_LEN = 6;
 
-// Keep: low masonry ring the team fortifies, with two open entries.
+// Keep: the enclosed castle the team holds — tall masonry walls with pane
+// arrow-slit windows, two arched entries (the barricade chokepoints), and its
+// own beamed skylight roof under the arena canopy.
 const KEEP_R = 12;                 // Chebyshev radius of the keep wall
-const KEEP_WALL_TOP = FY + 2;      // solid to here; merlons ride one higher
+const KEEP_WALL_TOP = FY + 6;      // walls meet the keep roof one above
+const KEEP_ROOF = KEEP_WALL_TOP + 1;
 const PLATFORM_R = 9;              // archer platform corners sit at (±R, ±R)
 
 // Middle curtain wall: a ruined stone ring between keep and shell that breaks
@@ -290,22 +294,37 @@ function emitMidWall(chunk, L, baseX, baseZ) {
   }
 }
 
-// The keep: a low crenellated masonry ring with east/west entries, four corner
-// archer platforms with ladders, and a supply corner (table/chest/furnace).
-// Unlike the shell it is ordinary stone — creepers can crack it open.
+// The keep: an enclosed castle hall — tall masonry walls with pane arrow-slit
+// windows, arched east/west entries (the team's choke points to barricade),
+// its own beamed skylight roof, four corner archer platforms with ladders,
+// and a supply corner (table/chest/furnace/mystery box). Unlike the shell it
+// is ordinary stone — creepers can crack it open.
 function emitKeep(chunk, baseX, baseZ) {
   for (let lx = 0; lx < CHUNK_SIZE; lx++) {
     for (let lz = 0; lz < CHUNK_SIZE; lz++) {
       const wx = baseX + lx, wz = baseZ + lz;
       const r = Math.max(Math.abs(wx), Math.abs(wz));
-      if (r !== KEEP_R) continue;
-      // Entries: 2-wide gaps at the east and west midpoints (the team's
-      // choke points to barricade).
-      if (Math.abs(wz) <= 1 && Math.abs(wx) === KEEP_R) continue;
-      for (let y = FY + 1; y <= KEEP_WALL_TOP; y++) chunk.set(lx, y, lz, masonry(wx, y, wz));
-      // Merlons every other block; torches on the gaps facing the field.
-      if (((wx + wz) & 1) === 0) chunk.set(lx, KEEP_WALL_TOP + 1, lz, masonry(wx, KEEP_WALL_TOP + 1, wz));
-      else if (cellHash(wx * 3, wz * 5) < 0.35) chunk.set(lx, KEEP_WALL_TOP + 1, lz, TORCH);
+      if (r > KEEP_R + 1) continue;
+      if (r === KEEP_R) {
+        // The wall ring. Entries: 2-wide, 2-high arches at the east and west
+        // midpoints; pane slit windows high up every 4th column.
+        const onEntry = Math.abs(wz) <= 1 && Math.abs(wx) === KEEP_R;
+        const corner = Math.abs(wx) === KEEP_R && Math.abs(wz) === KEEP_R;
+        const off = Math.abs(wz) === KEEP_R ? wx : wz;
+        for (let y = FY + 1; y <= KEEP_WALL_TOP; y++) {
+          if (onEntry && y <= FY + 2) continue; // arched doorway
+          const slit = !corner && !onEntry && y === FY + 4 && ((off % 4) + 4) % 4 === 0;
+          chunk.set(lx, y, lz, slit ? PANE : masonry(wx, y, wz));
+        }
+        chunk.set(lx, KEEP_ROOF, lz, masonry(wx, KEEP_ROOF, wz)); // roof rim
+      } else if (r < KEEP_R) {
+        // The keep roof: plank beams on a 4-grid over glass, so the striped
+        // night light of the arena canopy carries down into the hall.
+        const beam = (wx & 3) === 0 || (wz & 3) === 0;
+        chunk.set(lx, KEEP_ROOF, lz, beam ? PLANKS : GLASS);
+      } else {
+        chunk.set(lx, KEEP_ROOF, lz, STONE_SLAB); // eaves overhang the wall
+      }
     }
   }
 

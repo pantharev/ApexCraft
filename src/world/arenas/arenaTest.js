@@ -106,11 +106,18 @@ for (const seed of [12345, 987654321]) {
   }
   ok(standable(get, bastion.lobbySpawn()), `${tag}: lobby spawn standable`);
 
-  // The keep: masonry ring with open east/west entries, breakable (not bedrock).
+  // The keep: a tall enclosed hall — breakable walls, arched entries, its own
+  // beamed skylight roof with eaves, and headroom over the archer platforms.
   const keepWall = get(12, FY + 1, 5);
   ok(isSolid(keepWall) && keepWall !== BEDROCK, `${tag}: keep wall solid and breakable`);
+  ok(isSolid(get(12, FY + 5, 5)), `${tag}: keep wall risen tall`);
   ok(get(12, FY + 1, 0) === 0 && get(12, FY + 2, 0) === 0, `${tag}: keep east entry open`);
   ok(get(-12, FY + 1, 0) === 0 && get(-12, FY + 2, 0) === 0, `${tag}: keep west entry open`);
+  ok(isSolid(get(12, FY + 3, 0)), `${tag}: keep entry is arched (wall above)`);
+  ok(get(0, FY + 7, 5) !== 0 && get(2, FY + 7, 5) === getBlockId('glass'),
+    `${tag}: keep roof beams + glass skylight`);
+  ok(isSolid(get(12, FY + 7, 5)), `${tag}: keep roof rim caps the wall`);
+  ok(get(9, FY + 5, 9) === 0 && get(9, FY + 6, 9) === 0, `${tag}: headroom over the archer platforms`);
 
   // The Mystery Box sits in the supply corner (gun spins between waves).
   ok(get(4, FY + 1, -10) === getBlockId('mystery_box'), `${tag}: mystery box in the supply corner`);

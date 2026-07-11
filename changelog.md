@@ -9,6 +9,61 @@ updated with every merged PR** (and mirror a short player-facing entry in the
 
 ---
 
+## 2026-07-10 — #46 Zombies gamemode: co-op wave defense
+
+Fourth world mode `'zombies'` riding the exact hideseek plumbing (whitelists in
+`Game` ctor / `server/index.js` / `Menus.jsx` picker; arena registry map;
+generic `match`/`matchState` channel — a room has one mode, so sharing is safe;
+`Game._matchMode()` picks the active manager). `src/systems/ZombiesMode.js` is
+the host/solo-authoritative FSM (`lobby → build → wave → … → gameover`) AND the
+wave director: trickle-spawns (live cap 12) from a queue at
+`activeMap().zombieGates()` via `MobManager._spawn`, spiders w4+/skeletons
+w6+/creepers w8+, per-wave HP mult, kill scoring by sweeping tracked mobs'
+`dead` flags. Host migration mid-wave folds back to a build phase (old host's
+mobs died with it).
+
+Key mechanisms & gotchas:
+- **`mob.lastHitBy`** is the kill-attribution seam — stamped in melee
+  (`Game.onAttack`), `Projectiles` mob-hit (`opts.owner`), `Explosions.boom`
+  (`ctx.by`), `DamageZones` (`owner`), and `net.onMobHit` (server now tags
+  `mobHit.from`; `boom` passes optional `by`). Ids: `'self'` solo, socket id online.
+- **`MobManager.autoSpawn = false`** (zombies): kills ambient spawn timers AND
+  far-despawn (gate mobs must survive being >70 blocks from a huddled team).
+  `mob.detectOverride` (Mob.js one-liner) lets wave mobs aggro arena-wide —
+  never mutate the shared `def`.
+- **Special ammo**: `Game.AMMO` table + X-cycle (`_cycleAmmo`, bound in
+  `_bindScreens`, all modes). Exploding arrows call `boom(r=1.7,
+  applyEdits=false)` — entity damage only, defenses never take collateral;
+  the host's `onBoom` replay already damages mobs for guest-fired booms
+  (`_boomCtx().mobs` is real there), so no new mob-damage netcode was needed.
+  Venom arrows spawn `src/systems/DamageZones.js` pools (0.5 s tick, mobs only,
+  no players) synced by a one-shot `zone` message — registered in the usual
+  THREE places (Net send, Net listener, server relay); the server stamps
+  `owner` itself so clients can't spoof credit.
+- **Night lock** (`dayNight.t=0.78, frozen`, set on every client; `onTime`
+  ignored in zombies) is what keeps `burns:true` zombies alive — no mob changes.
+- Shop (`SHOP` in ZombiesMode, `ZombiesShop` in `src/ui/ZombiesUI.jsx`,
+  `openScreen === 'shop'`, B key): optimistic buys — buyer grants itself
+  immediately, authority decrements points floored at 0 (same trust level as
+  edits/booms). Never grant via item drops (not net-synced).
+- Death: `Game._zombiesDeath` (no scatter, no `onDead` overlay, free-fly
+  spectate, `interaction.locked`); revives are client-local in
+  `ZombiesMode._applyLocal` on build/wave-entry transitions (host never touches
+  guest vitals). Dead players are filtered out of the mob-targeting `players`
+  array in `_loop`.
+- Gen-mode token renamed **`'hideseek'` → `'arena'`** in `TerrainGen`
+  (playroom/castle/town regression-checked by build + arena tests).
+- `src/world/arenas/maps/bastion.js` (`half=48`): bedrock shell + 4 gate
+  tunnels (only way in), buildable stone keep, ladders face-adjacent to their
+  pillar (mesher rule). **`arenaTest.js` is now committed** (the #42/#44
+  harness): `npx esbuild src/world/arenas/arenaTest.js --bundle --format=esm
+  --outfile=… && node …` — 62 assertions × 2 seeds.
+- server/test.js grew zombies-mode round-trip, `zone`, `mobHit.from`,
+  `boom.by` coverage (33 passing).
+- Known v1 gaps (by design): zombies don't break player blocks (creepers are
+  the anti-turtle), wave state isn't saved (reload → lobby), balance constants
+  live at the top of ZombiesMode.js for tuning.
+
 ## 2026-07-03 — #44 Prop Hunt arena: The Playroom
 
 `src/world/arenas/maps/playroom.js` — third arena: mouse-scale players in a

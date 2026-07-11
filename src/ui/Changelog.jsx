@@ -6,6 +6,11 @@ import React from 'react';
 
 const CHANGELOG = [
   {
+    date: 'July 10, 2026',
+    title: 'New game mode: Zombies (co-op wave defense)',
+    body: 'Grab up to three friends and hold The Bastion against endless waves of the undead. Zombies pour in through four gate tunnels — wall them off, snipe from the archer platforms, and watch out: spiders climb, skeletons shoot back, and creepers blow your barricades open. Kills earn points to spend in a between-wave shop, and two new bow ammos (cycle with X) turn the tide: exploding arrows that blast crowds without harming your walls, and venom arrows that leave a poison pool. Fall in battle and you spectate until your team clears the wave — if everyone drops, the run ends at the wave you reached.',
+  },
+  {
     date: 'July 3, 2026',
     title: 'New Prop Hunt arena: The Playroom',
     body: 'Shrink down to mouse size in a giant child’s bedroom: hide under a colossal table (or climb its leg to the fruit bowl and chess set on top), crawl beneath the bed, walk the bookshelf shelves among giant books, or lurk in the toy castle by the glow-mushroom night lights. A beamed glass skylight roof pours daylight in stripes across the floorboards, and the fireplace crackles with real lava behind its guard rail. Seekers start penned on the rug.',

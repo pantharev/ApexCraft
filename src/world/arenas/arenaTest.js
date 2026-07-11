@@ -69,8 +69,14 @@ for (const seed of [12345, 987654321]) {
   for (const [x, z, side] of [[20, 46, 'S'], [20, -46, 'N'], [46, 20, 'E'], [-46, 20, 'W'], [47, 47, 'corner']]) {
     ok(get(x, FY + 2, z) === BEDROCK, `${tag}: ${side} wall bedrock at (${x},${z})`);
   }
-  ok(get(20, FY + 7, 46) === BEDROCK, `${tag}: wall reaches full height`);
-  ok(get(20, FY + 8, 46) === 0, `${tag}: open sky above the wall`);
+  ok(get(20, FY + 16, 46) === BEDROCK, `${tag}: shell rises to the roof line`);
+  ok(get(20, FY + 17, 46) === 0, `${tag}: open sky above the shell`);
+
+  // The roof: plank beams on the 8-grid over a glass skylight, spanning the
+  // interior at FY+16; nothing leaks past the shell.
+  ok(get(0, FY + 16, 20) !== 0 && get(8, FY + 16, 20) !== 0, `${tag}: roof beams on the 8-grid`);
+  ok(get(4, FY + 16, 20) === getBlockId('glass'), `${tag}: roof skylight is glass`);
+  ok(get(52, FY + 16, 0) === 0, `${tag}: no roof outside the shell`);
 
   // Gates: a 3-wide, 3-high bore through the ring at each midpoint, lintel
   // closed above, roofed tunnel outside with a gravel bed.
@@ -154,6 +160,31 @@ for (const seed of [12345, 987654321]) {
   }
   ok(intact / cells > 0.6, `${tag}: mid wall mostly intact (${intact}/${cells})`);
   ok(rubble >= 8, `${tag}: mid wall has hop-able breaches (${rubble} rubble cells)`);
+
+  // The outer curtain wall (r=38): narrower gates, heavier ruin.
+  const OUT = 38;
+  for (const [gx, gz, side] of [[0, -OUT, 'N'], [0, OUT, 'S'], [-OUT, 0, 'W'], [OUT, 0, 'E']]) {
+    let open = true;
+    for (let s = -1; s <= 1; s++) {
+      for (let y = FY + 1; y <= FY + 3; y++) {
+        const x = gz === 0 ? gx : s, z = gx === 0 ? gz : s;
+        if (get(x, y, z) !== 0) open = false;
+      }
+    }
+    ok(open, `${tag}: outer-wall ${side} gate open`);
+  }
+  let oIntact = 0, oRubble = 0, oCells = 0;
+  for (let off = -OUT + 1; off < OUT; off++) {
+    if (Math.abs(off) <= 1) continue; // gates
+    for (const [x, z] of [[off, -OUT], [off, OUT], [-OUT, off], [OUT, off]]) {
+      oCells++;
+      const low = get(x, FY + 1, z), high = get(x, FY + 2, z);
+      if (isSolid(low) && isSolid(high)) oIntact++;
+      else if (isSolid(low) && high === 0) oRubble++;
+    }
+  }
+  ok(oIntact / oCells > 0.55, `${tag}: outer wall mostly intact (${oIntact}/${oCells})`);
+  ok(oRubble >= 16, `${tag}: outer wall heavily breached (${oRubble} rubble cells)`);
 }
 
 console.log(fails === 0 ? 'ARENA TESTS PASSED' : `ARENA TESTS FAILED (${fails})`);

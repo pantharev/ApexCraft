@@ -24,6 +24,8 @@ export const propBlocks = [];
 export const botSpots = [];
 
 const STONE = getBlockId('stone');
+const PLANKS = getBlockId('oak_planks');
+const GLASS = getBlockId('glass');
 const ANDESITE = getBlockId('andesite');
 const MOSSY = getBlockId('mossy_cobblestone');
 const STONE_SLAB = getBlockId('stone_slab');
@@ -44,9 +46,11 @@ const WALLBUY_GALIL = getBlockId('wallbuy_galil');
 
 const FY = FLOOR_Y;                // grass floor level (64)
 
-// Bedrock curtain wall rings (Chebyshev radius) and height.
+// Bedrock curtain wall rings (Chebyshev radius). The shell rises all the way
+// to the roof line, sealing the fortress into a closed siege arena.
 const WALL_IN = 46, WALL_OUT = 48;
-const WALL_TOP = FY + 7;
+const ROOF_LEVEL = FY + 16;
+const WALL_TOP = ROOF_LEVEL; // the shell caps its own 3-wide top ring
 // Gate opening: 3 wide (|coord| <= 1), 3 high, one per wall midpoint.
 const GATE_HALF = 1;
 const GATE_TOP = FY + 3;
@@ -66,6 +70,17 @@ const PLATFORM_R = 9;              // archer platform corners sit at (±R, ±R)
 const MID_R = 28;                  // Chebyshev radius of the ring
 const MID_TOP = FY + 3;            // intact wall height; slab parapet above
 const MID_GATE_HALF = 2;           // gates are 5 wide, on the gravel lanes
+
+// Outer curtain wall: an older, more broken ring between the mid wall and the
+// shell — narrower gates, heavier ruin. No towers; it reads as the castle's
+// crumbling first line.
+const OUTER_R = 38;
+const OUTER_TOP = FY + 3;
+const OUTER_GATE_HALF = 1;         // gates are 3 wide
+
+// Roof: plank beams over a glass-major skylight at ROOF_LEVEL (the Playroom
+// rule — glass keeps the per-column skylight alive; a solid roof would drop
+// the whole arena to cave darkness).
 
 // ~30% deterministic mossy weathering on the keep masonry.
 const masonry = (wx, wy, wz) => (cellHash(wx + wy * 57, wz - wy * 31) < 0.3 ? MOSSY : STONE);
@@ -88,29 +103,36 @@ function layout() {
     if (Math.abs(x) <= 2 || Math.abs(z) <= 2) continue;              // gate paths
     if (cheb >= WALL_IN - 2) continue;                               // wall footing
     if (Math.abs(cheb - MID_R) <= 1) continue;                       // mid-wall line
+    if (Math.abs(cheb - OUTER_R) <= 1) continue;                     // outer-wall line
     scatter.push({ x, z, block: rng() < 0.35 ? HAY : ANDESITE, tall: rng() < 0.3 });
   }
 
-  // Ruined breaches in the middle curtain wall: 1–2 crumbled spans per side,
-  // never on the gates or in the corner towers. Stored as [side][{at, span}]
-  // where `at` is the tangential offset along that side.
-  const breaches = [];
-  for (let side = 0; side < 4; side++) {
-    const n = 1 + (rng() < 0.5 ? 1 : 0);
-    for (let i = 0; i < n; i++) {
-      const at = Math.floor(6 + rng() * 16) * (rng() < 0.5 ? -1 : 1); // |6..22|
-      breaches.push({ side, at, span: 3 + Math.floor(rng() * 3) });   // 3–5 wide
+  // Ruined breaches in the curtain walls: crumbled spans per side, never on
+  // the gates or the mid ring's corner towers. Stored as [{side, at, span}]
+  // where `at` is the tangential offset along that side. The outer ring is
+  // the castle's derelict first line — it gets more, wider breaches.
+  const rollBreaches = (perSideMin, extraP, reach, spanMax) => {
+    const out = [];
+    for (let side = 0; side < 4; side++) {
+      const n = perSideMin + (rng() < extraP ? 1 : 0);
+      for (let i = 0; i < n; i++) {
+        const at = Math.floor(6 + rng() * (reach - 6)) * (rng() < 0.5 ? -1 : 1);
+        out.push({ side, at, span: 3 + Math.floor(rng() * (spanMax - 2)) });
+      }
     }
-  }
+    return out;
+  };
+  const breaches = rollBreaches(1, 0.5, 22, 5);      // mid ring: 1–2/side, 3–5 wide
+  const outerBreaches = rollBreaches(2, 0.6, 32, 6); // outer ring: 2–3/side, 3–6 wide
 
-  _layout = { scatter, breaches };
+  _layout = { scatter, breaches, outerBreaches };
   _layoutSeed = seed;
   return _layout;
 }
 
 // Is ring-cell (side, offset) inside a crumbled breach span?
-function inBreach(L, side, off) {
-  for (const b of L.breaches) {
+function inBreach(list, side, off) {
+  for (const b of list) {
     if (b.side === side && Math.abs(off - b.at) <= b.span / 2) return true;
   }
   return false;
@@ -126,9 +148,14 @@ export function generate(chunk) {
   groundPass(chunk, baseX, baseZ);
   emitWall(chunk, baseX, baseZ);
   emitTunnels(chunk, baseX, baseZ);
+  emitRuinRing(chunk, baseX, baseZ, {
+    r: OUTER_R, top: OUTER_TOP, gateHalf: OUTER_GATE_HALF,
+    breaches: L.outerBreaches, sagP: 0.3, skipCorners: false,
+  });
   emitMidWall(chunk, L, baseX, baseZ);
   emitKeep(chunk, baseX, baseZ);
   emitWallBuys(chunk, baseX, baseZ);
+  emitRoof(chunk, baseX, baseZ);
   for (const s of L.scatter) {
     put(chunk, baseX, baseZ, s.x, FY + 1, s.z, s.block);
     if (s.tall) put(chunk, baseX, baseZ, s.x, FY + 2, s.z, s.block);
@@ -205,31 +232,40 @@ function emitTunnels(chunk, baseX, baseZ) {
   }
 }
 
-// The ruined middle curtain wall (see the MID_R constants above): intact
-// spans carry a slab parapet, weathered columns sag a block, breach spans are
-// down to hop-able rubble, and squat watchtowers anchor the four corners.
-function emitMidWall(chunk, L, baseX, baseZ) {
+// A ruined curtain-wall ring: intact spans carry a slab parapet, weathered
+// columns sag a block, breach spans are down to hop-able rubble (zombies can
+// climb one block, so the horde keeps flowing).
+function emitRuinRing(chunk, baseX, baseZ, { r, top, gateHalf, breaches, sagP, skipCorners }) {
   for (let lx = 0; lx < CHUNK_SIZE; lx++) {
     for (let lz = 0; lz < CHUNK_SIZE; lz++) {
       const wx = baseX + lx, wz = baseZ + lz;
-      if (Math.max(Math.abs(wx), Math.abs(wz)) !== MID_R) continue;
-      if (Math.abs(wx) === MID_R && Math.abs(wz) === MID_R) continue; // tower corners
+      if (Math.max(Math.abs(wx), Math.abs(wz)) !== r) continue;
+      if (skipCorners && Math.abs(wx) === r && Math.abs(wz) === r) continue;
       // Which side of the ring, and how far along it?
-      const onZ = Math.abs(wz) === MID_R; // north/south run
+      const onZ = Math.abs(wz) === r; // north/south run
       const off = onZ ? wx : wz;
       const side = onZ ? (wz < 0 ? 0 : 1) : (wx < 0 ? 2 : 3);
-      if (Math.abs(off) <= MID_GATE_HALF) continue;              // lane gate
-      if (inBreach(L, side, off)) {
+      if (Math.abs(off) <= gateHalf) continue;                   // lane gate
+      if (inBreach(breaches, side, off)) {
         chunk.set(lx, FY + 1, lz, MOSSY);                        // rubble — zombies hop it
         continue;
       }
       // Intact wall, with weathered columns sagging one block.
-      const sag = cellHash(wx * 7, wz * 11) < 0.15;
-      const top = sag ? MID_TOP - 1 : MID_TOP;
-      for (let y = FY + 1; y <= top; y++) chunk.set(lx, y, lz, masonry(wx, y, wz));
-      if (!sag) chunk.set(lx, MID_TOP + 1, lz, STONE_SLAB);      // parapet walk
+      const sag = cellHash(wx * 7, wz * 11) < sagP;
+      const colTop = sag ? top - 1 : top;
+      for (let y = FY + 1; y <= colTop; y++) chunk.set(lx, y, lz, masonry(wx, y, wz));
+      if (!sag) chunk.set(lx, top + 1, lz, STONE_SLAB);          // parapet walk
     }
   }
+}
+
+// The ruined middle curtain wall: the shared ring plus squat watchtowers
+// anchoring the four corners.
+function emitMidWall(chunk, L, baseX, baseZ) {
+  emitRuinRing(chunk, baseX, baseZ, {
+    r: MID_R, top: MID_TOP, gateHalf: MID_GATE_HALF,
+    breaches: L.breaches, sagP: 0.15, skipCorners: true,
+  });
 
   // Corner watchtowers: solid 3×3 masonry stumps with a fenced top and a
   // ladder up the keep-facing face (ends level with the platform floor).
@@ -313,6 +349,21 @@ function emitKeep(chunk, baseX, baseZ) {
     chunk.set(lx, FY + 1, lz, GLOW);
     if (!chunk.lights) chunk.lights = [];
     chunk.lights.push([gx, FY + 1, gz]);
+  }
+}
+
+// The fortress roof: plank beams on an 8-block grid over a glass skylight,
+// spanning wall to wall at ROOF_LEVEL. Glass-major keeps the per-column
+// skylight alive (a solid roof would put the whole floor at cave darkness);
+// the bedrock shell rises to meet it, so the arena reads as one closed hall.
+function emitRoof(chunk, baseX, baseZ) {
+  for (let lx = 0; lx < CHUNK_SIZE; lx++) {
+    for (let lz = 0; lz < CHUNK_SIZE; lz++) {
+      const wx = baseX + lx, wz = baseZ + lz;
+      if (Math.max(Math.abs(wx), Math.abs(wz)) >= WALL_IN) continue; // shell owns the rim
+      const beam = (wx & 7) === 0 || (wz & 7) === 0;
+      chunk.set(lx, ROOF_LEVEL, lz, beam ? PLANKS : GLASS);
+    }
   }
 }
 

@@ -53,19 +53,26 @@ Mechanisms & gotchas:
   and box-exclusive), usable mid-wave too. `buy()` grant logic extracted to
   `_grant`/`_grantGun` — grants must stay client-local (host `handleIntent`
   only decrements points). Rebuy/dupe = full refill. Ray Gun ammo = respin.
-- **Middle curtain wall** (`bastion.js emitMidWall`, constants `MID_R=28`,
-  `MID_TOP`): a ruined stone ring between keep (r=12) and shell (r=46) that
-  turns the open square into keep → inner courtyard → outer field. Cardinal
-  gates (5 wide) align with the gravel lanes (barricade-able chokepoints);
-  seed-varied breach spans (layout().breaches, 1–2/side, 3–5 wide) crumble to
-  1-high rubble — **deliberately hop-able so the direct-steering mob AI keeps
-  flowing** (mobs also wall-slide via per-axis collision, so a gapped ring
-  works without pathfinding); ~15% of columns sag one block; intact spans
-  carry a slab parapet; solid 3×3 corner watchtowers with keep-facing ladders
-  (ladders end LEVEL with the platform floor, the #42 engine rule). Ordinary
-  masonry — players repair it, creepers breach it. Scatter now avoids the
-  ring line. arenaTest asserts gates/towers/ladders exactly and the
-  intact-vs-rubble ratio statistically (>60% intact, ≥8 rubble cells).
+- **Concentric curtain walls** (`bastion.js emitRuinRing`, shared by both
+  rings): ruined stone rings at `MID_R=28` (5-wide gates, 1–2 breaches/side,
+  corner watchtowers with keep-facing ladders — the #42 ladders-end-LEVEL
+  rule) and `OUTER_R=38` (3-wide gates, 2–3 wider breaches/side, sagP 0.3, no
+  towers — the derelict first line). The square is now keep → inner court →
+  middle court → outer field. Breach spans (layout() `breaches`/
+  `outerBreaches`) crumble to 1-high rubble — **deliberately hop-able so the
+  direct-steering mob AI keeps flowing** (mobs also wall-slide via per-axis
+  collision, so gapped rings work without pathfinding); intact spans carry a
+  slab parapet. Ordinary masonry — players repair it, creepers breach it.
+  Scatter avoids both ring lines. arenaTest asserts gates/towers/ladders
+  exactly and intact-vs-rubble ratios statistically per ring.
+- **Roof + full enclosure**: the bedrock shell now rises to `ROOF_LEVEL =
+  FY+16` and `emitRoof` spans the interior with plank beams on an 8-grid over
+  a **glass-majority skylight — the Playroom rule: glass keeps per-column
+  skylight alive; a solid roof would drop the whole arena to cave darkness**
+  (skylight has no horizontal bleed). The shell caps its own 3-wide top ring
+  (`WALL_TOP = ROOF_LEVEL`) so there's no sky slot around the roof rim. Note:
+  the roofed arena makes `surfaceHeight`-based cave detection kick in — cave
+  ambience/music inside the fortress is accepted as thematic.
 - **`mystery_box` block** (id 65, `hardness: -1` unbreakable, `luminance: 6`,
   interactive): tiles in atlas.js (`mystery_box_top/_side`), placed in the
   bastion supply corner at (4, FY+1, −10), used via `interaction.onUseBlock`

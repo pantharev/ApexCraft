@@ -961,6 +961,16 @@
     ]
   },
   {
+    "id": 65,
+    "name": "mystery_box",
+    "solid": true,
+    "color": "#2c2440",
+    "hardness": -1,
+    "interactive": true,
+    "luminance": 6,
+    "drops": []
+  },
+  {
     "id": 61,
     "name": "lava_flow_3",
     "solid": false,

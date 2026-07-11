@@ -37,6 +37,7 @@ const HAY = getBlockId('hay_bale');
 const CHEST = getBlockId('chest');
 const TABLE = getBlockId('crafting_table');
 const FURNACE = getBlockId('furnace');
+const MYSTERY_BOX = getBlockId('mystery_box');
 
 const FY = FLOOR_Y;                // grass floor level (64)
 
@@ -205,11 +206,13 @@ function emitKeep(chunk, baseX, baseZ) {
     put(chunk, baseX, baseZ, cx - sx, deckY, cz, LADDER); // hatch over the lip
   }
 
-  // Supply corner by the north wall: worktable, storage, smelter, hay seats.
+  // Supply corner by the north wall: worktable, storage, smelter, hay seats —
+  // and the Mystery Box (right-click between waves for a random gun).
   put(chunk, baseX, baseZ, -2, FY + 1, -KEEP_R + 2, TABLE);
   put(chunk, baseX, baseZ, -1, FY + 1, -KEEP_R + 2, CHEST);
   put(chunk, baseX, baseZ, 0, FY + 1, -KEEP_R + 2, FURNACE);
   put(chunk, baseX, baseZ, 2, FY + 1, -KEEP_R + 2, HAY);
+  put(chunk, baseX, baseZ, 4, FY + 1, -KEEP_R + 2, MYSTERY_BOX);
 
   // Glow mushrooms light the keep at night (gen-time torches never light;
   // the glow pool has only 6 slots — spend them all here at the heart).

@@ -147,6 +147,34 @@ function drawBow(ctx) {
   for (let y = 2; y <= 13; y++) px(ctx, 3, y, y <= 2 || y >= 13 ? dark : '#e8e8e8'); // string
 }
 
+// Side-profile pixel guns (Zombies weapons). One parameterized rifle plus a
+// distinct ray gun. Muzzle points right.
+function drawGun(ctx, { wood, metal, barrel, mag, stock }) {
+  ctx.fillStyle = metal;
+  ctx.fillRect(4, 7, barrel + 7, 2);           // barrel + top of receiver
+  ctx.fillStyle = wood;
+  ctx.fillRect(1, 7, 4, 3);                    // stock root
+  if (stock) { ctx.fillRect(0, 8, 2, 3); }     // shoulder pad
+  ctx.fillRect(4, 9, 6, 2);                    // receiver underside
+  ctx.fillStyle = metal;
+  ctx.fillRect(6, 11, 2, mag);                 // magazine
+  ctx.fillRect(4, 11, 1, 3);                   // trigger guard / grip
+  ctx.fillRect(barrel + 9, 6, 1, 1);           // front sight
+}
+
+function drawRayGun(ctx) {
+  ctx.fillStyle = '#7a2a22';
+  ctx.fillRect(3, 6, 8, 4);                    // body
+  ctx.fillRect(4, 10, 3, 4);                   // grip
+  ctx.fillStyle = '#3a1f1a';
+  ctx.fillRect(11, 7, 3, 2);                   // barrel core
+  ctx.fillStyle = '#3ad24a';
+  ctx.fillRect(9, 5, 2, 6);                    // energy ring
+  ctx.fillRect(13, 6, 2, 4);                   // muzzle emitter
+  ctx.fillStyle = '#b8ffbe';
+  ctx.fillRect(14, 7, 1, 2);                   // hot core
+}
+
 // tip: optional head tint for special ammo (exploding / venom arrows).
 function drawArrow(ctx, tip) {
   for (let i = 0; i < 8; i++) px(ctx, 4 + i, 11 - i, '#9a7d4e'); // shaft
@@ -410,6 +438,10 @@ function drawItem(def) {
   const name = def?.name || '';
 
   if (name === 'bow') drawBow(ctx);
+  else if (name === 'm14') drawGun(ctx, { wood: '#7a5a30', metal: '#3c3a34', barrel: 4, mag: 2, stock: true });
+  else if (name === 'ak74u') drawGun(ctx, { wood: '#6a4a28', metal: '#4a4438', barrel: 1, mag: 4, stock: false });
+  else if (name === 'galil') drawGun(ctx, { wood: '#2f333a', metal: '#565c66', barrel: 3, mag: 4, stock: true });
+  else if (name === 'ray_gun') drawRayGun(ctx);
   else if (name === 'door') drawDoor(ctx);
   else if (name === 'oak_stairs') drawStairs(ctx);
   else if (name === 'bed') drawBed(ctx);

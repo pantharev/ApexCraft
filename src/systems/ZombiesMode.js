@@ -1,4 +1,5 @@
 import { playerSpawns, zombieGates } from '../world/arenas/index.js';
+import { getItem } from '../items/ItemRegistry.js';
 import { Sound } from './Sound.js';
 
 // Zombies wave-defense state machine. Host/solo-authoritative (same model as
@@ -32,8 +33,19 @@ export const SHOP = [
   { id: 'venom', label: 'Venom ×2', item: 'arrow_venom', count: 2, cost: 50 },
   { id: 'apples', label: 'Apples ×3', item: 'apple', count: 3, cost: 10 },
   { id: 'heal', label: 'Full heal', item: null, count: 0, cost: 25 },
+  // Guns (rebuying one you own = full mag + reserve refill, wall-buy style).
+  { id: 'm14', label: 'M14', gun: 'm14', cost: 60 },
+  { id: 'ak74u', label: 'AK-74u', gun: 'ak74u', cost: 150 },
+  { id: 'galil', label: 'Galil', gun: 'galil', cost: 250 },
+  { id: 'gunammo', label: 'Ammo (held gun)', cost: 30 },
+  // The Mystery Box: a random gun — the ONLY source of the Ray Gun. Also
+  // usable via the physical box block in the keep's supply corner.
+  { id: 'box', label: 'Mystery Box 🎲', cost: 95 },
 ];
 export const shopById = Object.fromEntries(SHOP.map((s) => [s.id, s]));
+
+// Mystery Box odds. The Ray Gun is box-exclusive and deliberately rare.
+const BOX_WEIGHTS = [['ray_gun', 0.15], ['m14', 0.30], ['ak74u', 0.275], ['galil', 0.275]];
 
 // Wave composition: how many, and what mix. Spiders climb walls (anti-turtle),
 // skeletons answer pillar-towers, creepers crack sealed boxes open.
@@ -120,12 +132,7 @@ export class ZombiesMode {
     const s = this.state;
     if (!entry || s.phase !== 'build') return false;
     if ((s.points[this.selfId] || 0) < entry.cost) return false;
-    if (entry.id === 'heal') {
-      this.game.vitals.health = 20;
-    } else {
-      this.game.inventory.addItem(entry.item, entry.count);
-      this.game.inventory.notify();
-    }
+    if (!this._grant(entry)) return false; // grant can refuse (e.g. no held gun)
     Sound.eat();
     if (this.authoritative) {
       s.points[this.selfId] = Math.max(0, (s.points[this.selfId] || 0) - entry.cost);
@@ -137,6 +144,46 @@ export class ZombiesMode {
       this.net.sendMatch({ action: 'buy', id });
     }
     return true;
+  }
+
+  // Hand over what a shop entry sells. Gun state lives on the buying client
+  // only (game.guns) — the network only ever sees the points change.
+  _grant(entry) {
+    const game = this.game;
+    if (entry.id === 'heal') {
+      game.vitals.health = 20;
+    } else if (entry.gun) {
+      this._grantGun(entry.gun);
+    } else if (entry.id === 'box') {
+      const r = Math.random();
+      let acc = 0, roll = BOX_WEIGHTS[BOX_WEIGHTS.length - 1][0];
+      for (const [name, w] of BOX_WEIGHTS) { acc += w; if (r < acc) { roll = name; break; } }
+      this._grantGun(roll);
+      game.onToast?.(`🎲 The box reveals… ${getItem(roll).display}!`);
+    } else if (entry.id === 'gunammo') {
+      const held = game.interaction.heldItem;
+      if (!held || !held.gun) { game.onToast?.('Hold a gun to buy its ammo'); return false; }
+      const g = game.guns[held.name] || (game.guns[held.name] = { mag: held.gun.mag, reserve: 0 });
+      g.reserve = held.gun.reserve;
+    } else {
+      game.inventory.addItem(entry.item, entry.count);
+      game.inventory.notify();
+    }
+    return true;
+  }
+
+  // Give (or, if owned, fully refill) a gun.
+  _grantGun(name) {
+    const def = getItem(name);
+    const owned = this.game.guns[name];
+    if (owned) {
+      owned.mag = def.gun.mag;
+      owned.reserve = def.gun.reserve;
+    } else {
+      this.game.guns[name] = { mag: def.gun.mag, reserve: def.gun.reserve };
+      this.game.inventory.addItem(name, 1);
+      this.game.inventory.notify();
+    }
   }
 
   // ---- Authoritative intent handling (host receives guest commands) ----

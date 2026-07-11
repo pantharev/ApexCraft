@@ -243,6 +243,19 @@ export default function App() {
             <Hotbar inventory={gameRef.current.inventory}
               onSelect={IS_TOUCH ? (i) => gameRef.current.inventory.setSelected(i) : undefined} />
           )}
+          {/* Gun magazine / reserve counter (Zombies weapons) */}
+          {stats?.gunAmmo && active && (
+            <div style={{ position: 'absolute', bottom: 70, right: 26, pointerEvents: 'none', textAlign: 'right', textShadow: '2px 2px 2px #000', fontFamily: 'monospace' }}>
+              {stats.gunAmmo.reloading
+                ? <span style={{ color: '#ffd27a', fontSize: 16, fontWeight: 700 }}>RELOADING…</span>
+                : (
+                  <span style={{ color: stats.gunAmmo.mag === 0 ? '#ff8b6b' : '#fff', fontSize: 24, fontWeight: 700 }}>
+                    {stats.gunAmmo.mag}
+                    <span style={{ opacity: 0.6, fontSize: 15 }}> / {stats.gunAmmo.reserve}</span>
+                  </span>
+                )}
+            </div>
+          )}
           {stats && active && !stats.creative && !stats.hideseek && (
             <StatusBars health={stats.health} hunger={stats.hunger} air={stats.air} submerged={stats.submerged} />
           )}

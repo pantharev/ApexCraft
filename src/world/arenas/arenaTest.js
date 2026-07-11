@@ -106,6 +106,9 @@ for (const seed of [12345, 987654321]) {
   ok(get(12, FY + 1, 0) === 0 && get(12, FY + 2, 0) === 0, `${tag}: keep east entry open`);
   ok(get(-12, FY + 1, 0) === 0 && get(-12, FY + 2, 0) === 0, `${tag}: keep west entry open`);
 
+  // The Mystery Box sits in the supply corner (gun spins between waves).
+  ok(get(4, FY + 1, -10) === getBlockId('mystery_box'), `${tag}: mystery box in the supply corner`);
+
   // Archer platforms: deck present, ladder continuous and level with the deck.
   ok(get(9, FY + 4, 9) === STONE, `${tag}: archer platform deck`);
   let ladderOk = true;

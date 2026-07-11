@@ -320,6 +320,27 @@ const DRAW = {
     c.fillStyle = '#9aa0a8'; c.fillRect(7, 4, 2, 3);   // clasp
     c.fillStyle = '#3a2a14'; c.fillRect(7, 6, 2, 1);   // keyhole
   },
+  // Mystery Box (Zombies): a dark arcane crate with a glowing question mark.
+  mystery_box_top: (c, r) => {
+    const vn = valueNoise(r, 4);
+    paint(c, '#2c2440', (x, y) => (vn(x, y) - 0.5) * 12, 4, r);
+    c.strokeStyle = 'rgba(200,170,80,0.9)'; c.strokeRect(0.5, 0.5, 15, 15);
+    c.strokeRect(3.5, 3.5, 9, 9);
+    c.fillStyle = '#5ae06a'; c.fillRect(7, 7, 2, 2); // glow stud
+  },
+  mystery_box_side: (c, r) => {
+    const vn = valueNoise(r, 4);
+    paint(c, '#241e38', (x, y) => (vn(x, y) - 0.5) * 12, 4, r);
+    c.strokeStyle = 'rgba(200,170,80,0.9)'; c.strokeRect(0.5, 0.5, 15, 15);
+    // Glowing '?' glyph.
+    c.fillStyle = '#5ae06a';
+    c.fillRect(5, 3, 6, 2);   // top bar
+    c.fillRect(9, 5, 2, 2);   // right descender
+    c.fillRect(7, 7, 3, 2);   // curl into the middle
+    c.fillRect(7, 9, 2, 1);   // stem
+    c.fillRect(7, 12, 2, 2);  // dot
+    c.fillStyle = '#b8ffbe'; c.fillRect(6, 3, 2, 1); // hot highlight
+  },
   // Door panels (rendered as thin slabs by the mesher's special pass).
   door_bottom: (c, r) => {
     const vn = valueNoise(r, 5);
@@ -592,6 +613,7 @@ const FACE_TILES = {
   furnace: { top: 'furnace_side', side: 'furnace_front', bottom: 'furnace_side' },
   torch: t('torch'),
   chest: { top: 'chest_top', side: 'chest_side', bottom: 'chest_top' },
+  mystery_box: { top: 'mystery_box_top', side: 'mystery_box_side', bottom: 'mystery_box_top' },
   tall_grass: t('tall_grass'), poppy: t('poppy'), dandelion: t('dandelion'),
   // Doors: 'top' face = upper half tile (window), 'side' = lower half tile.
   door: { top: 'door_top', side: 'door_bottom', bottom: 'door_bottom' },

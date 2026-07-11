@@ -9,6 +9,54 @@ updated with every merged PR** (and mirror a short player-facing entry in the
 
 ---
 
+## 2026-07-11 — #47 Zombies guns: M14, AK-74u, Galil + Mystery Box Ray Gun
+
+Stacked on #46. Guns are **data-driven** via a new `gun` field on items
+(`src/items/items.json`): `{auto, dmg, rpm, mag, reserve, speed, spread,
+reload, boom?}` — flows through `getItem()` untouched and keys every branch
+(HeldItem viewmodel, onAttack, HUD). Zombies-only by acquisition (shop/box
+grants), no recipes.
+
+Mechanisms & gotchas:
+- **Magazine state** lives in `Game.guns = {name: {mag, reserve}}` — client-
+  local (never synced; the network only sees points), persisted in
+  `Game.serialize()`. `_shootGun` auto-inits state on first fire, so a gun
+  obtained by any means works.
+- **Full-auto**: `Interaction.attackHeld` mirrors the raw primary-button state
+  (set in `primaryDown` before the one-shot `onAttack`, cleared in
+  `primaryUp`); the Game loop polls it with a `60/rpm` cooldown. Touch: holding
+  with a gun sets `attackHeld` instead of `breaking` (`Interaction.startMining`).
+  The `onAttack` gun/bow branch now early-returns when `vitals.dead` so
+  zombies-mode spectators can't shoot (interaction.locked does NOT gate
+  onAttack — hide & seek relies on that).
+- **Reload**: `_startReload`/`_reloading` ticked in `_loop`; `_syncHeld`'s
+  name-change branch cancels it on weapon swap. R is bound in `_bindZombies`
+  (safe: the taunt wheel binds R only under hideseek).
+- **Ray Gun splash** reuses the exploding-arrow path, refactored into
+  `Game._splashImpact(pos, r)` (entity-only boom + `by` attribution +
+  broadcast). Tracers are new `bullet`/`ray` entries in `Projectiles.mats` +
+  a `scales` map — peers get them via the existing cosmetic `sendProjectile
+  {kind}`. **Zero new net messages in this PR.**
+- **Shop/Mystery Box**: `SHOP` gained gun entries + `box` (95⭐, weights in
+  `BOX_WEIGHTS`, ray_gun 0.15 and box-exclusive) + `gunammo` (refills the HELD
+  gun; refuses without one). `buy()` grant logic extracted to
+  `_grant`/`_grantGun` — grants must stay client-local (host `handleIntent`
+  only decrements points). Rebuy/dupe = full refill.
+- **`mystery_box` block** (id 65, `hardness: -1` unbreakable, `luminance: 6`,
+  interactive): tiles in atlas.js (`mystery_box_top/_side`), placed in the
+  bastion supply corner at (4, FY+1, −10), used via `interaction.onUseBlock`
+  → `Game._useMysteryBox()` → `zombiesMode.buy('box')` with refusal toasts.
+  arenaTest.js asserts its placement.
+- **Recoil**: decaying `Game._recoil` impulse composed into `_animateHeld`'s
+  rest-ease branch (kicks `heldAnchor` rotation.x/position.z). Gun viewmodels
+  are box-built in `HeldItem.js buildGunModel` (fresh geometry per build —
+  Game disposes on swap; materials shared).
+- Ammo HUD rides a `gunAmmo` field in the 60 Hz `onStats` snapshot (tiny),
+  rendered in App.jsx bottom-right; match HUD stays on `onMatch`.
+- **Ops note**: `git push` hung via the Windows credential manager this
+  session; pushing with `git -c "credential.helper=!gh auth git-credential"
+  push …` works (gh CLI is authed).
+
 ## 2026-07-10 — #46 Zombies gamemode: co-op wave defense
 
 Fourth world mode `'zombies'` riding the exact hideseek plumbing (whitelists in

@@ -6,6 +6,11 @@ import React from 'react';
 
 const CHANGELOG = [
   {
+    date: 'July 11, 2026',
+    title: 'Zombies: guns & the Mystery Box',
+    body: 'The armory is open. Buy an M14, AK-74u, or Galil from the between-wave shop — semi-auto snaps or full-auto sprays, each with its own magazine, reserve ammo, and recoil; press R to reload before the horde reaches you. Feeling lucky? The glowing crate in the keep is the Mystery Box: one spin for a random gun, and it’s the only place the legendary Ray Gun drops — a green-bolt monster whose splash blast shreds crowds without ever harming your barricades.',
+  },
+  {
     date: 'July 10, 2026',
     title: 'New game mode: Zombies (co-op wave defense)',
     body: 'Grab up to three friends and hold The Bastion against endless waves of the undead. Zombies pour in through four gate tunnels — wall them off, snipe from the archer platforms, and watch out: spiders climb, skeletons shoot back, and creepers blow your barricades open. Kills earn points to spend in a between-wave shop, and two new bow ammos (cycle with X) turn the tide: exploding arrows that blast crowds without harming your walls, and venom arrows that leave a poison pool. Fall in battle and you spectate until your team clears the wave — if everyone drops, the run ends at the wave you reached.',

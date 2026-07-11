@@ -58,6 +58,15 @@ const KEEP_R = 12;                 // Chebyshev radius of the keep wall
 const KEEP_WALL_TOP = FY + 2;      // solid to here; merlons ride one higher
 const PLATFORM_R = 9;              // archer platform corners sit at (±R, ±R)
 
+// Middle curtain wall: a ruined stone ring between keep and shell that breaks
+// the open field into courtyards and lanes. Ordinary masonry — players can
+// build it up, creepers can breach it. Zombies funnel through the cardinal
+// gates and clamber over the crumbled (1-high) breach spans, so the direct-
+// steering AI keeps flowing instead of humping an unbroken wall.
+const MID_R = 28;                  // Chebyshev radius of the ring
+const MID_TOP = FY + 3;            // intact wall height; slab parapet above
+const MID_GATE_HALF = 2;           // gates are 5 wide, on the gravel lanes
+
 // ~30% deterministic mossy weathering on the keep masonry.
 const masonry = (wx, wy, wz) => (cellHash(wx + wy * 57, wz - wy * 31) < 0.3 ? MOSSY : STONE);
 
@@ -74,14 +83,37 @@ function layout() {
   for (let i = 0; i < 90 && scatter.length < 16; i++) {
     const x = Math.floor((rng() * 2 - 1) * (WALL_IN - 4));
     const z = Math.floor((rng() * 2 - 1) * (WALL_IN - 4));
-    if (Math.max(Math.abs(x), Math.abs(z)) <= KEEP_R + 2) continue;  // keep + skirt
+    const cheb = Math.max(Math.abs(x), Math.abs(z));
+    if (cheb <= KEEP_R + 2) continue;                                // keep + skirt
     if (Math.abs(x) <= 2 || Math.abs(z) <= 2) continue;              // gate paths
-    if (Math.max(Math.abs(x), Math.abs(z)) >= WALL_IN - 2) continue; // wall footing
+    if (cheb >= WALL_IN - 2) continue;                               // wall footing
+    if (Math.abs(cheb - MID_R) <= 1) continue;                       // mid-wall line
     scatter.push({ x, z, block: rng() < 0.35 ? HAY : ANDESITE, tall: rng() < 0.3 });
   }
-  _layout = { scatter };
+
+  // Ruined breaches in the middle curtain wall: 1–2 crumbled spans per side,
+  // never on the gates or in the corner towers. Stored as [side][{at, span}]
+  // where `at` is the tangential offset along that side.
+  const breaches = [];
+  for (let side = 0; side < 4; side++) {
+    const n = 1 + (rng() < 0.5 ? 1 : 0);
+    for (let i = 0; i < n; i++) {
+      const at = Math.floor(6 + rng() * 16) * (rng() < 0.5 ? -1 : 1); // |6..22|
+      breaches.push({ side, at, span: 3 + Math.floor(rng() * 3) });   // 3–5 wide
+    }
+  }
+
+  _layout = { scatter, breaches };
   _layoutSeed = seed;
   return _layout;
+}
+
+// Is ring-cell (side, offset) inside a crumbled breach span?
+function inBreach(L, side, off) {
+  for (const b of L.breaches) {
+    if (b.side === side && Math.abs(off - b.at) <= b.span / 2) return true;
+  }
+  return false;
 }
 
 // Stamp the whole arena into this chunk.
@@ -94,6 +126,7 @@ export function generate(chunk) {
   groundPass(chunk, baseX, baseZ);
   emitWall(chunk, baseX, baseZ);
   emitTunnels(chunk, baseX, baseZ);
+  emitMidWall(chunk, L, baseX, baseZ);
   emitKeep(chunk, baseX, baseZ);
   emitWallBuys(chunk, baseX, baseZ);
   for (const s of L.scatter) {
@@ -168,6 +201,55 @@ function emitTunnels(chunk, baseX, baseZ) {
     } else {
       put(chunk, baseX, baseZ, dx * in2, FY + 1, -(GATE_HALF + 1), TORCH);
       put(chunk, baseX, baseZ, dx * in2, FY + 1, GATE_HALF + 1, TORCH);
+    }
+  }
+}
+
+// The ruined middle curtain wall (see the MID_R constants above): intact
+// spans carry a slab parapet, weathered columns sag a block, breach spans are
+// down to hop-able rubble, and squat watchtowers anchor the four corners.
+function emitMidWall(chunk, L, baseX, baseZ) {
+  for (let lx = 0; lx < CHUNK_SIZE; lx++) {
+    for (let lz = 0; lz < CHUNK_SIZE; lz++) {
+      const wx = baseX + lx, wz = baseZ + lz;
+      if (Math.max(Math.abs(wx), Math.abs(wz)) !== MID_R) continue;
+      if (Math.abs(wx) === MID_R && Math.abs(wz) === MID_R) continue; // tower corners
+      // Which side of the ring, and how far along it?
+      const onZ = Math.abs(wz) === MID_R; // north/south run
+      const off = onZ ? wx : wz;
+      const side = onZ ? (wz < 0 ? 0 : 1) : (wx < 0 ? 2 : 3);
+      if (Math.abs(off) <= MID_GATE_HALF) continue;              // lane gate
+      if (inBreach(L, side, off)) {
+        chunk.set(lx, FY + 1, lz, MOSSY);                        // rubble — zombies hop it
+        continue;
+      }
+      // Intact wall, with weathered columns sagging one block.
+      const sag = cellHash(wx * 7, wz * 11) < 0.15;
+      const top = sag ? MID_TOP - 1 : MID_TOP;
+      for (let y = FY + 1; y <= top; y++) chunk.set(lx, y, lz, masonry(wx, y, wz));
+      if (!sag) chunk.set(lx, MID_TOP + 1, lz, STONE_SLAB);      // parapet walk
+    }
+  }
+
+  // Corner watchtowers: solid 3×3 masonry stumps with a fenced top and a
+  // ladder up the keep-facing face (ends level with the platform floor).
+  for (const [sx, sz] of [[1, 1], [1, -1], [-1, 1], [-1, -1]]) {
+    const cx = sx * MID_R, cz = sz * MID_R;
+    const top = FY + 4;
+    for (let dx = -1; dx <= 1; dx++) {
+      for (let dz = -1; dz <= 1; dz++) {
+        for (let y = FY + 1; y <= top; y++) {
+          put(chunk, baseX, baseZ, cx + dx, y, cz + dz, masonry(cx + dx, y, cz + dz));
+        }
+      }
+    }
+    // Fence rail on the two outward rims of the top.
+    for (let s = -1; s <= 1; s++) {
+      put(chunk, baseX, baseZ, cx + sx, top + 1, cz + s, FENCE);
+      put(chunk, baseX, baseZ, cx + s, top + 1, cz + sz, FENCE);
+    }
+    for (let y = FY + 1; y <= top; y++) {
+      put(chunk, baseX, baseZ, cx - 2 * sx, y, cz - sz, LADDER);
     }
   }
 }

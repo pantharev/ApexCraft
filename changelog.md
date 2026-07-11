@@ -53,6 +53,19 @@ Mechanisms & gotchas:
   and box-exclusive), usable mid-wave too. `buy()` grant logic extracted to
   `_grant`/`_grantGun` — grants must stay client-local (host `handleIntent`
   only decrements points). Rebuy/dupe = full refill. Ray Gun ammo = respin.
+- **Middle curtain wall** (`bastion.js emitMidWall`, constants `MID_R=28`,
+  `MID_TOP`): a ruined stone ring between keep (r=12) and shell (r=46) that
+  turns the open square into keep → inner courtyard → outer field. Cardinal
+  gates (5 wide) align with the gravel lanes (barricade-able chokepoints);
+  seed-varied breach spans (layout().breaches, 1–2/side, 3–5 wide) crumble to
+  1-high rubble — **deliberately hop-able so the direct-steering mob AI keeps
+  flowing** (mobs also wall-slide via per-axis collision, so a gapped ring
+  works without pathfinding); ~15% of columns sag one block; intact spans
+  carry a slab parapet; solid 3×3 corner watchtowers with keep-facing ladders
+  (ladders end LEVEL with the platform floor, the #42 engine rule). Ordinary
+  masonry — players repair it, creepers breach it. Scatter now avoids the
+  ring line. arenaTest asserts gates/towers/ladders exactly and the
+  intact-vs-rubble ratio statistically (>60% intact, ≥8 rubble cells).
 - **`mystery_box` block** (id 65, `hardness: -1` unbreakable, `luminance: 6`,
   interactive): tiles in atlas.js (`mystery_box_top/_side`), placed in the
   bastion supply corner at (4, FY+1, −10), used via `interaction.onUseBlock`

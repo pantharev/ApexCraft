@@ -122,6 +122,38 @@ for (const seed of [12345, 987654321]) {
   let ladderOk = true;
   for (let y = FY + 1; y <= FY + 4; y++) if (get(8, y, 9) !== LADDER) ladderOk = false;
   ok(ladderOk, `${tag}: platform ladder continuous and deck-level`);
+
+  // The middle curtain wall (r=28): lane gates open, corner towers solid with
+  // continuous ladders, ring mostly intact but with real hop-able breaches.
+  const MID = 28;
+  for (const [gx, gz, side] of [[0, -MID, 'N'], [0, MID, 'S'], [-MID, 0, 'W'], [MID, 0, 'E']]) {
+    let open = true;
+    for (let s = -2; s <= 2; s++) {
+      for (let y = FY + 1; y <= FY + 3; y++) {
+        const x = gz === 0 ? gx : s, z = gx === 0 ? gz : s;
+        if (get(x, y, z) !== 0) open = false;
+      }
+    }
+    ok(open, `${tag}: mid-wall ${side} gate open`);
+  }
+  for (const [sx, sz] of [[1, 1], [1, -1], [-1, 1], [-1, -1]]) {
+    ok(isSolid(get(sx * MID, FY + 4, sz * MID)), `${tag}: mid-wall tower at (${sx * MID},${sz * MID})`);
+    let tl = true;
+    for (let y = FY + 1; y <= FY + 4; y++) if (get(sx * (MID - 2), y, sz * (MID - 1)) !== LADDER) tl = false;
+    ok(tl, `${tag}: tower ladder continuous`);
+  }
+  let intact = 0, rubble = 0, cells = 0;
+  for (let off = -MID + 1; off < MID; off++) {
+    if (Math.abs(off) <= 2) continue; // gates
+    for (const [x, z] of [[off, -MID], [off, MID], [-MID, off], [MID, off]]) {
+      cells++;
+      const low = get(x, FY + 1, z), high = get(x, FY + 2, z);
+      if (isSolid(low) && isSolid(high)) intact++;
+      else if (isSolid(low) && high === 0) rubble++;
+    }
+  }
+  ok(intact / cells > 0.6, `${tag}: mid wall mostly intact (${intact}/${cells})`);
+  ok(rubble >= 8, `${tag}: mid wall has hop-able breaches (${rubble} rubble cells)`);
 }
 
 console.log(fails === 0 ? 'ARENA TESTS PASSED' : `ARENA TESTS FAILED (${fails})`);

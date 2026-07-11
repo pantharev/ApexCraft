@@ -14,6 +14,7 @@ import { TorchLights } from '../systems/TorchLights.js';
 import { Projectiles } from '../systems/Projectiles.js';
 import { Particles } from '../systems/Particles.js';
 import { Explosions, MEGA_TNT_RADIUS } from '../systems/Explosions.js';
+import { DamageZones } from '../systems/DamageZones.js';
 import { Liquids } from '../systems/Liquids.js';
 import { Music } from '../systems/Music.js';
 import { ChessGames } from '../chess/ChessGames.js';
@@ -28,6 +29,7 @@ import { setGenMode } from '../world/generators/TerrainGen.js';
 import { setActiveMap, activeMap, MAPS } from '../world/arenas/index.js';
 import { HideSeek, TAG_RANGE } from '../systems/HideSeek.js';
 import { HideSeekBots } from '../systems/HideSeekBots.js';
+import { ZombiesMode } from '../systems/ZombiesMode.js';
 import { TAUNTS, tauntById } from '../systems/taunts.js';
 import { getBlockId, isSolid, liquidKind } from '../blocks/BlockRegistry.js';
 import { getItem } from '../items/ItemRegistry.js';
@@ -53,6 +55,26 @@ const STARTER_KIT = [
 // Creative loadout: just the top tools in hand. Every block is reachable from
 // the scrollable creative palette (see CreativeInventory), so the inventory is
 // otherwise left empty for the player to fill. Placement never consumes.
+// Bow ammunition, cycled with X while holding the bow. Special arrows carry a
+// smaller direct hit but an area effect on impact: a compact entity-only blast
+// (never breaks blocks — defenses stay yours) or a lingering venom pool.
+const AMMO = {
+  arrow: { dmg: 5 },
+  arrow_explosive: { dmg: 2, boom: 1.7 },
+  arrow_venom: { dmg: 2, zone: { r: 2.5, dps: 4, ttl: 6 } },
+};
+const AMMO_ORDER = ['arrow', 'arrow_explosive', 'arrow_venom'];
+
+// Zombies loadout: bow-first combat plus enough blocks and food to survive the
+// opening waves — everything else comes from the points shop between waves.
+const ZOMBIES_KIT = [
+  ['bow', 1],
+  ['arrow', 32],
+  ['stone_sword', 1],
+  ['oak_planks', 32],
+  ['apple', 4],
+];
+
 const CREATIVE_KIT = [
   ['diamond_pickaxe', 1],
   ['diamond_axe', 1],
@@ -88,18 +110,21 @@ export class Game {
     this.seed = save?.seed ?? WORLD_SEED;
     // Game mode (survival = default, with mobs + mining; creative = infinite
     // blocks, no mobs, no damage; hideseek = Prop Hunt minigame on a fixed
-    // arena). A per-world setting, fixed at creation.
-    this.mode = ['creative', 'hideseek'].includes(save?.mode) ? save.mode : 'survival';
+    // arena; zombies = co-op wave defense on a fixed arena). A per-world
+    // setting, fixed at creation.
+    this.mode = ['creative', 'hideseek', 'zombies'].includes(save?.mode) ? save.mode : 'survival';
     this.creative = this.mode === 'creative';
     this.hideseek = this.mode === 'hideseek';
-    // Prop Hunt worlds play on a named arena map, fixed at creation like the
+    this.zombies = this.mode === 'zombies';
+    // Arena worlds play on a named arena map, fixed at creation like the
     // seed. Select it before any chunk generates (unknown/legacy ids fall back
     // to the default map inside setActiveMap).
-    this.map = this.hideseek ? (MAPS[save?.map] ? save.map : 'town') : null;
-    if (this.hideseek) setActiveMap(this.map);
+    const arena = this.hideseek || this.zombies;
+    this.map = arena ? (MAPS[save?.map] ? save.map : (this.zombies ? 'bastion' : 'town')) : null;
+    if (arena) setActiveMap(this.map);
     // Tell the chunk generator which world to build before any chunk generates
-    // (flat Prop Hunt arena for hide & seek, procedural terrain otherwise).
-    setGenMode(this.hideseek ? 'hideseek' : null);
+    // (flat arena for hide & seek / zombies, procedural terrain otherwise).
+    setGenMode(arena ? 'arena' : null);
     this.dev = typeof location !== 'undefined' && ['localhost', '127.0.0.1'].includes(location.hostname);
     this._devTime = 0; // 0 = auto, 1 = day, 2 = night
 
@@ -140,7 +165,10 @@ export class Game {
     this.inventory = new Inventory();
     if (this._save?.inventory) this.inventory.load(this._save.inventory);
     // Hide & seek players carry nothing — the arena is fixed and there's no building.
-    else if (!this.hideseek) for (const [name, count] of (this.creative ? CREATIVE_KIT : STARTER_KIT)) this.inventory.addItem(name, count);
+    else if (!this.hideseek) {
+      const kit = this.creative ? CREATIVE_KIT : this.zombies ? ZOMBIES_KIT : STARTER_KIT;
+      for (const [name, count] of kit) this.inventory.addItem(name, count);
+    }
     this.itemDrops.onCollect = (name, count) => this.inventory.addItem(name, count);
 
     // Placing a block consumes one of the selected stack — except in creative,
@@ -186,11 +214,19 @@ export class Game {
     // Day/night cycle + mobs.
     this.dayNight = new DayNight(this.scene, this.sun, this.hemi, this.camera);
     if (this._save?.time != null) { this.dayNight.t = this._save.time; this.dayNight.update(0); }
+    // Zombies arenas are locked to night on every client (a mode constant, not
+    // synced state): zombies have burns:true and would cook in daylight.
+    if (this.zombies) { this.dayNight.t = 0.78; this.dayNight.frozen = true; this.dayNight.update(0); }
     this.mobs = new MobManager(this.world, this.scene, this.itemDrops);
+    // Zombies mode: the wave director is the only spawner, and gate mobs must
+    // not despawn just because the team is across the arena.
+    if (this.zombies) this.mobs.autoSpawn = false;
     this.torchLights = new TorchLights(this.scene, this.world);
     this.projectiles = new Projectiles(this.world, this.scene);
     this.particles = new Particles(this.scene);
     this.explosions = new Explosions(this.world, this.scene, this.particles);
+    this.damageZones = new DamageZones(this.scene, this.particles);
+    this.ammoType = 'arrow'; // bow ammo selection, cycled with X
     this.liquids = new Liquids(this.world);
     // Context-aware music (day/night/cave rotation + jukebox discs). Purely
     // local — every player hears their own soundtrack, like the SFX bed.
@@ -237,21 +273,34 @@ export class Game {
       // A bulk edit message is an explosion crater: suppress per-block break
       // particles while it applies (the 'boom' event renders the visuals).
       net.onEditBatch = (active) => { this._blastEdits = active; };
-      net.onPlayerJoined = (p) => this.remotePlayers.add(p.id, p.name);
+      net.onPlayerJoined = (p) => {
+        this.remotePlayers.add(p.id, p.name);
+        // Zombies: roster a late joiner into the running match (host only).
+        if (this.zombiesMode && net.isHost) this.zombiesMode.playerJoined(p.id);
+      };
       net.onPlayerLeft = (p) => {
         this.remotePlayers.remove(p.id);
-        // Prop Hunt: drop them from the round roster too, or a departed hider
-        // becomes an untaggable ghost and the round can never be won.
-        if (this.hideSeek) this.hideSeek.playerLeft(p.id);
+        // Drop them from the match roster too, or a departed hider becomes an
+        // untaggable ghost / a departed defender holds the wipe check hostage.
+        this._matchMode()?.playerLeft(p.id);
       };
       net.onPlayerState = (s) => this.remotePlayers.setState(s);
       net.onMobs = (snap) => { if (!net.isHost) this.ghostMobs.apply(snap); };
       net.onProjectile = (p) => {
-        this.projectiles.spawn(p.x, p.y, p.z, new THREE.Vector3(p.dx, p.dy, p.dz), p.speed, p.dmg || 0, p.target);
+        this.projectiles.spawn(p.x, p.y, p.z, new THREE.Vector3(p.dx, p.dy, p.dz), p.speed, p.dmg || 0, p.target, { kind: p.kind });
         Sound.shoot();
       };
-      // Remote explosion: visuals + own damage only (edits arrive separately).
-      net.onBoom = (b) => this.explosions.boom(b.x, b.y, b.z, b.r, this._boomCtx(), false);
+      // Remote explosion: visuals + own damage; on the host, _boomCtx carries
+      // the real MobManager, so a guest's exploding arrow damages mobs here.
+      // b.by attributes those kills to the shooter.
+      net.onBoom = (b) => {
+        const c = this._boomCtx();
+        c.by = b.by;
+        this.explosions.boom(b.x, b.y, b.z, b.r, c, false);
+      };
+      // Remote venom pool: every client renders it; only the host damages mobs
+      // (the server stamps `owner` with the sender for kill attribution).
+      net.onZone = (z) => this.damageZones.spawn(z.x, z.y, z.z, z.r, z.dps, z.ttl, z.owner);
       // Chess: the host validates every action and broadcasts the new view.
       net.onChess = (m) => {
         if (!net.isHost || !m) return;
@@ -265,10 +314,11 @@ export class Game {
       net.onChessState = (view) => {
         if (view && view.key === this.activeChessKey && this.onChess) this.onChess(view);
       };
-      // Hide & seek: guests send intents to the host; the host broadcasts the
-      // authoritative round state, which everyone applies.
-      net.onMatch = (m) => { if (this.hideSeek && net.isHost) this.hideSeek.handleIntent(m.from, m); };
-      net.onMatchState = (s) => { if (this.hideSeek) this.hideSeek.applyState(s); };
+      // Match modes (hide & seek / zombies): guests send intents to the host;
+      // the host broadcasts the authoritative match state, which everyone
+      // applies. A room has exactly one mode, so the channel is shared.
+      net.onMatch = (m) => { if (net.isHost && m) this._matchMode()?.handleIntent(m.from, m); };
+      net.onMatchState = (s) => { this._matchMode()?.applyState(s); };
       // Taunts: the host broadcasts them; every client renders the floating icon.
       net.onTaunt = (m) => { if (m) this.playTauntFx(m.id, m.taunt); };
       net.onHitPlayer = (dmg, kx, kz) => {
@@ -277,14 +327,19 @@ export class Game {
       };
       net.onMobHit = (m) => { // a guest hit one of our simulated mobs
         const mob = this.mobs.byId(m.i);
-        if (mob) { mob.takeDamage(m.dmg, new THREE.Vector3(m.x, m.y, m.z)); Sound.mobHurt(); }
+        if (mob) {
+          if (m.from) mob.lastHitBy = m.from; // kill attribution (Zombies points)
+          mob.takeDamage(m.dmg, new THREE.Vector3(m.x, m.y, m.z));
+          Sound.mobHurt();
+        }
       };
       net.onBecomeHost = () => {
         this.ghostMobs.clear(); // our MobManager takes over
-        // Take over the hide & seek simulation from our last-synced state.
-        if (this.hideSeek) this.hideSeek.becomeAuthority();
+        // Take over the match simulation from our last-synced state.
+        this._matchMode()?.becomeAuthority();
       };
-      net.onTime = (t) => { this.dayNight.t = t; };
+      // Zombies arenas ignore the clock sync — the night lock is absolute.
+      net.onTime = (t) => { if (!this.zombies) this.dayNight.t = t; };
       this._netT = 0;     // player-state send accumulator (~15 Hz)
       this._mobNetT = 0;  // mob snapshot accumulator (~10 Hz)
       this._timeNetT = 0; // clock sync accumulator (every 5 s)
@@ -341,6 +396,7 @@ export class Game {
       Sound.swing();
       if (!mob) return false;
       const tool = this.interaction.currentTool;
+      mob.lastHitBy = this._selfPid(); // kill attribution (Zombies points)
       mob.takeDamage(tool && tool.attackDamage ? tool.attackDamage : 1, this.player.pos);
       Sound.mobHurt();
       return true;
@@ -433,6 +489,19 @@ export class Game {
       if (this._save?.match) this.hideSeek.applyState(this._save.match);
     }
 
+    // Zombies: the wave-defense director. Same authoritative-manager shape and
+    // the same match/matchState channel (a room has exactly one mode).
+    this.zombiesMode = null;
+    if (this.zombies) {
+      this.zombiesMode = new ZombiesMode(this);
+      this.zombiesMode.onChanged = (state, received) => {
+        if (this.onMatch) this.onMatch(state);
+        if (this.net && this.net.isHost && !received) this.net.sendMatchState(state);
+      };
+      // Late joiner: adopt the match already in progress from the server.
+      if (this._save?.match) this.zombiesMode.applyState(this._save.match);
+    }
+
     // First-person held view-model, parented to the camera so it tracks the
     // view. The camera must be in the scene graph to be lit/rendered.
     this.scene.add(this.camera);
@@ -451,6 +520,7 @@ export class Game {
     this._bindHotbar();
     this._bindScreens();
     if (this.hideseek) { this._bindHideSeek(); this._bindTauntWheel(); }
+    if (this.zombies) this._bindZombies();
 
     // Pre-generate spawn area so the player doesn't fall through ungenerated
     // chunks, then place the player. For a loaded game, generate around the
@@ -458,7 +528,7 @@ export class Game {
     if (this._save?.player) {
       this._restorePlayer(this._save.player);
       this.world.update(this.player.pos.x, this.player.pos.z, 80);
-    } else if (this.hideseek) {
+    } else if (this.hideseek || this.zombies) {
       // Arena maps define their lobby spawn explicitly — spawnAtSurface scans
       // top-down and would drop the player onto a roof (or a future ceiling).
       this.world.update(0, 0, 80);
@@ -522,7 +592,7 @@ export class Game {
       },
       // Only the simulation owner damages real mobs.
       mobs: this.net && !this.net.isHost ? null : this.mobs,
-      broadcast: this.net ? (x, y, z, r) => this.net.sendBoom(x, y, z, r) : null,
+      broadcast: this.net ? (x, y, z, r, by) => this.net.sendBoom(x, y, z, r, by) : null,
       // Blast-edit bracketing: batch the network sync into one message and
       // skip per-block break particles while the crater is carved.
       beginEdits: () => {
@@ -625,8 +695,48 @@ export class Game {
       if (e.code === 'KeyE') this.setScreen(this.openScreen ? null : 'inventory');
       else if (e.code === 'Escape' && this.openScreen) this.setScreen(null);
       else if (e.code === 'KeyM') { const on = Sound.toggle(); if (this.music.enabled !== on) this.music.toggle(); }
+      else if (e.code === 'KeyX' && !this.openScreen) this._cycleAmmo();
     });
   }
+
+  // The active match-mode manager (hide & seek or zombies), if any. Both share
+  // the match/matchState net channel and the onMatch React channel.
+  _matchMode() {
+    return this.hideSeek || this.zombiesMode || null;
+  }
+
+  // Zombies: dead defenders spectate and must not draw mob aggro.
+  _playerTargetable(id) {
+    if (!this.zombiesMode) return true;
+    const key = id === 'self' ? this.zombiesMode.selfId : id;
+    return this.zombiesMode.state.alive[key] !== false;
+  }
+
+  // Zombies keys: Enter starts a match (lobby/gameover) or brings the next
+  // wave early (build); B opens the shop during a build phase. (UI buttons
+  // can't be clicked under pointer-lock, so it's keys.)
+  _bindZombies() {
+    this._on(window, 'keydown', (e) => {
+      if (!this.zombiesMode || this.openScreen) return;
+      const st = this.zombiesMode.state;
+      if (e.code === 'Enter') {
+        if (st.phase === 'lobby' || st.phase === 'gameover') this.zStart();
+        else if (st.phase === 'build') this.zStartWave();
+      } else if (e.code === 'KeyB' && st.phase === 'build') {
+        this.setScreen('shop');
+      }
+    });
+  }
+
+  // ---- Zombies controls, called by the HUD / touch UI ----
+
+  zStart() {
+    if (!this.zombiesMode) return;
+    if (this.zombiesMode.authoritative) this.zombiesMode.start();
+    else this.net.sendMatch({ action: 'start' });
+  }
+
+  zStartWave() { this.zombiesMode?.startWave(); }
 
   // Hide & seek keys: Enter starts/advances a round; number keys pick a disguise
   // while hiding (countdown) or fire a taunt (seeking). (UI buttons can't be
@@ -759,6 +869,9 @@ export class Game {
   // On death: scatter the whole inventory as drops, freeze the player, and
   // raise the death overlay.
   _handleDeath() {
+    // Zombies: no inventory scatter (that gear was bought) and no respawn
+    // overlay — the player spectates until the next wave revives them.
+    if (this.zombies) { this._zombiesDeath(); return; }
     const p = this.player.pos;
     for (let i = 0; i < this.inventory.slots.length; i++) {
       const s = this.inventory.slots[i];
@@ -773,6 +886,16 @@ export class Game {
     Sound.death();
     document.exitPointerLock();
     if (this.onDead) this.onDead(true);
+  }
+
+  // Zombies death: become a free-fly spectator (interaction off) and report
+  // it to the wave director; the next build phase revives everyone.
+  _zombiesDeath() {
+    Sound.death();
+    this.player.flying = true;
+    this.interaction.locked = true;
+    if (this.onToast) this.onToast('You died — spectating until the next wave');
+    this.zombiesMode?.reportDead();
   }
 
   _restorePlayer(p) {
@@ -924,19 +1047,62 @@ export class Game {
     }, 1800);
   }
 
-  // Fire an arrow from the camera if the player has ammo.
+  // Fire an arrow from the camera if the player has ammo. The selected ammo
+  // type (X to cycle) is used when in stock, falling back to plain arrows.
   _shootBow() {
-    if (this.inventory.count('arrow') <= 0) return;
-    this.inventory.removeItems('arrow', 1);
+    let ammo = this.ammoType;
+    if (this.inventory.count(ammo) <= 0) ammo = 'arrow';
+    if (this.inventory.count(ammo) <= 0) return;
+    this.inventory.removeItems(ammo, 1);
     this.inventory.notify();
+    const spec = AMMO[ammo];
     const dir = new THREE.Vector3();
     this.camera.getWorldDirection(dir);
     const o = this.camera.position;
-    this.projectiles.spawn(o.x, o.y, o.z, dir, 30, 5, 'mob');
+    const kind = ammo === 'arrow' ? undefined : ammo;
+    this.projectiles.spawn(o.x, o.y, o.z, dir, 30, spec.dmg, 'mob', {
+      kind,
+      owner: this._selfPid(),
+      onHit: spec.boom || spec.zone ? (pos) => this._arrowImpact(ammo, pos) : null,
+    });
     Sound.shoot();
     // Co-op: others see the arrow fly, but it can't hurt them (no PvP).
     if (this.net) {
-      this.net.sendProjectile({ x: o.x, y: o.y, z: o.z, dx: dir.x, dy: dir.y, dz: dir.z, speed: 30, dmg: 0, target: 'none' });
+      this.net.sendProjectile({ x: o.x, y: o.y, z: o.z, dx: dir.x, dy: dir.y, dz: dir.z, speed: 30, dmg: 0, target: 'none', kind });
+    }
+  }
+
+  // My id in match/attribution space ('self' single-player, socket id online).
+  _selfPid() { return this.net ? this.net.id : 'self'; }
+
+  // Special-ammo impact effects. Explosive: a compact entity-only blast —
+  // applyEdits=false so player defenses never take collateral (creepers stay
+  // the only block-breakers). Venom: a lingering damage pool.
+  _arrowImpact(ammo, pos) {
+    const spec = AMMO[ammo];
+    if (spec.boom) {
+      const c = this._boomCtx();
+      c.by = this._selfPid();
+      this.explosions.boom(pos.x, pos.y, pos.z, spec.boom, c, false);
+      // On a guest, the local boom has no mobs to damage — the broadcast
+      // reaches the host, whose replay applies it (attributed via `by`).
+      if (c.broadcast) c.broadcast(pos.x, pos.y, pos.z, spec.boom, c.by);
+    } else if (spec.zone) {
+      const { r, dps, ttl } = spec.zone;
+      this.damageZones.spawn(pos.x, pos.y, pos.z, r, dps, ttl, this._selfPid());
+      if (this.net) this.net.sendZone({ x: pos.x, y: pos.y, z: pos.z, r, dps, ttl });
+    }
+  }
+
+  // Cycle bow ammo (X). Only types in stock are offered; plain arrows always
+  // qualify so the cycle never dead-ends.
+  _cycleAmmo() {
+    const stocked = AMMO_ORDER.filter((a) => a === 'arrow' || this.inventory.count(a) > 0);
+    const i = stocked.indexOf(this.ammoType);
+    this.ammoType = stocked[(i + 1) % stocked.length];
+    if (this.onToast) {
+      const item = getItem(this.ammoType);
+      this.onToast(`🏹 Ammo: ${item ? item.display : this.ammoType} (${this.inventory.count(this.ammoType)})`);
     }
   }
 
@@ -1021,6 +1187,7 @@ export class Game {
     this.dayNight.update(dt);
     this.torchLights.update(this.player.pos);
     if (this.hideSeek) this.hideSeek.update(dt);
+    if (this.zombiesMode) this.zombiesMode.update(dt);
     const isGuest = this.net && !this.net.isHost;
     if (isGuest) {
       // Guests mirror the host's mob simulation instead of running their own.
@@ -1029,10 +1196,12 @@ export class Game {
       // Creative + hide & seek worlds have no mobs at all, so the simulation is skipped.
       this.mobs.update(dt, {
         playerPos: this.player.pos,
-        // Host: mobs hunt every player in the room.
+        // Host: mobs hunt every player in the room — minus dead defenders in
+        // zombies mode (spectators are not targets).
         players: this.net
           ? [{ id: 'self', pos: this.player.pos }, ...this.remotePlayers.list()]
-          : null,
+              .filter((pl) => this._playerTargetable(pl.id))
+          : (this.zombiesMode && this.vitals.dead ? [] : null),
         isNight: this.dayNight.isNight,
         attackPlayer: (dmg, id = 'self', kdir = null) => {
           if (id === 'self' || !this.net) {
@@ -1090,6 +1259,8 @@ export class Game {
     }
     this.particles.update(dt);
     this.explosions.update(dt, this._boomCtx());
+    // Venom pools: visuals everywhere; mob damage only on the sim owner.
+    this.damageZones.update(dt, this.net && !this.net.isHost ? null : this.mobs);
     // Liquid flow: only the authority simulates; guests receive the edits.
     this.liquids.enabled = !this.net || this.net.isHost;
     this.liquids.update(dt);
@@ -1140,6 +1311,7 @@ export class Game {
         mobs: this._mobApi().mobs.length,
         creative: this.creative,
         hideseek: this.hideseek,
+        zombies: this.zombies,
         dev: this.dev,
         devTime: ['Auto', 'Day', 'Night'][this._devTime],
         devBoost: this.player.speedBoost > 1,
@@ -1176,6 +1348,7 @@ export class Game {
     this._listeners.length = 0;
     if (this._resizeObserver) this._resizeObserver.disconnect();
     this.torchLights.dispose();
+    this.damageZones.dispose();
     this.music.dispose();
     this.renderer.dispose();
     if (this.renderer.domElement.parentNode) {

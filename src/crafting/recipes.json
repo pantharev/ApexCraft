@@ -445,6 +445,24 @@
     }
   },
   {
+    "id": "arrow_explosive",
+    "type": "shapeless",
+    "ingredients": ["arrow", "gunpowder"],
+    "result": {
+      "item": "arrow_explosive",
+      "count": 1
+    }
+  },
+  {
+    "id": "arrow_venom",
+    "type": "shapeless",
+    "ingredients": ["arrow", "rotten_flesh", "rotten_flesh"],
+    "result": {
+      "item": "arrow_venom",
+      "count": 1
+    }
+  },
+  {
     "id": "bow",
     "type": "shaped",
     "pattern": [

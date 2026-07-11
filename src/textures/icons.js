@@ -147,10 +147,12 @@ function drawBow(ctx) {
   for (let y = 2; y <= 13; y++) px(ctx, 3, y, y <= 2 || y >= 13 ? dark : '#e8e8e8'); // string
 }
 
-function drawArrow(ctx) {
+// tip: optional head tint for special ammo (exploding / venom arrows).
+function drawArrow(ctx, tip) {
   for (let i = 0; i < 8; i++) px(ctx, 4 + i, 11 - i, '#9a7d4e'); // shaft
-  px(ctx, 13, 2, '#d8dde2'); px(ctx, 12, 2, '#d8dde2'); px(ctx, 13, 3, '#d8dde2'); // head
-  px(ctx, 14, 1, '#eef2f6');
+  const head = tip || '#d8dde2';
+  px(ctx, 13, 2, head); px(ctx, 12, 2, head); px(ctx, 13, 3, head); // head
+  px(ctx, 14, 1, tip || '#eef2f6');
   px(ctx, 3, 12, '#e8e8e8'); px(ctx, 2, 13, '#e8e8e8'); px(ctx, 4, 13, '#cfcfcf'); // fletching
   px(ctx, 3, 14, '#cfcfcf'); px(ctx, 2, 12, '#cfcfcf');
 }
@@ -414,6 +416,8 @@ function drawItem(def) {
   else if (name === 'fence') drawFence(ctx);
   else if (name === 'chess_table') drawChessTable(ctx);
   else if (name === 'arrow') drawArrow(ctx);
+  else if (name === 'arrow_explosive') drawArrow(ctx, '#ff5a2a');
+  else if (name === 'arrow_venom') drawArrow(ctx, '#5ac83a');
   else if (name === 'stick') drawStick(ctx);
   else if (name === 'apple') drawApple(ctx, color);
   else if (name === 'raw_chicken' || name === 'cooked_chicken') drawDrumstick(ctx, color);

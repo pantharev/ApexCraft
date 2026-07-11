@@ -8,6 +8,7 @@ import { Landing } from './ui/Landing.jsx';
 import { Hotbar, InventoryPanel, CreativeInventory, CraftingTableScreen, FurnaceScreen, ChestScreen } from './ui/InventoryUI.jsx';
 import { ChessScreen } from './ui/ChessScreen.jsx';
 import { HideSeekHUD, TauntWheel, HideSeekTouch } from './ui/HideSeekUI.jsx';
+import { ZombiesHUD, ZombiesShop, ZombiesTouch } from './ui/ZombiesUI.jsx';
 import { TouchControls } from './ui/TouchControls.jsx';
 
 const IS_TOUCH = typeof window !== 'undefined' &&
@@ -73,6 +74,7 @@ export default function App() {
     game.onMatch = setMatch;
     game.onTauntWheel = setTauntWheel;
     if (game.hideSeek) setMatch(game.hideSeek.state); // seed the initial lobby state
+    if (game.zombiesMode) setMatch(game.zombiesMode.state);
     game.start();
 
     const onLock = () => setLocked(document.pointerLockElement === game.renderer.domElement);
@@ -280,6 +282,10 @@ export default function App() {
           {stats?.hideseek && gameRef.current && <HideSeekHUD game={gameRef.current} match={match} />}
           {stats?.hideseek && !IS_TOUCH && <TauntWheel wheel={tauntWheel} />}
           {stats?.hideseek && IS_TOUCH && active && gameRef.current && <HideSeekTouch game={gameRef.current} match={match} />}
+
+          {stats?.zombies && gameRef.current && <ZombiesHUD game={gameRef.current} match={match} />}
+          {stats?.zombies && IS_TOUCH && active && gameRef.current && <ZombiesTouch game={gameRef.current} match={match} />}
+          {gameRef.current && openScreen === 'shop' && <ZombiesShop game={gameRef.current} match={match} />}
 
           {saved && (
             <div style={{ position: 'absolute', bottom: 8, right: 10, color: '#cfe9c0', font: '12px monospace', textShadow: '1px 1px 2px #000', pointerEvents: 'none' }}>Saved</div>

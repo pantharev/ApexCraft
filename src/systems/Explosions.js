@@ -124,11 +124,13 @@ export class Explosions {
     }
 
     // The simulation owner hurts mobs; guests' ghosts mirror via snapshots.
+    // ctx.by (optional player id) credits the kills (exploding arrows).
     if (ctx.mobs) {
       for (const m of ctx.mobs.mobs) {
         if (m.dead) continue;
         const md = Math.hypot(m.pos.x - x, m.pos.y + 0.5 - y, m.pos.z - z);
         if (md < radius * 1.8) {
+          if (ctx.by != null) m.lastHitBy = ctx.by;
           m.takeDamage(Math.max(1, Math.round((1 - md / (radius * 1.8)) * Math.max(14, radius * 4))), new THREE.Vector3(x, y, z));
         }
       }

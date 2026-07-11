@@ -176,7 +176,9 @@ export class Mob {
       speed *= 1.6;
     } else if (
       (def.category === 'hostile' || (def.category === 'golem' && ctx.hasTarget)) &&
-      distSq < def.detect * def.detect
+      // detectOverride: per-mob aggro range (Zombies wave mobs hunt across the
+      // whole arena; def is shared and must never be mutated).
+      distSq < (this.detectOverride || def.detect) * (this.detectOverride || def.detect)
     ) {
       const d = Math.sqrt(distSq) || 1;
       this.lookAt = player; // hunters keep eye contact

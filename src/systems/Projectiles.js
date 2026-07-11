@@ -15,17 +15,28 @@ export class Projectiles {
     this.list = [];
     this.geo = new THREE.BoxGeometry(0.07, 0.07, 0.55);
     this.mat = new THREE.MeshLambertMaterial({ color: '#5a4327', emissive: '#2a1f12', emissiveIntensity: 0.3 });
+    // Special ammo gets a tinted shaft so everyone can read what's flying.
+    this.mats = {
+      arrow_explosive: new THREE.MeshLambertMaterial({ color: '#c84a1e', emissive: '#5a1f08', emissiveIntensity: 0.5 }),
+      arrow_venom: new THREE.MeshLambertMaterial({ color: '#4ab42a', emissive: '#1f4a10', emissiveIntensity: 0.5 }),
+    };
     this._fwd = new THREE.Vector3(0, 0, 1);
   }
 
-  // dir: THREE.Vector3 (any length); target: 'player' | 'mob'.
-  spawn(x, y, z, dir, speed, damage, target) {
+  // dir: THREE.Vector3 (any length); target: 'player' | 'mob' | 'none'.
+  // opts: { kind, owner, onHit } — kind tints the mesh; owner stamps
+  // mob.lastHitBy for kill attribution; onHit(pos, mobOrNull) fires on impact
+  // (terrain or mob) for special-ammo effects.
+  spawn(x, y, z, dir, speed, damage, target, opts = {}) {
     const v = dir.clone().normalize();
-    const mesh = new THREE.Mesh(this.geo, this.mat);
+    const mesh = new THREE.Mesh(this.geo, this.mats[opts.kind] || this.mat);
     mesh.position.set(x, y, z);
     mesh.quaternion.setFromUnitVectors(this._fwd, v);
     this.scene.add(mesh);
-    this.list.push({ pos: new THREE.Vector3(x, y, z), vel: v.multiplyScalar(speed), damage, target, life: 0, mesh });
+    this.list.push({
+      pos: new THREE.Vector3(x, y, z), vel: v.multiplyScalar(speed), damage, target, life: 0, mesh,
+      owner: opts.owner ?? null, onHit: opts.onHit ?? null,
+    });
   }
 
   _remove(i) {
@@ -44,6 +55,7 @@ export class Projectiles {
       if (isSolid(this.world.getBlock(Math.floor(next.x), Math.floor(next.y), Math.floor(next.z)))) {
         hit = true;
         Sound.arrowHit();
+        if (p.onHit) p.onHit(next, null);
       }
 
       if (!hit && p.target === 'player' && ctx.playerPos) {
@@ -61,9 +73,11 @@ export class Projectiles {
           if (m.dead) continue; // corpses don't stop arrows
           const { min, max } = m.aabb();
           if (next.x > min.x && next.x < max.x && next.y > min.y && next.y < max.y && next.z > min.z && next.z < max.z) {
+            if (p.owner != null) m.lastHitBy = p.owner; // kill attribution
             m.takeDamage(p.damage, next);
             Sound.mobHurt();
             hit = true;
+            if (p.onHit) p.onHit(next, m);
             break;
           }
         }

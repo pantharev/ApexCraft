@@ -346,6 +346,18 @@
     "maxStack": 64
   },
   {
+    "name": "arrow_explosive",
+    "display": "Exploding Arrow",
+    "color": "#e0622a",
+    "maxStack": 64
+  },
+  {
+    "name": "arrow_venom",
+    "display": "Venom Arrow",
+    "color": "#5ac83a",
+    "maxStack": 64
+  },
+  {
     "name": "bow",
     "display": "Bow",
     "color": "#8a6a36",

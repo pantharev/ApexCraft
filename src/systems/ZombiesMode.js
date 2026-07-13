@@ -1,4 +1,6 @@
 import { playerSpawns, zombieGates } from '../world/arenas/index.js';
+import { getItem } from '../items/ItemRegistry.js';
+import { MOBS } from '../entities/mobTypes.js';
 import { Sound } from './Sound.js';
 
 // Zombies wave-defense state machine. Host/solo-authoritative (same model as
@@ -16,7 +18,10 @@ const LIVE_CAP = 12;         // max wave mobs alive at once (perf + snapshot siz
 const DETECT_ALL = 999;      // wave mobs hunt across the whole arena
 
 // Per-kill points by mob type, plus a bonus for surviving the wave.
-export const KILL_POINTS = { zombie: 10, spider: 15, skeleton: 20, creeper: 25 };
+export const KILL_POINTS = {
+  zombie: 10, spider: 15, skeleton: 20, creeper: 25,
+  sprinter: 15, spitter: 25, screamer: 30, brute: 100,
+};
 const WAVE_BONUS_ALIVE = 50;
 const WAVE_BONUS_DEAD = 25;
 const START_POINTS = 0;
@@ -32,21 +37,49 @@ export const SHOP = [
   { id: 'venom', label: 'Venom ×2', item: 'arrow_venom', count: 2, cost: 50 },
   { id: 'apples', label: 'Apples ×3', item: 'apple', count: 3, cost: 10 },
   { id: 'heal', label: 'Full heal', item: null, count: 0, cost: 25 },
+  // Guns are wall-buys, CoD Zombies style: chalk-outline blocks in the arena
+  // (see bastion emitWallBuys), NOT the B menu — `wall: true` hides them from
+  // the shop screen and lets them be bought mid-wave at their station.
+  // Buying a wall gun you own delivers its ammo instead (half price, full
+  // reserve). The Mystery Box block is the ONLY source of the Ray Gun.
+  { id: 'm14', label: 'M14', gun: 'm14', cost: 60, wall: true },
+  { id: 'ak74u', label: 'AK-74u', gun: 'ak74u', cost: 150, wall: true },
+  { id: 'galil', label: 'Galil', gun: 'galil', cost: 250, wall: true },
+  { id: 'm14_ammo', label: 'M14 ammo', ammoFor: 'm14', cost: 30, wall: true },
+  { id: 'ak74u_ammo', label: 'AK-74u ammo', ammoFor: 'ak74u', cost: 75, wall: true },
+  { id: 'galil_ammo', label: 'Galil ammo', ammoFor: 'galil', cost: 125, wall: true },
+  { id: 'box', label: 'Mystery Box 🎲', cost: 95, wall: true },
 ];
 export const shopById = Object.fromEntries(SHOP.map((s) => [s.id, s]));
 
+// Mystery Box odds. The Ray Gun is box-exclusive and deliberately rare.
+const BOX_WEIGHTS = [['ray_gun', 0.15], ['m14', 0.30], ['ak74u', 0.275], ['galil', 0.275]];
+
 // Wave composition: how many, and what mix. Spiders climb walls (anti-turtle),
-// skeletons answer pillar-towers, creepers crack sealed boxes open.
+// skeletons answer pillar-towers, creepers crack sealed boxes open, sprinters
+// keep the early waves honest, spitters flush out campers.
 function waveTotal(wave) { return Math.min(6 + wave * 3, 45); }
 function pickType(wave, rng) {
-  const r = rng();
-  if (wave >= 8 && r < 0.10) return 'creeper';
-  if (wave >= 6 && r < 0.25) return 'skeleton';
-  if (wave >= 4 && r < 0.45) return 'spider';
+  let r = rng();
+  for (const [t, w] of [
+    ['creeper', wave >= 8 ? 0.08 : 0],
+    ['skeleton', wave >= 6 ? 0.12 : 0],
+    ['spitter', wave >= 5 ? 0.12 : 0],
+    ['spider', wave >= 4 ? 0.16 : 0],
+    ['sprinter', wave >= 2 ? Math.min(0.25, 0.10 + 0.02 * wave) : 0],
+  ]) { r -= w; if (r < 0) return t; }
   return 'zombie';
 }
 function healthMul(wave) { return Math.min(4, 1 + 0.15 * (wave - 1)); }
+// Early waves are small, so the few zombies there are come in HOT (1.5x speed
+// at wave 1, back to normal by wave 6); damage climbs CoD-style forever-ish.
+function speedMulWave(wave) { return Math.max(1, 1.5 - 0.1 * (wave - 1)); }
+function dmgMulWave(wave) { return Math.min(2.5, 1 + 0.1 * (wave - 1)); }
 function spawnInterval(wave) { return Math.max(0.8, 2.2 - wave * 0.1); }
+
+// Screamer buff: nearby wave mobs run 1.5x faster until the screamer dies.
+const SCREAM_R = 12;
+const SCREAM_MUL = 1.5;
 
 export class ZombiesMode {
   constructor(game) {
@@ -107,25 +140,37 @@ export class ZombiesMode {
     else this.net.sendMatch({ action: 'startWave' });
   }
 
+  // Dev-only (localhost) wave skip: build phase → wave now, wave phase →
+  // clear the horde and jump to the next build phase. Authority only.
+  devSkip() {
+    if (!this.authoritative) return;
+    const s = this.state;
+    if (s.phase === 'build') {
+      this._startWave();
+    } else if (s.phase === 'wave') {
+      for (const mob of this._tracked) mob.removed = true;
+      this._queue.length = 0;
+      this._endWave();
+    }
+  }
+
   // The local player died (Game hooks vitals.onDeath into this).
   reportDead() {
     if (this.authoritative) this.markDead(this.selfId);
     else this.net.sendMatch({ action: 'died' });
   }
 
-  // Buy from the between-wave shop. Optimistic: the buyer grants itself the
-  // goods now; the authority decrements the points (see SHOP note above).
+  // Buy from the shop or a wall station. Optimistic: the buyer grants itself
+  // the goods now; the authority decrements the points (see SHOP note above).
+  // Menu entries are build-phase only; wall entries (guns/ammo/box) can also
+  // be bought mid-wave — the CoD loop of sprinting for ammo under pressure.
   buy(id) {
     const entry = shopById[id];
     const s = this.state;
-    if (!entry || s.phase !== 'build') return false;
+    if (!entry) return false;
+    if (s.phase !== 'build' && !(entry.wall && s.phase === 'wave')) return false;
     if ((s.points[this.selfId] || 0) < entry.cost) return false;
-    if (entry.id === 'heal') {
-      this.game.vitals.health = 20;
-    } else {
-      this.game.inventory.addItem(entry.item, entry.count);
-      this.game.inventory.notify();
-    }
+    if (!this._grant(entry)) return false; // grant can refuse (e.g. ammo for an unowned gun)
     Sound.eat();
     if (this.authoritative) {
       s.points[this.selfId] = Math.max(0, (s.points[this.selfId] || 0) - entry.cost);
@@ -139,6 +184,66 @@ export class ZombiesMode {
     return true;
   }
 
+  // A wall-buy station was used: first purchase is the gun, after that the
+  // station sells its ammo at roughly half price. Returns a refusal reason
+  // string (for the toast) or null on success.
+  buyWall(gunName) {
+    const owned = !!this.game.guns[gunName];
+    const entry = shopById[owned ? `${gunName}_ammo` : gunName];
+    if (!entry) return 'Nothing for sale here';
+    const s = this.state;
+    if (s.phase !== 'build' && s.phase !== 'wave') return 'Start the match first';
+    if ((s.points[this.selfId] || 0) < entry.cost) {
+      return `${entry.label} costs ⭐${entry.cost} — you have ⭐${s.points[this.selfId] || 0}`;
+    }
+    this.buy(entry.id);
+    this.game.onToast?.(`${owned ? '🔋' : '🔫'} ${entry.label} — ⭐${entry.cost}`);
+    return null;
+  }
+
+  // Hand over what a shop entry sells. Gun state lives on the buying client
+  // only (game.guns) — the network only ever sees the points change.
+  _grant(entry) {
+    const game = this.game;
+    if (entry.id === 'heal') {
+      game.vitals.health = 20;
+    } else if (entry.gun) {
+      this._grantGun(entry.gun);
+    } else if (entry.id === 'box') {
+      // Never roll a gun the buyer already owns; once they own them all,
+      // any roll is a full refill.
+      let pool = BOX_WEIGHTS.filter(([name]) => !game.guns[name]);
+      if (!pool.length) pool = BOX_WEIGHTS;
+      let r = Math.random() * pool.reduce((t, [, w]) => t + w, 0);
+      let roll = pool[pool.length - 1][0];
+      for (const [name, w] of pool) { r -= w; if (r < 0) { roll = name; break; } }
+      this._grantGun(roll);
+      game.onToast?.(`🎲 The box reveals… ${getItem(roll).display}!`);
+    } else if (entry.ammoFor) {
+      const g = game.guns[entry.ammoFor];
+      if (!g) return false; // no ammo for a gun you don't own
+      g.reserve = getItem(entry.ammoFor).gun.reserve;
+    } else {
+      game.inventory.addItem(entry.item, entry.count);
+      game.inventory.notify();
+    }
+    return true;
+  }
+
+  // Give (or, if owned, fully refill) a gun.
+  _grantGun(name) {
+    const def = getItem(name);
+    const owned = this.game.guns[name];
+    if (owned) {
+      owned.mag = def.gun.mag;
+      owned.reserve = def.gun.reserve;
+    } else {
+      this.game.guns[name] = { mag: def.gun.mag, reserve: def.gun.reserve };
+      this.game.inventory.addItem(name, 1);
+      this.game.inventory.notify();
+    }
+  }
+
   // ---- Authoritative intent handling (host receives guest commands) ----
 
   handleIntent(fromId, msg) {
@@ -149,7 +254,9 @@ export class ZombiesMode {
     else if (msg.action === 'buy') {
       const entry = shopById[msg.id];
       const s = this.state;
-      if (!entry || s.phase !== 'build') return;
+      // Same phase rule as buy(): menu entries between waves only, wall
+      // entries (guns/ammo/box) also mid-wave.
+      if (!entry || (s.phase !== 'build' && !(entry.wall && s.phase === 'wave'))) return;
       s.points[fromId] = Math.max(0, (s.points[fromId] || 0) - entry.cost);
       this._changed();
     }
@@ -241,8 +348,17 @@ export class ZombiesMode {
     // Build the spawn queue for this wave (Math.random is fine — the queue
     // lives only on the authority; guests just see the mobs).
     const total = waveTotal(s.wave);
+    // Guaranteed specials: a brute mini-boss every 5th wave, screamers from
+    // wave 6 (two from wave 10). Spliced into the FRONT half — the queue is
+    // consumed LIFO via .pop(), so they arrive mid/late wave.
+    const brutes = s.wave >= 5 && s.wave % 5 === 0 ? 1 : 0;
+    const screamers = s.wave >= 6 ? Math.min(2, 1 + Math.floor((s.wave - 6) / 4)) : 0;
     this._queue = [];
-    for (let i = 0; i < total; i++) this._queue.push(pickType(s.wave, Math.random));
+    for (let i = 0; i < total - brutes - screamers; i++) this._queue.push(pickType(s.wave, Math.random));
+    for (let i = 0; i < brutes + screamers; i++) {
+      const at = Math.floor(Math.random() * Math.max(1, this._queue.length / 2));
+      this._queue.splice(at, 0, i < brutes ? 'brute' : 'screamer');
+    }
     s.total = total;
     s.remaining = total;
     this._spawnT = 0.5; // beat of silence, then the first spawn
@@ -258,8 +374,9 @@ export class ZombiesMode {
     const s = this.state;
     const mobs = this.game.mobs;
 
-    // Live count + kill scoring sweep.
+    // Live count + kill scoring sweep (collect screamers for the aura pass).
     let live = 0;
+    const screamers = [];
     for (const mob of this._tracked) {
       if (mob.dead || mob.removed) {
         if (!mob._zScored) {
@@ -274,7 +391,21 @@ export class ZombiesMode {
         if (mob.removed) this._tracked.delete(mob);
       } else {
         live++;
+        if (mob.type === 'screamer') screamers.push(mob);
       }
+    }
+
+    // Screamer aura: everything near a live screamer runs faster. Re-derived
+    // every frame so the buff dies with the screamer. Authority-only — guests
+    // simply see faster snapshot movement.
+    for (const mob of this._tracked) {
+      if (mob.dead || mob.removed || mob.type === 'screamer') continue;
+      let buffed = false;
+      for (const sc of screamers) {
+        const dx = mob.pos.x - sc.pos.x, dz = mob.pos.z - sc.pos.z;
+        if (dx * dx + dz * dz < SCREAM_R * SCREAM_R) { buffed = true; break; }
+      }
+      mob.auraSpeedMul = buffed ? SCREAM_MUL : 1;
     }
 
     // Trickle spawn while the queue lasts.
@@ -288,7 +419,13 @@ export class ZombiesMode {
         const mob = mobs._spawn(type, g.x, g.y, g.z);
         mob._wave = true;
         mob.detectOverride = DETECT_ALL;
-        mob.health = Math.round(mob.health * healthMul(s.wave));
+        // Specials get half the HP inflation (a w15 brute is scary enough)
+        // and skip the early-wave speed boost (never turbo a sprinter).
+        const special = !!MOBS[type].arenaOnly;
+        const hMul = special ? 1 + (healthMul(s.wave) - 1) * 0.5 : healthMul(s.wave);
+        mob.health = Math.round(mob.health * hMul);
+        mob.attackMul = dmgMulWave(s.wave);
+        mob.speedMul = special ? 1 : speedMulWave(s.wave);
         this._tracked.add(mob);
       }
     }

@@ -124,7 +124,7 @@ export function ZombiesShop({ game, match }) {
         </div>
         {!open && <div style={{ opacity: 0.7, marginBottom: 12 }}>The shop opens between waves.</div>}
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
-          {SHOP.map((s) => {
+          {SHOP.filter((s) => !s.wall).map((s) => {
             const afford = open && points >= s.cost;
             return (
               <button key={s.id} disabled={!afford}
@@ -143,6 +143,7 @@ export function ZombiesShop({ game, match }) {
         </div>
         <div style={{ marginTop: 14, fontSize: 12, opacity: 0.55 }}>
           Earn points by killing zombies; a wave-survival bonus pays out even if you fell.
+          Guns are bought at the chalk outlines on the walls — and the Mystery Box.
         </div>
       </div>
     </div>

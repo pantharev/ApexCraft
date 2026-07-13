@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { isSolid } from '../blocks/BlockRegistry.js';
+import { isSolid, getBlock } from '../blocks/BlockRegistry.js';
 import { WORLD_HEIGHT } from '../config.js';
 import { MOBS } from './mobTypes.js';
 import { buildMobModel } from './MobModels.js';
@@ -163,7 +163,9 @@ export class Mob {
     const def = this.def;
     this.attackCooldown = Math.max(0, this.attackCooldown - dt);
 
-    let speed = def.speed;
+    // Per-instance scaling (Zombies waves): speedMul set at spawn,
+    // auraSpeedMul re-set each frame by the Screamer buff sweep.
+    let speed = def.speed * (this.speedMul || 1) * (this.auraSpeedMul || 1);
     const dx = player.x - this.pos.x;
     const dy = player.y - this.pos.y; // vertical gap (feet to feet)
     const dz = player.z - this.pos.z;
@@ -216,8 +218,21 @@ export class Mob {
           const sx = this.pos.x, sy = this.pos.y + 1.4, sz = this.pos.z;
           let ax = player.x - sx, ay = (player.y + 1.0) - sy, az = player.z - sz;
           const al = Math.hypot(ax, ay, az) || 1;
-          ctx.shoot(sx, sy, sz, ax / al, ay / al, az / al, def.attack);
+          ctx.shoot(sx, sy, sz, ax / al, ay / al, az / al, def.attack * (this.attackMul || 1), def.projectile);
           this.attackCooldown = 2;
+        }
+      } else if (def.keepsDistance) {
+        // Screamer: lurk mid-range and let the buffed horde do the work —
+        // but swipe back if cornered.
+        if (d < 8) this.heading = { x: -dx / d, z: -dz / d };
+        else if (d > 14) this.heading = { x: dx / d, z: dz / d };
+        else this.heading = null;
+        this.targetYaw = Math.atan2(dx, dz);
+        if (d < this.hw + 1.0 && Math.abs(dy) < 1.6 && this.attackCooldown === 0 && ctx.attackPlayer) {
+          ctx.attackPlayer(def.attack * (this.attackMul || 1), this.pos);
+          this.attackCooldown = 1;
+          this.attackTimer = 0.25;
+          this._lungeDir = { x: dx / d, z: dz / d };
         }
       } else {
         // Melee: chase, attack when within reach (and vertically close so a mob
@@ -226,7 +241,7 @@ export class Mob {
         if (d < this.hw + 1.0 && Math.abs(dy) < 1.6) {
           this.heading = null;
           if (this.attackCooldown === 0 && ctx.attackPlayer) {
-            ctx.attackPlayer(def.attack, this.pos); // pos -> knockback direction
+            ctx.attackPlayer(def.attack * (this.attackMul || 1), this.pos); // pos -> knockback direction
             this.attackCooldown = 1;
             this.attackTimer = 0.25;          // visible lunge
             this._lungeDir = { x: dx / d, z: dz / d };
@@ -335,6 +350,30 @@ export class Mob {
         this.vel.y = JUMP;
         this.onGround = false;
       }
+      // Brute: a wall it can't hop gets smashed — one block every 1.5 s from
+      // the column it is pushing against. Unbreakables (hardness < 0: bedrock
+      // shell, wall-buys, mystery box) stop it. setBlock flows through
+      // World.onEdit, so break particles + multiplayer sync come for free;
+      // only the authority ticks real mobs, so this never runs on guests.
+      if (def.breaksBlocks) {
+        this._breakT = (this._breakT || 0) + dt;
+        if (this._breakT >= 1.5) {
+          this._breakT = 0;
+          const fx = Math.floor(this.pos.x + this.heading.x * (this.hw + 0.7));
+          const fz = Math.floor(this.pos.z + this.heading.z * (this.hw + 0.7));
+          const fy = Math.floor(this.pos.y);
+          for (const y of [fy + 1, fy, fy + 2]) {
+            const id = this.world.getBlock(fx, y, fz);
+            if (id !== 0 && (getBlock(id).hardness ?? 1) >= 0) {
+              this.world.setBlock(fx, y, fz, 0);
+              Sound.swing();
+              break; // one block per swing
+            }
+          }
+        }
+      }
+    } else if (def.breaksBlocks) {
+      this._breakT = 0;
     }
 
     // Hurt flash: clear the red tint when it expires.

@@ -227,6 +227,13 @@ export class Game {
     this.explosions = new Explosions(this.world, this.scene, this.particles);
     this.damageZones = new DamageZones(this.scene, this.particles);
     this.ammoType = 'arrow'; // bow ammo selection, cycled with X
+    // Guns (Zombies mode): per-gun magazine/reserve, keyed by item name —
+    // owning a duplicate just shares the ammo. Persisted with the save.
+    this.guns = this._save?.guns || {};
+    this._gunCd = 0;       // seconds until the held gun may fire again
+    this._reloading = 0;   // seconds left on the current reload
+    this._reloadGun = null;
+    this._recoil = 0;      // viewmodel kick impulse, decays in _animateHeld
     this.liquids = new Liquids(this.world);
     // Context-aware music (day/night/cave rotation + jukebox discs). Purely
     // local — every player hears their own soundtrack, like the SFX bed.
@@ -298,9 +305,10 @@ export class Game {
         c.by = b.by;
         this.explosions.boom(b.x, b.y, b.z, b.r, c, false);
       };
-      // Remote venom pool: every client renders it; only the host damages mobs
-      // (the server stamps `owner` with the sender for kill attribution).
-      net.onZone = (z) => this.damageZones.spawn(z.x, z.y, z.z, z.r, z.dps, z.ttl, z.owner);
+      // Remote venom/acid pool: every client renders it; only the host damages
+      // mobs (the server stamps `owner` with the sender for kill attribution).
+      // z.hp marks a spitter acid pool that also ticks the local player.
+      net.onZone = (z) => this.damageZones.spawn(z.x, z.y, z.z, z.r, z.dps, z.ttl, z.owner, !!z.hp);
       // Chess: the host validates every action and broadcasts the new view.
       net.onChess = (m) => {
         if (!net.isHost || !m) return;
@@ -350,7 +358,8 @@ export class Game {
     if (this.hideseek && !this.remotePlayers) this.remotePlayers = new RemotePlayers(this.scene);
 
     // Dev-only (localhost): T cycles day/night, V teleports to the nearest
-    // village (again = next one), G toggles a 3x speed boost.
+    // village (again = next one), G toggles a 3x speed boost, N skips the
+    // current Zombies phase (build → wave, wave → cleared).
     if (this.dev) {
       this._on(window, 'keydown', (e) => {
         if (e.code === 'KeyT') {
@@ -363,6 +372,10 @@ export class Game {
           this._devTeleportVillage();
         } else if (e.code === 'KeyG') {
           this.player.speedBoost = this.player.speedBoost > 1 ? 1 : 3;
+        } else if (e.code === 'KeyN' && this.zombiesMode) {
+          const phase = this.zombiesMode.state.phase;
+          this.zombiesMode.devSkip();
+          if (phase === 'wave') this.onToast?.('⏭ Wave skipped');
         }
       });
     }
@@ -386,9 +399,12 @@ export class Game {
         return true;
       }
 
-      // Holding a bow fires an arrow instead of meleeing.
+      // Holding a bow fires an arrow, a gun fires a round, instead of meleeing.
+      if (this.vitals.dead) return true; // spectators don't shoot
       const stack = this.inventory.selectedStack();
       if (stack && stack.item === 'bow') { this._shootBow(); return true; }
+      const heldDef = stack ? getItem(stack.item) : null;
+      if (heldDef && heldDef.gun) { this._shootGun(heldDef); return true; }
 
       const dir = new THREE.Vector3();
       this.camera.getWorldDirection(dir);
@@ -442,6 +458,11 @@ export class Game {
         this._openChess(pos);
       } else if (name === 'jukebox') {
         this._useJukebox(pos);
+      } else if (name === 'mystery_box') {
+        this._useMysteryBox();
+      } else if (name.startsWith('wallbuy_')) {
+        const err = this.zombiesMode?.buyWall(name.slice(8));
+        if (err && this.onToast) this.onToast(err);
       }
     };
     this.onSleep = null; // React fade-to-black overlay
@@ -724,6 +745,10 @@ export class Game {
         else if (st.phase === 'build') this.zStartWave();
       } else if (e.code === 'KeyB' && st.phase === 'build') {
         this.setScreen('shop');
+      } else if (e.code === 'KeyR') {
+        // Reload the held gun (guns are zombies-only, so R binds here).
+        const held = this.interaction.heldItem;
+        if (held && held.gun) this._startReload(held);
       }
     });
   }
@@ -922,6 +947,7 @@ export class Game {
       player: { x: p.x, y: p.y, z: p.z, yaw: this.player.yaw, pitch: this.player.pitch },
       vitals: this.vitals.serialize(),
       inventory: this.inventory.serialize(),
+      guns: this.guns,
       furnaces: this.furnaces.serialize(),
       chests: this.chests.serialize(),
       jukeboxes: Object.fromEntries(this.jukeboxes),
@@ -1075,23 +1101,96 @@ export class Game {
   // My id in match/attribution space ('self' single-player, socket id online).
   _selfPid() { return this.net ? this.net.id : 'self'; }
 
+  // The Mystery Box block: a spin at the crate (works mid-wave too — running
+  // a gamble under pressure is the point), with reasons on refusal.
+  _useMysteryBox() {
+    const zm = this.zombiesMode;
+    if (!zm) return;
+    const st = zm.state;
+    if (st.phase !== 'build' && st.phase !== 'wave') {
+      if (this.onToast) this.onToast('Start the match to use the Mystery Box');
+      return;
+    }
+    if (!zm.buy('box') && this.onToast) this.onToast('Not enough points for the Mystery Box');
+  }
+
   // Special-ammo impact effects. Explosive: a compact entity-only blast —
   // applyEdits=false so player defenses never take collateral (creepers stay
   // the only block-breakers). Venom: a lingering damage pool.
   _arrowImpact(ammo, pos) {
     const spec = AMMO[ammo];
     if (spec.boom) {
-      const c = this._boomCtx();
-      c.by = this._selfPid();
-      this.explosions.boom(pos.x, pos.y, pos.z, spec.boom, c, false);
-      // On a guest, the local boom has no mobs to damage — the broadcast
-      // reaches the host, whose replay applies it (attributed via `by`).
-      if (c.broadcast) c.broadcast(pos.x, pos.y, pos.z, spec.boom, c.by);
+      this._splashImpact(pos, spec.boom);
     } else if (spec.zone) {
       const { r, dps, ttl } = spec.zone;
       this.damageZones.spawn(pos.x, pos.y, pos.z, r, dps, ttl, this._selfPid());
       if (this.net) this.net.sendZone({ x: pos.x, y: pos.y, z: pos.z, r, dps, ttl });
     }
+  }
+
+  // A spitter glob hit the ground: leave a short-lived acid pool that ticks
+  // players standing in it (hp flag → hurtPlayer on every client).
+  _acidSplash(pos) {
+    this.damageZones.spawn(pos.x, pos.y, pos.z, 2, 3, 4, null, true);
+    if (this.net) this.net.sendZone({ x: pos.x, y: pos.y, z: pos.z, r: 2, dps: 3, ttl: 4, hp: 1 });
+  }
+
+  // Entity-only splash (exploding arrows, ray gun bolts): never carves blocks.
+  // On a guest, the local boom has no mobs to damage — the broadcast reaches
+  // the host, whose replay applies it (attributed via `by`).
+  _splashImpact(pos, radius) {
+    const c = this._boomCtx();
+    c.by = this._selfPid();
+    this.explosions.boom(pos.x, pos.y, pos.z, radius, c, false);
+    if (c.broadcast) c.broadcast(pos.x, pos.y, pos.z, radius, c.by);
+  }
+
+  // Fire the held gun (Zombies weapons): fire-rate gated, magazine-fed, with
+  // per-shot spread, viewmodel recoil, and a cosmetic tracer for peers. Dry
+  // trigger auto-reloads.
+  _shootGun(item) {
+    const spec = item.gun;
+    const g = this.guns[item.name] ||
+      (this.guns[item.name] = { mag: spec.mag, reserve: spec.reserve });
+    if (this._reloading > 0 || this._gunCd > 0) return;
+    if (g.mag <= 0) {
+      Sound.dryFire();
+      this._startReload(item);
+      return;
+    }
+    g.mag--;
+    this._gunCd = 60 / spec.rpm;
+    const dir = new THREE.Vector3();
+    this.camera.getWorldDirection(dir);
+    if (spec.spread) {
+      dir.x += (Math.random() * 2 - 1) * spec.spread;
+      dir.y += (Math.random() * 2 - 1) * spec.spread;
+      dir.z += (Math.random() * 2 - 1) * spec.spread;
+      dir.normalize();
+    }
+    const o = this.camera.position;
+    const kind = spec.boom ? 'ray' : 'bullet';
+    this.projectiles.spawn(o.x, o.y, o.z, dir, spec.speed, spec.dmg, 'mob', {
+      kind,
+      owner: this._selfPid(),
+      onHit: spec.boom ? (pos) => this._splashImpact(pos, spec.boom) : null,
+    });
+    this._recoil = Math.min(0.5, this._recoil + (spec.boom ? 0.3 : spec.auto ? 0.1 : 0.2));
+    if (spec.boom) Sound.rayZap(); else Sound.gunShot(spec.auto);
+    // Co-op: others see the tracer fly, but it can't hurt them (no PvP).
+    if (this.net) {
+      this.net.sendProjectile({ x: o.x, y: o.y, z: o.z, dx: dir.x, dy: dir.y, dz: dir.z, speed: spec.speed, dmg: 0, target: 'none', kind });
+    }
+  }
+
+  // Begin reloading the held gun (R, or automatically on a dry trigger).
+  _startReload(item) {
+    const spec = item.gun;
+    const g = this.guns[item.name];
+    if (!g || this._reloading > 0 || g.mag >= spec.mag || g.reserve <= 0) return;
+    this._reloading = spec.reload;
+    this._reloadGun = item.name;
+    Sound.reload();
   }
 
   // Cycle bow ammo (X). Only types in stock are offered; plain arrows always
@@ -1159,6 +1258,9 @@ export class Game {
 
     if (name !== this._heldName) {
       this._heldName = name;
+      // Swapping weapons abandons a reload in progress.
+      this._reloading = 0;
+      this._reloadGun = null;
       if (this.heldModel) {
         this.heldAnchor.remove(this.heldModel);
         this.heldModel.traverse((o) => o.geometry && o.geometry.dispose());
@@ -1181,6 +1283,28 @@ export class Game {
     this._syncHeld();
     this.player.update(dt);
     this.interaction.update(dt);
+
+    // Guns: fire-rate cooldown, reload completion, and full-auto while the
+    // primary button is held (onAttack only fires once per press).
+    if (this._gunCd > 0) this._gunCd -= dt;
+    if (this._reloading > 0) {
+      this._reloading -= dt;
+      if (this._reloading <= 0) {
+        const g = this.guns[this._reloadGun];
+        const def = this._reloadGun ? getItem(this._reloadGun) : null;
+        if (g && def?.gun) {
+          const take = Math.min(def.gun.mag - g.mag, g.reserve);
+          g.mag += take;
+          g.reserve -= take;
+        }
+        this._reloading = 0;
+        this._reloadGun = null;
+      }
+    }
+    if (this.interaction.attackHeld && !this.vitals.dead && this.player.enabled) {
+      const held = this.interaction.heldItem;
+      if (held && held.gun && held.gun.auto) this._shootGun(held);
+    }
     this.itemDrops.update(dt, this.player.pos);
     this.furnaces.update(dt);
     this.vitals.update(dt);
@@ -1212,11 +1336,18 @@ export class Game {
             this.net.sendHitPlayer(id, dmg, kdir);
           }
         },
-        shoot: (sx, sy, sz, dx, dy, dz, dmg) => {
-          this.projectiles.spawn(sx, sy, sz, new THREE.Vector3(dx, dy, dz), 22, dmg, 'player');
+        shoot: (sx, sy, sz, dx, dy, dz, dmg, kind) => {
+          // Acid globs (spitter) fly slower — a readable, dodgeable arc.
+          const speed = kind === 'acid' ? 14 : 22;
+          this.projectiles.spawn(sx, sy, sz, new THREE.Vector3(dx, dy, dz), speed, dmg, 'player', {
+            kind,
+            // Only the authority owns onHit, so exactly one pool per glob;
+            // guests get theirs from the sendZone broadcast.
+            onHit: kind === 'acid' ? (pos) => this._acidSplash(pos) : null,
+          });
           Sound.shoot();
           // Guests simulate the same arrow locally so it can hit *them*.
-          if (this.net) this.net.sendProjectile({ x: sx, y: sy, z: sz, dx, dy, dz, speed: 22, dmg, target: 'player' });
+          if (this.net) this.net.sendProjectile({ x: sx, y: sy, z: sz, dx, dy, dz, speed, dmg, target: 'player', kind });
         },
         explode: (mob) => {
           const c = this._boomCtx();
@@ -1260,7 +1391,12 @@ export class Game {
     this.particles.update(dt);
     this.explosions.update(dt, this._boomCtx());
     // Venom pools: visuals everywhere; mob damage only on the sim owner.
-    this.damageZones.update(dt, this.net && !this.net.isHost ? null : this.mobs);
+    // Acid pools also tick the LOCAL player on every client.
+    this.damageZones.update(dt, this.net && !this.net.isHost ? null : this.mobs, {
+      pos: this.player.pos,
+      dead: this.vitals.dead,
+      damage: (n) => this.vitals.damage(n),
+    });
     // Liquid flow: only the authority simulates; guests receive the edits.
     this.liquids.enabled = !this.net || this.net.isHost;
     this.liquids.update(dt);
@@ -1312,6 +1448,9 @@ export class Game {
         creative: this.creative,
         hideseek: this.hideseek,
         zombies: this.zombies,
+        gunAmmo: item && item.gun && this.guns[item.name]
+          ? { mag: this.guns[item.name].mag, reserve: this.guns[item.name].reserve, reloading: this._reloading > 0 }
+          : null,
         dev: this.dev,
         devTime: ['Auto', 'Day', 'Night'][this._devTime],
         devBoost: this.player.speedBoost > 1,
@@ -1334,9 +1473,14 @@ export class Game {
     const baseRot = 0.1;
     if (this.interaction.breaking) {
       this.heldAnchor.rotation.x = baseRot - 0.5 + Math.sin(this.heldTime * 16) * 0.5;
+      this.heldAnchor.position.z = -0.7;
     } else {
-      // Ease back to rest.
-      this.heldAnchor.rotation.x += (baseRot - this.heldAnchor.rotation.x) * Math.min(1, dt * 12);
+      // Ease toward rest plus any gun recoil kick (muzzle up, gun shoved back);
+      // the impulse decays exponentially so rapid fire stacks smoothly.
+      const kick = this._recoil;
+      this.heldAnchor.rotation.x += ((baseRot + kick * 0.9) - this.heldAnchor.rotation.x) * Math.min(1, dt * 30);
+      this.heldAnchor.position.z = -0.7 + kick * 0.25;
+      this._recoil = kick > 0.004 ? kick * Math.max(0, 1 - dt * 9) : 0;
     }
   }
 

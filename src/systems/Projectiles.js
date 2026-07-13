@@ -19,7 +19,11 @@ export class Projectiles {
     this.mats = {
       arrow_explosive: new THREE.MeshLambertMaterial({ color: '#c84a1e', emissive: '#5a1f08', emissiveIntensity: 0.5 }),
       arrow_venom: new THREE.MeshLambertMaterial({ color: '#4ab42a', emissive: '#1f4a10', emissiveIntensity: 0.5 }),
+      bullet: new THREE.MeshLambertMaterial({ color: '#c8a24a', emissive: '#7a5a18', emissiveIntensity: 0.9 }),
+      ray: new THREE.MeshLambertMaterial({ color: '#5aff6a', emissive: '#2ad83a', emissiveIntensity: 1.0 }),
+      acid: new THREE.MeshLambertMaterial({ color: '#8fd42a', emissive: '#3f6a10', emissiveIntensity: 0.8 }),
     };
+    this.scales = { bullet: 0.5, ray: 1.5, acid: 1.4 }; // per-kind mesh size tweak
     this._fwd = new THREE.Vector3(0, 0, 1);
   }
 
@@ -32,6 +36,7 @@ export class Projectiles {
     const mesh = new THREE.Mesh(this.geo, this.mats[opts.kind] || this.mat);
     mesh.position.set(x, y, z);
     mesh.quaternion.setFromUnitVectors(this._fwd, v);
+    if (this.scales[opts.kind]) mesh.scale.setScalar(this.scales[opts.kind]);
     this.scene.add(mesh);
     this.list.push({
       pos: new THREE.Vector3(x, y, z), vel: v.multiplyScalar(speed), damage, target, life: 0, mesh,

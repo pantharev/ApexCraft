@@ -305,9 +305,10 @@ export class Game {
         c.by = b.by;
         this.explosions.boom(b.x, b.y, b.z, b.r, c, false);
       };
-      // Remote venom pool: every client renders it; only the host damages mobs
-      // (the server stamps `owner` with the sender for kill attribution).
-      net.onZone = (z) => this.damageZones.spawn(z.x, z.y, z.z, z.r, z.dps, z.ttl, z.owner);
+      // Remote venom/acid pool: every client renders it; only the host damages
+      // mobs (the server stamps `owner` with the sender for kill attribution).
+      // z.hp marks a spitter acid pool that also ticks the local player.
+      net.onZone = (z) => this.damageZones.spawn(z.x, z.y, z.z, z.r, z.dps, z.ttl, z.owner, !!z.hp);
       // Chess: the host validates every action and broadcasts the new view.
       net.onChess = (m) => {
         if (!net.isHost || !m) return;
@@ -357,7 +358,8 @@ export class Game {
     if (this.hideseek && !this.remotePlayers) this.remotePlayers = new RemotePlayers(this.scene);
 
     // Dev-only (localhost): T cycles day/night, V teleports to the nearest
-    // village (again = next one), G toggles a 3x speed boost.
+    // village (again = next one), G toggles a 3x speed boost, N skips the
+    // current Zombies phase (build → wave, wave → cleared).
     if (this.dev) {
       this._on(window, 'keydown', (e) => {
         if (e.code === 'KeyT') {
@@ -370,6 +372,10 @@ export class Game {
           this._devTeleportVillage();
         } else if (e.code === 'KeyG') {
           this.player.speedBoost = this.player.speedBoost > 1 ? 1 : 3;
+        } else if (e.code === 'KeyN' && this.zombiesMode) {
+          const phase = this.zombiesMode.state.phase;
+          this.zombiesMode.devSkip();
+          if (phase === 'wave') this.onToast?.('⏭ Wave skipped');
         }
       });
     }
@@ -1122,6 +1128,13 @@ export class Game {
     }
   }
 
+  // A spitter glob hit the ground: leave a short-lived acid pool that ticks
+  // players standing in it (hp flag → hurtPlayer on every client).
+  _acidSplash(pos) {
+    this.damageZones.spawn(pos.x, pos.y, pos.z, 2, 3, 4, null, true);
+    if (this.net) this.net.sendZone({ x: pos.x, y: pos.y, z: pos.z, r: 2, dps: 3, ttl: 4, hp: 1 });
+  }
+
   // Entity-only splash (exploding arrows, ray gun bolts): never carves blocks.
   // On a guest, the local boom has no mobs to damage — the broadcast reaches
   // the host, whose replay applies it (attributed via `by`).
@@ -1323,11 +1336,18 @@ export class Game {
             this.net.sendHitPlayer(id, dmg, kdir);
           }
         },
-        shoot: (sx, sy, sz, dx, dy, dz, dmg) => {
-          this.projectiles.spawn(sx, sy, sz, new THREE.Vector3(dx, dy, dz), 22, dmg, 'player');
+        shoot: (sx, sy, sz, dx, dy, dz, dmg, kind) => {
+          // Acid globs (spitter) fly slower — a readable, dodgeable arc.
+          const speed = kind === 'acid' ? 14 : 22;
+          this.projectiles.spawn(sx, sy, sz, new THREE.Vector3(dx, dy, dz), speed, dmg, 'player', {
+            kind,
+            // Only the authority owns onHit, so exactly one pool per glob;
+            // guests get theirs from the sendZone broadcast.
+            onHit: kind === 'acid' ? (pos) => this._acidSplash(pos) : null,
+          });
           Sound.shoot();
           // Guests simulate the same arrow locally so it can hit *them*.
-          if (this.net) this.net.sendProjectile({ x: sx, y: sy, z: sz, dx, dy, dz, speed: 22, dmg, target: 'player' });
+          if (this.net) this.net.sendProjectile({ x: sx, y: sy, z: sz, dx, dy, dz, speed, dmg, target: 'player', kind });
         },
         explode: (mob) => {
           const c = this._boomCtx();
@@ -1371,7 +1391,12 @@ export class Game {
     this.particles.update(dt);
     this.explosions.update(dt, this._boomCtx());
     // Venom pools: visuals everywhere; mob damage only on the sim owner.
-    this.damageZones.update(dt, this.net && !this.net.isHost ? null : this.mobs);
+    // Acid pools also tick the LOCAL player on every client.
+    this.damageZones.update(dt, this.net && !this.net.isHost ? null : this.mobs, {
+      pos: this.player.pos,
+      dead: this.vitals.dead,
+      damage: (n) => this.vitals.damage(n),
+    });
     // Liquid flow: only the authority simulates; guests receive the edits.
     this.liquids.enabled = !this.net || this.net.isHost;
     this.liquids.update(dt);

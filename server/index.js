@@ -65,8 +65,8 @@ io.on('connection', (socket) => {
     rooms.set(c, {
       seed: data?.seed ?? 0,
       time: data?.time ?? 0.3,
-      mode: ['creative', 'hideseek'].includes(data?.mode) ? data.mode : 'survival',
-      map: typeof data?.map === 'string' ? data.map.slice(0, 24) : null, // Prop Hunt arena map id
+      mode: ['creative', 'hideseek', 'zombies'].includes(data?.mode) ? data.mode : 'survival',
+      map: typeof data?.map === 'string' ? data.map.slice(0, 24) : null, // arena map id (Prop Hunt / Zombies)
 
       edits: data?.edits && typeof data.edits === 'object' ? data.edits : {},
       host: socket.id,
@@ -142,9 +142,24 @@ io.on('connection', (socket) => {
   });
 
   // Explosions: the originator applies block edits (synced separately);
-  // receivers replay the blast for visuals and their own damage.
+  // receivers replay the blast for visuals and their own damage. `by` (an
+  // optional player id) attributes exploding-arrow kills on the host.
   socket.on('boom', (b) => {
-    if (code && b) socket.to(code).emit('boom', { x: +b.x, y: +b.y, z: +b.z, r: +b.r || 3 });
+    if (!code || !b) return;
+    const out = { x: +b.x, y: +b.y, z: +b.z, r: +b.r || 3 };
+    if (typeof b.by === 'string') out.by = b.by.slice(0, 40);
+    socket.to(code).emit('boom', out);
+  });
+
+  // Lingering damage pools (venom arrows): one-shot spawn relayed to everyone
+  // else; each client runs its own copy (the host applies the mob damage).
+  socket.on('zone', (z) => {
+    if (!code || !z) return;
+    socket.to(code).emit('zone', {
+      x: +z.x, y: +z.y, z: +z.z, r: Math.min(6, +z.r || 2.5),
+      dps: Math.min(20, +z.dps || 4), ttl: Math.min(15, +z.ttl || 6),
+      owner: socket.id,
+    });
   });
 
   // World clock from the host so day/night stays in sync.
@@ -198,12 +213,14 @@ io.on('connection', (socket) => {
     socket.to(code).emit('taunt', m);
   });
 
-  // A guest hit a mob; route to the host who owns the simulation.
+  // A guest hit a mob; route to the host who owns the simulation. `from`
+  // credits the kill to the right player (Zombies points).
   socket.on('mobHit', (m) => {
     const r = room();
     if (!r || !m) return;
     io.to(r.host).emit('mobHit', {
       i: m.i | 0, dmg: +m.dmg || 0, x: +m.x || 0, y: +m.y || 0, z: +m.z || 0,
+      from: socket.id,
     });
   });
 

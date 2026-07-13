@@ -9,6 +9,211 @@ updated with every merged PR** (and mirror a short player-facing entry in the
 
 ---
 
+## 2026-07-12 — Zombies fun pass: L4D specials, wave scaling, tighter Bastion
+
+Feedback-driven ("not fun enough"): variety, pressure, and pace. Same
+host-authoritative model — all new AI/scaling runs only on the authority;
+guests mirror via the existing mob snapshots (`GhostMobs` builds any type
+from `MOBS[s.t]`, zero netcode changes for new mob types).
+
+- **Per-instance mob multipliers** (`Mob.js`): speed is now
+  `def.speed * (speedMul||1) * (auraSpeedMul||1)`; melee + ranged damage
+  `def.attack * (attackMul||1)`. Set by `ZombiesMode._directWave` at spawn —
+  **never mutate `def`** (shared objects). Wave formulas in `ZombiesMode.js`:
+  `speedMulWave` 1.5x@w1 → 1.0x@w6 (regular mobs only, specials exempt),
+  `dmgMulWave` 1+0.1/wave capped 2.5x, specials get half the `healthMul`
+  inflation.
+- **Four arena-only specials** (`mobTypes.js`, flag `arenaOnly: true` filters
+  them out of the survival `HOSTILE` pool — category stays 'hostile' because
+  aggro/no-flee key off it): `sprinter` (3.2 speed, 12 hp, w2+),
+  `brute` (80 hp, attack 8, `breaksBlocks`, guaranteed on every 5th wave),
+  `spitter` (`ranged` + `projectile:'acid'`, w5+), `screamer`
+  (`keepsDistance` — new mid-range AI branch in Mob.js; 1@w6, 2@w10+).
+- **Brute block-breaking** (Mob.js wall-handling block): while wall-blocked
+  and chasing, breaks ONE block in front of its face every 1.5 s via
+  `world.setBlock(...,0)` — particles + `net.sendEdit` free via `World.onEdit`.
+  Skips `getBlock(id).hardness < 0` (bedrock shell, wall-buys, mystery box —
+  same unbreakable rule as Interaction).
+- **Screamer aura**: recomputed every frame in `_directWave`'s tracked sweep —
+  live non-screamer wave mobs within 12 blocks of a live screamer get
+  `auraSpeedMul = 1.5`, else 1. Dies with the screamer by construction.
+- **Spitter acid**: mob `shoot` ctx (Game.js) takes a trailing `kind`; acid
+  flies at 14 (visible arc) with `onHit → Game._acidSplash` — a
+  `DamageZones.spawn(..., hurtPlayer=true)` pool (r2, 3 dps, 4 s) + a `zone`
+  net message with `hp:1`. **DamageZones extension**: `hurtPlayer` pools tick
+  the LOCAL player on every client (`update(dt, mobs, playerCtx)`) — same
+  trust model as guest-simulated arrows; mob damage stays authority-only.
+  GOTCHA: mob→player projectiles never fire `onHit` on a direct player hit
+  (Projectiles.js) — pools only appear on ground impact, by design.
+- **KILL_POINTS**: sprinter 15, spitter 25, screamer 30, brute 100. Wave
+  composition is now a weight table in `pickType`; guaranteed brutes/screamers
+  are spliced into the front half of the LIFO spawn queue (arrive mid/late wave).
+- **Bastion tightened** (`bastion.js`): `half` 48→36, shell `WALL_IN/OUT`
+  46/48→32/34 (gates now 30 from keep center), `MID_R` 28→22, **outer ruin
+  ring deleted** (no room in the 10-block annulus). Everything else
+  (wall-buys, gates, roof, box) is constant-derived and moved automatically.
+  `arenaTest.js` literals swept to match + outer-wall section removed; both
+  seeds pass.
+- **Dev QoL**: N (localhost) skips the current Zombies phase
+  (`ZombiesMode.devSkip`: build→wave, wave→cleared); Mystery Box rolls
+  exclude guns you own (falls back to full pool = refill when you own all).
+- **PR 2 planned, not shipped**: revive mechanics (L4D downed state) +
+  leaderboard mockup (highest wave/kills/points, local until Supabase auth).
+
+## 2026-07-11 — #47 Zombies guns: M14, AK-74u, Galil + Mystery Box Ray Gun
+
+Stacked on #46. Guns are **data-driven** via a new `gun` field on items
+(`src/items/items.json`): `{auto, dmg, rpm, mag, reserve, speed, spread,
+reload, boom?}` — flows through `getItem()` untouched and keys every branch
+(HeldItem viewmodel, onAttack, HUD). Zombies-only by acquisition (shop/box
+grants), no recipes.
+
+Mechanisms & gotchas:
+- **Magazine state** lives in `Game.guns = {name: {mag, reserve}}` — client-
+  local (never synced; the network only sees points), persisted in
+  `Game.serialize()`. `_shootGun` auto-inits state on first fire, so a gun
+  obtained by any means works.
+- **Full-auto**: `Interaction.attackHeld` mirrors the raw primary-button state
+  (set in `primaryDown` before the one-shot `onAttack`, cleared in
+  `primaryUp`); the Game loop polls it with a `60/rpm` cooldown. Touch: holding
+  with a gun sets `attackHeld` instead of `breaking` (`Interaction.startMining`).
+  The `onAttack` gun/bow branch now early-returns when `vitals.dead` so
+  zombies-mode spectators can't shoot (interaction.locked does NOT gate
+  onAttack — hide & seek relies on that).
+- **Reload**: `_startReload`/`_reloading` ticked in `_loop`; `_syncHeld`'s
+  name-change branch cancels it on weapon swap. R is bound in `_bindZombies`
+  (safe: the taunt wheel binds R only under hideseek).
+- **Ray Gun splash** reuses the exploding-arrow path, refactored into
+  `Game._splashImpact(pos, r)` (entity-only boom + `by` attribution +
+  broadcast). Tracers are new `bullet`/`ray` entries in `Projectiles.mats` +
+  a `scales` map — peers get them via the existing cosmetic `sendProjectile
+  {kind}`. **Zero new net messages in this PR.**
+- **Wall-buys (CoD style), not menu buys**: guns live on physical
+  `wallbuy_m14/ak74u/galil` blocks (ids 66–68, unbreakable, interactive,
+  chalk-outline tiles via `wallbuyBase`/`chalkGun` in atlas.js), stamped by
+  `bastion.js emitWallBuys` — M14 on the keep's north wall (starter), AK-74u
+  on the south wall, Galil out on the curtain wall by the east gate
+  (risk-priced). Right-click → `Game` onUseBlock → `ZombiesMode.buyWall(gun)`:
+  first purchase = the gun; owned = its ammo at ~half price (`ammoFor`
+  entries: 30/75/125). SHOP entries carry `wall: true` — hidden from the B
+  menu (`SHOP.filter(!s.wall)` in ZombiesUI) and **purchasable mid-wave**
+  (menu entries stay build-only). GOTCHA: the phase rule lives in BOTH
+  `buy()` and the host's `handleIntent` buy branch — they must stay
+  identical or guest wall-buys silently stop decrementing points.
+- **Mystery Box**: `box` entry (95⭐, weights in `BOX_WEIGHTS`, ray_gun 0.15
+  and box-exclusive), usable mid-wave too. `buy()` grant logic extracted to
+  `_grant`/`_grantGun` — grants must stay client-local (host `handleIntent`
+  only decrements points). Rebuy/dupe = full refill. Ray Gun ammo = respin.
+- **Concentric curtain walls** (`bastion.js emitRuinRing`, shared by both
+  rings): ruined stone rings at `MID_R=28` (5-wide gates, 1–2 breaches/side,
+  corner watchtowers with keep-facing ladders — the #42 ladders-end-LEVEL
+  rule) and `OUTER_R=38` (3-wide gates, 2–3 wider breaches/side, sagP 0.3, no
+  towers — the derelict first line). The square is now keep → inner court →
+  middle court → outer field. Breach spans (layout() `breaches`/
+  `outerBreaches`) crumble to 1-high rubble — **deliberately hop-able so the
+  direct-steering mob AI keeps flowing** (mobs also wall-slide via per-axis
+  collision, so gapped rings work without pathfinding); intact spans carry a
+  slab parapet. Ordinary masonry — players repair it, creepers breach it.
+  Scatter avoids both ring lines. arenaTest asserts gates/towers/ladders
+  exactly and intact-vs-rubble ratios statistically per ring.
+- **Roof + full enclosure**: the bedrock shell now rises to `ROOF_LEVEL =
+  FY+16` and `emitRoof` spans the interior with plank beams on an 8-grid over
+  a **glass-majority skylight — the Playroom rule: glass keeps per-column
+  skylight alive; a solid roof would drop the whole arena to cave darkness**
+  (skylight has no horizontal bleed). The shell caps its own 3-wide top ring
+  (`WALL_TOP = ROOF_LEVEL`) so there's no sky slot around the roof rim. Note:
+  the roofed arena makes `surfaceHeight`-based cave detection kick in — cave
+  ambience/music inside the fortress is accepted as thematic.
+- **Castle interior, not outdoors**: `groundPass` paves the ENTIRE interior
+  (r < WALL_IN) in patchwork flagstone (stone/mossy/andesite by cellHash;
+  gravel lanes kept, now full crosses). Both curtain rings carry a **slab
+  gallery roof** (`GALLERY_Y = FY+7`, 3-wide band r±1 in `emitRuinRing`),
+  torn open over every breach span (side/off recomputed per band cell —
+  corners resolve by the larger axis). Parapet walkers clear the gallery
+  (slab stand 4.5 + 1.8 < 7); gates and mid towers are covered. arenaTest
+  asserts flagstone samples, lane gravel, covered gates, and that gallery
+  holes exactly match rubble columns.
+- **Enclosed keep**: `KEEP_WALL_TOP` raised FY+2 → FY+6 with pane arrow-slit
+  windows (every 4th column at FY+4, visual only — panes are solid), arched
+  2-high entries (wall continues above the doorway), and its own roof at
+  `KEEP_ROOF = FY+7`: plank beams on a 4-grid over glass, masonry rim over
+  the wall ring, slab eaves overhanging at r=KEEP_R+1. Merlons/top torches
+  removed (roofed). Archer platforms keep exactly enough headroom (deck
+  FY+4, stand FY+5, head < roof at FY+7 — asserted in arenaTest). Side
+  effect: spiders can no longer climb INTO the keep — creepers remain the
+  anti-turtle counter for a sealed keep.
+- **`mystery_box` block** (id 65, `hardness: -1` unbreakable, `luminance: 6`,
+  interactive): tiles in atlas.js (`mystery_box_top/_side`), placed in the
+  bastion supply corner at (4, FY+1, −10), used via `interaction.onUseBlock`
+  → `Game._useMysteryBox()` → `zombiesMode.buy('box')` with refusal toasts.
+  arenaTest.js asserts its placement.
+- **Recoil**: decaying `Game._recoil` impulse composed into `_animateHeld`'s
+  rest-ease branch (kicks `heldAnchor` rotation.x/position.z). Gun viewmodels
+  are box-built in `HeldItem.js buildGunModel` (fresh geometry per build —
+  Game disposes on swap; materials shared).
+- Ammo HUD rides a `gunAmmo` field in the 60 Hz `onStats` snapshot (tiny),
+  rendered in App.jsx bottom-right; match HUD stays on `onMatch`.
+- **Ops note**: `git push` hung via the Windows credential manager this
+  session; pushing with `git -c credential.helper= -c
+  "credential.helper=!gh auth git-credential" push …` works (gh CLI is
+  authed). Both `-c` flags are required — the empty one clears the hanging
+  default helper first.
+
+## 2026-07-10 — #46 Zombies gamemode: co-op wave defense
+
+Fourth world mode `'zombies'` riding the exact hideseek plumbing (whitelists in
+`Game` ctor / `server/index.js` / `Menus.jsx` picker; arena registry map;
+generic `match`/`matchState` channel — a room has one mode, so sharing is safe;
+`Game._matchMode()` picks the active manager). `src/systems/ZombiesMode.js` is
+the host/solo-authoritative FSM (`lobby → build → wave → … → gameover`) AND the
+wave director: trickle-spawns (live cap 12) from a queue at
+`activeMap().zombieGates()` via `MobManager._spawn`, spiders w4+/skeletons
+w6+/creepers w8+, per-wave HP mult, kill scoring by sweeping tracked mobs'
+`dead` flags. Host migration mid-wave folds back to a build phase (old host's
+mobs died with it).
+
+Key mechanisms & gotchas:
+- **`mob.lastHitBy`** is the kill-attribution seam — stamped in melee
+  (`Game.onAttack`), `Projectiles` mob-hit (`opts.owner`), `Explosions.boom`
+  (`ctx.by`), `DamageZones` (`owner`), and `net.onMobHit` (server now tags
+  `mobHit.from`; `boom` passes optional `by`). Ids: `'self'` solo, socket id online.
+- **`MobManager.autoSpawn = false`** (zombies): kills ambient spawn timers AND
+  far-despawn (gate mobs must survive being >70 blocks from a huddled team).
+  `mob.detectOverride` (Mob.js one-liner) lets wave mobs aggro arena-wide —
+  never mutate the shared `def`.
+- **Special ammo**: `Game.AMMO` table + X-cycle (`_cycleAmmo`, bound in
+  `_bindScreens`, all modes). Exploding arrows call `boom(r=1.7,
+  applyEdits=false)` — entity damage only, defenses never take collateral;
+  the host's `onBoom` replay already damages mobs for guest-fired booms
+  (`_boomCtx().mobs` is real there), so no new mob-damage netcode was needed.
+  Venom arrows spawn `src/systems/DamageZones.js` pools (0.5 s tick, mobs only,
+  no players) synced by a one-shot `zone` message — registered in the usual
+  THREE places (Net send, Net listener, server relay); the server stamps
+  `owner` itself so clients can't spoof credit.
+- **Night lock** (`dayNight.t=0.78, frozen`, set on every client; `onTime`
+  ignored in zombies) is what keeps `burns:true` zombies alive — no mob changes.
+- Shop (`SHOP` in ZombiesMode, `ZombiesShop` in `src/ui/ZombiesUI.jsx`,
+  `openScreen === 'shop'`, B key): optimistic buys — buyer grants itself
+  immediately, authority decrements points floored at 0 (same trust level as
+  edits/booms). Never grant via item drops (not net-synced).
+- Death: `Game._zombiesDeath` (no scatter, no `onDead` overlay, free-fly
+  spectate, `interaction.locked`); revives are client-local in
+  `ZombiesMode._applyLocal` on build/wave-entry transitions (host never touches
+  guest vitals). Dead players are filtered out of the mob-targeting `players`
+  array in `_loop`.
+- Gen-mode token renamed **`'hideseek'` → `'arena'`** in `TerrainGen`
+  (playroom/castle/town regression-checked by build + arena tests).
+- `src/world/arenas/maps/bastion.js` (`half=48`): bedrock shell + 4 gate
+  tunnels (only way in), buildable stone keep, ladders face-adjacent to their
+  pillar (mesher rule). **`arenaTest.js` is now committed** (the #42/#44
+  harness): `npx esbuild src/world/arenas/arenaTest.js --bundle --format=esm
+  --outfile=… && node …` — 62 assertions × 2 seeds.
+- server/test.js grew zombies-mode round-trip, `zone`, `mobHit.from`,
+  `boom.by` coverage (33 passing).
+- Known v1 gaps (by design): zombies don't break player blocks (creepers are
+  the anti-turtle), wave state isn't saved (reload → lobby), balance constants
+  live at the top of ZombiesMode.js for tuning.
+
 ## 2026-07-03 — #44 Prop Hunt arena: The Playroom
 
 `src/world/arenas/maps/playroom.js` — third arena: mouse-scale players in a

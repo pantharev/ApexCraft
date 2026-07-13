@@ -23,7 +23,8 @@ const ANDESITE = getBlockId('andesite');
 const GRASS = getBlockId('grass');
 
 // Generation mode, set once before a Game's chunks generate (see Game ctor).
-// 'hideseek' swaps the procedural terrain for a flat Prop Hunt arena.
+// 'arena' swaps the procedural terrain for a flat arena base + the active
+// arena map (Prop Hunt and Zombies worlds).
 let GEN_MODE = null;
 export function setGenMode(m) { GEN_MODE = m || null; }
 
@@ -31,7 +32,7 @@ export function setGenMode(m) { GEN_MODE = m || null; }
 // query terrain shape without importing the whole generator.
 
 export function generateChunk(chunk) {
-  if (GEN_MODE === 'hideseek') { generateArenaChunk(chunk); return; }
+  if (GEN_MODE === 'arena') { generateArenaChunk(chunk); return; }
   const baseX = chunk.cx * CHUNK_SIZE;
   const baseZ = chunk.cz * CHUNK_SIZE;
 
@@ -88,7 +89,7 @@ export function generateChunk(chunk) {
   chunk.dirty = true;
 }
 
-// Flat Prop Hunt base: bedrock floor, stone fill, the map's surface block at
+// Flat arena base: bedrock floor, stone fill, the map's surface block at
 // FLOOR_Y, air above — no caves/ores/villages/trees. The arena map is stamped
 // on top.
 function generateArenaChunk(chunk) {

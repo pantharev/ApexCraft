@@ -2,6 +2,7 @@ import { getBlockId } from '../../blocks/BlockRegistry.js';
 import * as town from './maps/town.js';
 import * as castle from './maps/castle.js';
 import * as playroom from './maps/playroom.js';
+import * as bastion from './maps/bastion.js';
 
 // Prop Hunt arena map registry. A map is a module exporting { id, name, desc,
 // half, baseSurface, propBlocks, botSpots, generate(chunk), seekerSpawn(i),
@@ -13,8 +14,9 @@ export { FLOOR_Y } from './lib.js';
 
 const DEFAULT_MAP = 'town';
 
-export const MAPS = { [town.id]: town, [castle.id]: castle, [playroom.id]: playroom };
-export const MAP_LIST = [town, castle, playroom]; // menu order
+export const MAPS = { [town.id]: town, [castle.id]: castle, [playroom.id]: playroom, [bastion.id]: bastion };
+export const MAP_LIST = [town, castle, playroom]; // Prop Hunt menu order
+export const ZOMBIE_MAP_LIST = [bastion];         // Zombies menu order
 
 let active = MAPS[DEFAULT_MAP];
 
@@ -33,3 +35,7 @@ export function propIds() { return active.propBlocks.map(getBlockId).filter(Bool
 export function seekerSpawn(i = 0) { return active.seekerSpawn(i); }
 export function hiderSpawns(n) { return active.hiderSpawns(n); }
 export function lobbySpawn() { return active.lobbySpawn(); }
+
+// Spawn helpers used by the Zombies wave director.
+export function playerSpawns(n) { return active.playerSpawns(n); }
+export function zombieGates() { return active.zombieGates(); }

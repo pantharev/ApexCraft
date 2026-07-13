@@ -167,6 +167,34 @@ class SoundEngine {
 
   arrowHit() { this.burst(1600, 1, 'bandpass', 0.12, 0.06); }
 
+  // Gunshot: a highpass crack over a lowpass thump (a compressed explode).
+  // Autos get a shorter, lighter report so rapid fire doesn't wall of sound.
+  gunShot(auto) {
+    if (auto) {
+      this.burst(jit(2600), 0.9, 'highpass', 0.2, 0.05);
+      this.burst(jit(220), 1.2, 'lowpass', 0.24, 0.09);
+    } else {
+      this.burst(jit(2400), 0.9, 'highpass', 0.28, 0.08);
+      this.burst(jit(170), 1.3, 'lowpass', 0.34, 0.16);
+      this.tone(jit(80), 0.1, 'sine', 0.14, 55);
+    }
+  }
+
+  // Ray gun: a falling sci-fi zap with a bright sparkle tail.
+  rayZap() {
+    this.tone(jit(1300), 0.16, 'sawtooth', 0.2, 240);
+    this.tone(jit(2100), 0.08, 'square', 0.07, 900, 0.02);
+    this.burst(3200, 1.2, 'bandpass', 0.1, 0.06, 0.03);
+  }
+
+  // Reload: mag out, mag in — two mechanical clicks.
+  reload() {
+    this.burst(1500, 1.6, 'bandpass', 0.18, 0.04);
+    this.burst(1100, 1.6, 'bandpass', 0.2, 0.05, 0.16);
+  }
+
+  dryFire() { this.burst(2000, 1.4, 'bandpass', 0.14, 0.03); }
+
   // Door creak: a slow saw sweep — rising to open, falling to close.
   door(opening) {
     this.tone(opening ? 160 : 240, 0.16, 'sawtooth', 0.14, opening ? 260 : 130);

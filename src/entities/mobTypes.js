@@ -125,6 +125,58 @@ export const MOBS = {
     ],
   },
 
+  // ---- Zombies arena specials ----
+  // `arenaOnly: true` keeps these out of the survival HOSTILE spawn pool —
+  // the Zombies wave director spawns them by name. Category stays 'hostile'
+  // so the hunt-the-player AI applies.
+  sprinter: {
+    category: 'hostile', arenaOnly: true, health: 12, speed: 3.2, attack: 2, detect: 20, burns: false, hw: 0.35, h: 1.7,
+    drops: [{ item: 'rotten_flesh', count: [0, 1] }],
+    parts: [ // gaunt runner: thin legs, hunched pale torso, red eyes
+      leg(-0.11, 0, 0.18, 0.85, 0.18, '#3a3a44'), leg(0.11, 0, 0.18, 0.85, 0.18, '#3a3a44'),
+      { size: [0.42, 0.6, 0.24], pos: [0, 1.15, 0.06], color: '#8a9a72' },
+      { size: [0.16, 0.6, 0.16], pos: [-0.3, 1.1, 0.1], color: '#7d8d66' },
+      { size: [0.16, 0.6, 0.16], pos: [0.3, 1.1, 0.1], color: '#7d8d66' },
+      { size: [0.36, 0.36, 0.36], pos: [0, 1.55, 0.12], color: '#93a37b', head: true },
+      { size: [0.1, 0.06, 0.02], pos: [-0.09, 1.6, 0.31], color: '#c23a2a', head: true },
+      { size: [0.1, 0.06, 0.02], pos: [0.09, 1.6, 0.31], color: '#c23a2a', head: true },
+    ],
+  },
+  brute: {
+    category: 'hostile', arenaOnly: true, health: 80, speed: 1.0, attack: 8, detect: 20, burns: false, breaksBlocks: true, hw: 0.6, h: 2.6,
+    drops: [{ item: 'rotten_flesh', count: [1, 3] }],
+    parts: [ // hulking mini-boss: slab torso, gorilla arms, sunken head
+      leg(-0.24, 0, 0.4, 0.9, 0.4, '#4a4438'), leg(0.24, 0, 0.4, 0.9, 0.4, '#4a4438'),
+      { size: [1.15, 1.0, 0.6], pos: [0, 1.45, 0], color: '#6b7a4a' },
+      { size: [0.34, 1.1, 0.34], pos: [-0.78, 1.35, 0], color: '#5d6c40' },
+      { size: [0.34, 1.1, 0.34], pos: [0.78, 1.35, 0], color: '#5d6c40' },
+      { size: [0.5, 0.45, 0.48], pos: [0, 2.2, 0.08], color: '#77865a', head: true },
+      { size: [0.3, 0.12, 0.04], pos: [0, 2.1, 0.32], color: '#2a2a22', head: true },
+    ],
+  },
+  spitter: {
+    category: 'hostile', arenaOnly: true, health: 18, speed: 1.3, attack: 4, detect: 24, burns: false, ranged: true, projectile: 'acid', hw: 0.45, h: 1.6,
+    drops: [{ item: 'rotten_flesh', count: [0, 2] }],
+    parts: [ // bloated acid belly, hunched, glowing maw
+      leg(-0.14, 0, 0.2, 0.55, 0.2, '#4c5a30'), leg(0.14, 0, 0.2, 0.55, 0.2, '#4c5a30'),
+      { size: [0.7, 0.6, 0.55], pos: [0, 0.9, 0], color: '#7fb43a' },
+      { size: [0.4, 0.4, 0.4], pos: [0, 1.4, 0.2], color: '#5f8a2a', head: true },
+      { size: [0.2, 0.16, 0.1], pos: [0, 1.28, 0.44], color: '#b8e04a', head: true },
+    ],
+  },
+  screamer: {
+    category: 'hostile', arenaOnly: true, health: 25, speed: 1.2, attack: 1, detect: 24, burns: false, keepsDistance: true, hw: 0.4, h: 1.9,
+    drops: [],
+    parts: [ // tall bone-pale banshee, arms raised, huge black mouth
+      leg(-0.12, 0, 0.2, 0.8, 0.2, '#8a8378'), leg(0.12, 0, 0.2, 0.8, 0.2, '#8a8378'),
+      { size: [0.46, 0.75, 0.26], pos: [0, 1.18, 0], color: '#c9c2b8' },
+      { size: [0.18, 0.7, 0.18], pos: [-0.34, 1.25, 0], color: '#b5aea2' },
+      { size: [0.18, 0.7, 0.18], pos: [0.34, 1.25, 0], color: '#b5aea2' },
+      { size: [0.44, 0.48, 0.44], pos: [0, 1.82, 0], color: '#d8d1c6', head: true },
+      { size: [0.22, 0.28, 0.04], pos: [0, 1.76, 0.24], color: '#0d0d0d', head: true },
+    ],
+  },
+
   // ---- Cave ambient ----
   // Bats are harmless ambient creatures that flutter through dark underground
   // pockets. `category: 'ambient'` keeps them out of the surface passive
@@ -146,7 +198,8 @@ export const MOBS = {
 };
 
 export const PASSIVE = Object.keys(MOBS).filter((k) => MOBS[k].category === 'passive');
-export const HOSTILE = Object.keys(MOBS).filter((k) => MOBS[k].category === 'hostile');
+// arenaOnly specials (Zombies mode) never enter the survival spawn pool.
+export const HOSTILE = Object.keys(MOBS).filter((k) => MOBS[k].category === 'hostile' && !MOBS[k].arenaOnly);
 // Cave-hostile pool: existing hostile types that work underground. Zombies and
 // skeletons burn in daylight, but the burn check requires open sky, so a rock
 // roof keeps them safe down here. Bats spawn through the same cave pass but as

@@ -35,6 +35,10 @@ export class MobManager {
     this.spawnTimer = 2;
     this.caveSpawnTimer = 3; // offset from surface timer to avoid same-frame bursts
     this.villagerTimer = 3;
+    // Ambient spawning + far-despawn. Zombies mode turns this off: its wave
+    // director is the only spawner, and gate mobs must survive being far from
+    // a team huddled at the opposite wall.
+    this.autoSpawn = true;
   }
 
   count(category) {
@@ -178,26 +182,28 @@ export class MobManager {
       ? ctx.players
       : [{ id: 'self', pos: ctx.playerPos }];
 
-    this.spawnTimer -= dt;
-    if (this.spawnTimer <= 0) {
-      this.spawnTimer = 2;
-      const anchor = players[Math.floor(Math.random() * players.length)];
-      this._trySpawn({ ...ctx, playerPos: anchor.pos });
-    }
+    if (this.autoSpawn) {
+      this.spawnTimer -= dt;
+      if (this.spawnTimer <= 0) {
+        this.spawnTimer = 2;
+        const anchor = players[Math.floor(Math.random() * players.length)];
+        this._trySpawn({ ...ctx, playerPos: anchor.pos });
+      }
 
-    // Cave hostile spawning: runs on its own timer and cap, independent of the
-    // surface hostile pool so daytime caving is always dangerous.
-    this.caveSpawnTimer -= dt;
-    if (this.caveSpawnTimer <= 0) {
-      this.caveSpawnTimer = 3.5;
-      const anchor = players[Math.floor(Math.random() * players.length)];
-      this._trySpawnCave(anchor.pos);
-    }
+      // Cave hostile spawning: runs on its own timer and cap, independent of the
+      // surface hostile pool so daytime caving is always dangerous.
+      this.caveSpawnTimer -= dt;
+      if (this.caveSpawnTimer <= 0) {
+        this.caveSpawnTimer = 3.5;
+        const anchor = players[Math.floor(Math.random() * players.length)];
+        this._trySpawnCave(anchor.pos);
+      }
 
-    this.villagerTimer -= dt;
-    if (this.villagerTimer <= 0) {
-      this.villagerTimer = 4;
-      this._trySpawnVillagers(players);
+      this.villagerTimer -= dt;
+      if (this.villagerTimer <= 0) {
+        this.villagerTimer = 4;
+        this._trySpawnVillagers(players);
+      }
     }
 
     // Census for cross-mob behaviour: zombies hunt villagers, golems hunt
@@ -285,8 +291,10 @@ export class MobManager {
           const c = lo + Math.floor(Math.random() * (hi - lo + 1));
           if (c > 0) this.itemDrops.spawn(d.item, c, Math.floor(mob.pos.x), Math.floor(mob.pos.y), Math.floor(mob.pos.z));
         }
-      } else if (!mob.dead && (nearSq > DESPAWN * DESPAWN || mob.pos.y < -10)) {
-        // Despawn only when far from *every* player.
+      } else if (!mob.dead &&
+                 ((this.autoSpawn && nearSq > DESPAWN * DESPAWN) || mob.pos.y < -10)) {
+        // Despawn only when far from *every* player (never in wave mode —
+        // a gate mob across the arena is still part of the wave).
         mob.removed = true;
       }
     }

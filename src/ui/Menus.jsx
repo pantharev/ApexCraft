@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { MAPS, MAP_LIST } from '../world/arenas/index.js';
+import { MAPS, MAP_LIST, ZOMBIE_MAP_LIST } from '../world/arenas/index.js';
 
 const panel = {
   background: '#1b1d22', border: '3px solid #3a3d44', borderRadius: 8,
@@ -67,6 +67,9 @@ export function MainMenu({ worlds, onPlay, onCreate, onDelete, onHome, onHost, o
                   {w.mode === 'hideseek' && (
                     <span style={{ marginLeft: 6, fontSize: 10, fontWeight: 700, color: '#ffd9a8', background: 'rgba(130,90,46,0.5)', padding: '1px 6px', borderRadius: 8, letterSpacing: 0.5 }}>PROP HUNT</span>
                   )}
+                  {w.mode === 'zombies' && (
+                    <span style={{ marginLeft: 6, fontSize: 10, fontWeight: 700, color: '#ffb3a8', background: 'rgba(130,46,46,0.5)', padding: '1px 6px', borderRadius: 8, letterSpacing: 0.5 }}>ZOMBIES</span>
+                  )}
                 </div>
                 <div style={{ fontSize: 12, opacity: 0.55 }}>
                   seed {w.seed}{w.map && MAPS[w.map] ? ` · ${MAPS[w.map].name}` : ''} · {fmtDate(w.lastPlayed)}
@@ -98,10 +101,18 @@ export function MainMenu({ worlds, onPlay, onCreate, onDelete, onHome, onHost, o
             ['survival', 'Survival', 'Mobs, mining, hunger & health'],
             ['creative', 'Creative', 'Infinite blocks, flight, no mobs'],
             ['hideseek', 'Prop Hunt', 'Hide as a block — or hunt the hiders'],
+            ['zombies', 'Zombies', 'Co-op wave defense — build & survive'],
           ].map(([val, label, desc]) => {
-            const accent = val === 'creative' ? '#5a3c8a' : val === 'hideseek' ? '#8a5a2e' : '#3c6b3c';
+            const accent = val === 'creative' ? '#5a3c8a' : val === 'hideseek' ? '#8a5a2e' : val === 'zombies' ? '#8a2e2e' : '#3c6b3c';
             return (
-              <button key={val} onClick={() => setMode(val)} title={desc}
+              <button key={val}
+                onClick={() => {
+                  setMode(val);
+                  // Each arena mode has its own map list; snap the selection over.
+                  if (val === 'zombies') setMap(ZOMBIE_MAP_LIST[0].id);
+                  else if (val === 'hideseek') setMap(MAP_LIST[0].id);
+                }}
+                title={desc}
                 style={{
                   flex: 1, font: '13px system-ui', padding: '7px 8px', cursor: 'pointer', borderRadius: 4,
                   background: mode === val ? accent : '#2a2d33',
@@ -114,14 +125,14 @@ export function MainMenu({ worlds, onPlay, onCreate, onDelete, onHome, onHost, o
             );
           })}
         </div>
-        {/* Arena map picker (Prop Hunt worlds only). */}
-        {mode === 'hideseek' && (
+        {/* Arena map picker (Prop Hunt / Zombies worlds). */}
+        {(mode === 'hideseek' || mode === 'zombies') && (
           <div style={{ display: 'flex', gap: 6, marginTop: 6 }}>
-            {MAP_LIST.map((m) => (
+            {(mode === 'zombies' ? ZOMBIE_MAP_LIST : MAP_LIST).map((m) => (
               <button key={m.id} onClick={() => setMap(m.id)} title={m.desc}
                 style={{
                   flex: 1, font: '13px system-ui', padding: '7px 8px', cursor: 'pointer', borderRadius: 4,
-                  background: map === m.id ? '#8a5a2e' : '#2a2d33',
+                  background: map === m.id ? (mode === 'zombies' ? '#8a2e2e' : '#8a5a2e') : '#2a2d33',
                   color: map === m.id ? '#fff' : '#9aa', textAlign: 'center',
                   border: map === m.id ? '2px solid #fff5' : '2px solid #3a3d44',
                 }}>

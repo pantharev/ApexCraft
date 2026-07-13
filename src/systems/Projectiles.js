@@ -21,8 +21,9 @@ export class Projectiles {
       arrow_venom: new THREE.MeshLambertMaterial({ color: '#4ab42a', emissive: '#1f4a10', emissiveIntensity: 0.5 }),
       bullet: new THREE.MeshLambertMaterial({ color: '#c8a24a', emissive: '#7a5a18', emissiveIntensity: 0.9 }),
       ray: new THREE.MeshLambertMaterial({ color: '#5aff6a', emissive: '#2ad83a', emissiveIntensity: 1.0 }),
+      acid: new THREE.MeshLambertMaterial({ color: '#8fd42a', emissive: '#3f6a10', emissiveIntensity: 0.8 }),
     };
-    this.scales = { bullet: 0.5, ray: 1.5 }; // per-kind mesh size tweak
+    this.scales = { bullet: 0.5, ray: 1.5, acid: 1.4 }; // per-kind mesh size tweak
     this._fwd = new THREE.Vector3(0, 0, 1);
   }
 

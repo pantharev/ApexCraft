@@ -66,23 +66,23 @@ for (const seed of [12345, 987654321]) {
 
   // The bedrock shell: solid on all four sides and over the full height, open
   // above the parapet.
-  for (const [x, z, side] of [[20, 46, 'S'], [20, -46, 'N'], [46, 20, 'E'], [-46, 20, 'W'], [47, 47, 'corner']]) {
+  for (const [x, z, side] of [[20, 32, 'S'], [20, -32, 'N'], [32, 20, 'E'], [-32, 20, 'W'], [33, 33, 'corner']]) {
     ok(get(x, FY + 2, z) === BEDROCK, `${tag}: ${side} wall bedrock at (${x},${z})`);
   }
-  ok(get(20, FY + 16, 46) === BEDROCK, `${tag}: shell rises to the roof line`);
-  ok(get(20, FY + 17, 46) === 0, `${tag}: open sky above the shell`);
+  ok(get(20, FY + 16, 32) === BEDROCK, `${tag}: shell rises to the roof line`);
+  ok(get(20, FY + 17, 32) === 0, `${tag}: open sky above the shell`);
 
   // The roof: plank beams on the 8-grid over a glass skylight, spanning the
   // interior at FY+16; nothing leaks past the shell.
   ok(get(0, FY + 16, 20) !== 0 && get(8, FY + 16, 20) !== 0, `${tag}: roof beams on the 8-grid`);
   ok(get(4, FY + 16, 20) === getBlockId('glass'), `${tag}: roof skylight is glass`);
-  ok(get(52, FY + 16, 0) === 0, `${tag}: no roof outside the shell`);
+  ok(get(38, FY + 16, 0) === 0, `${tag}: no roof outside the shell`);
 
   // Gates: a 3-wide, 3-high bore through the ring at each midpoint, lintel
   // closed above, roofed tunnel outside with a gravel bed.
   for (const [dx, dz, side] of [[0, 1, 'S'], [0, -1, 'N'], [1, 0, 'E'], [-1, 0, 'W']]) {
     let open = true;
-    for (let d = 46; d <= 48; d++) {
+    for (let d = 32; d <= 34; d++) {
       for (let s = -1; s <= 1; s++) {
         for (let y = FY + 1; y <= FY + 3; y++) {
           const x = dx === 0 ? s : dx * d, z = dz === 0 ? s : dz * d;
@@ -91,15 +91,15 @@ for (const seed of [12345, 987654321]) {
       }
     }
     ok(open, `${tag}: ${side} gate bore is open`);
-    ok(get(dx * 47, FY + 4, dz * 47) === BEDROCK, `${tag}: ${side} gate lintel closed`);
-    ok(get(dx * 51, FY + 4, dz * 51) === BEDROCK, `${tag}: ${side} tunnel roofed`);
-    ok(get(dx * 51, FY + 2, dz * 51) === 0, `${tag}: ${side} tunnel bore open`);
-    ok(get(dx * 51, FY, dz * 51) === GRAVEL, `${tag}: ${side} tunnel gravel bed`);
+    ok(get(dx * 33, FY + 4, dz * 33) === BEDROCK, `${tag}: ${side} gate lintel closed`);
+    ok(get(dx * 37, FY + 4, dz * 37) === BEDROCK, `${tag}: ${side} tunnel roofed`);
+    ok(get(dx * 37, FY + 2, dz * 37) === 0, `${tag}: ${side} tunnel bore open`);
+    ok(get(dx * 37, FY, dz * 37) === GRAVEL, `${tag}: ${side} tunnel gravel bed`);
   }
 
   // Castle flooring: the interior is flagstone (never grass), lanes gravel.
   const floorIds = new Set([STONE, getBlockId('mossy_cobblestone'), getBlockId('andesite')]);
-  ok([[20, 20], [-33, 17], [8, -42]].every(([x, z]) => floorIds.has(get(x, FY, z))),
+  ok([[20, 20], [-25, 13], [8, -28]].every(([x, z]) => floorIds.has(get(x, FY, z))),
     `${tag}: interior floor is flagstone`);
   ok(get(0, FY, 20) === GRAVEL, `${tag}: gravel lanes survive the paving`);
 
@@ -132,8 +132,8 @@ for (const seed of [12345, 987654321]) {
   // curtain wall by the east gate, each reachable (air in front at eye level).
   ok(get(4, FY + 2, -12) === getBlockId('wallbuy_m14'), `${tag}: M14 wall-buy on the keep north wall`);
   ok(get(-4, FY + 2, 12) === getBlockId('wallbuy_ak74u'), `${tag}: AK-74u wall-buy on the keep south wall`);
-  ok(get(46, FY + 2, 6) === getBlockId('wallbuy_galil'), `${tag}: Galil wall-buy on the curtain wall`);
-  ok(get(4, FY + 2, -11) === 0 && get(-4, FY + 2, 11) === 0 && get(45, FY + 2, 6) === 0,
+  ok(get(32, FY + 2, 6) === getBlockId('wallbuy_galil'), `${tag}: Galil wall-buy on the curtain wall`);
+  ok(get(4, FY + 2, -11) === 0 && get(-4, FY + 2, 11) === 0 && get(31, FY + 2, 6) === 0,
     `${tag}: wall-buy stations are reachable`);
 
   // Archer platforms: deck present, ladder continuous and level with the deck.
@@ -142,9 +142,9 @@ for (const seed of [12345, 987654321]) {
   for (let y = FY + 1; y <= FY + 4; y++) if (get(8, y, 9) !== LADDER) ladderOk = false;
   ok(ladderOk, `${tag}: platform ladder continuous and deck-level`);
 
-  // The middle curtain wall (r=28): lane gates open, corner towers solid with
+  // The middle curtain wall (r=22): lane gates open, corner towers solid with
   // continuous ladders, ring mostly intact but with real hop-able breaches.
-  const MID = 28;
+  const MID = 22;
   for (const [gx, gz, side] of [[0, -MID, 'N'], [0, MID, 'S'], [-MID, 0, 'W'], [MID, 0, 'E']]) {
     let open = true;
     for (let s = -2; s <= 2; s++) {
@@ -175,33 +175,6 @@ for (const seed of [12345, 987654321]) {
   ok(rubble >= 8, `${tag}: mid wall has hop-able breaches (${rubble} rubble cells)`);
   ok(holed === rubble, `${tag}: mid gallery roof torn open over every breach`);
   ok(get(0, FY + 7, MID) === getBlockId('stone_slab'), `${tag}: mid gallery covers its gate`);
-
-  // The outer curtain wall (r=38): narrower gates, heavier ruin.
-  const OUT = 38;
-  for (const [gx, gz, side] of [[0, -OUT, 'N'], [0, OUT, 'S'], [-OUT, 0, 'W'], [OUT, 0, 'E']]) {
-    let open = true;
-    for (let s = -1; s <= 1; s++) {
-      for (let y = FY + 1; y <= FY + 3; y++) {
-        const x = gz === 0 ? gx : s, z = gx === 0 ? gz : s;
-        if (get(x, y, z) !== 0) open = false;
-      }
-    }
-    ok(open, `${tag}: outer-wall ${side} gate open`);
-  }
-  let oIntact = 0, oRubble = 0, oCells = 0, oHoled = 0;
-  for (let off = -OUT + 1; off < OUT; off++) {
-    if (Math.abs(off) <= 1) continue; // gates
-    for (const [x, z] of [[off, -OUT], [off, OUT], [-OUT, off], [OUT, off]]) {
-      oCells++;
-      const low = get(x, FY + 1, z), high = get(x, FY + 2, z);
-      if (isSolid(low) && isSolid(high)) oIntact++;
-      else if (isSolid(low) && high === 0) { oRubble++; if (get(x, FY + 7, z) === 0) oHoled++; }
-    }
-  }
-  ok(oIntact / oCells > 0.55, `${tag}: outer wall mostly intact (${oIntact}/${oCells})`);
-  ok(oRubble >= 16, `${tag}: outer wall heavily breached (${oRubble} rubble cells)`);
-  ok(oHoled === oRubble, `${tag}: outer gallery roof torn open over every breach`);
-  ok(get(0, FY + 7, OUT) === getBlockId('stone_slab'), `${tag}: outer gallery covers its gate`);
 }
 
 console.log(fails === 0 ? 'ARENA TESTS PASSED' : `ARENA TESTS FAILED (${fails})`);

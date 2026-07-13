@@ -16,7 +16,7 @@ import { FLOOR_Y, put, fillBox, chunkOutside, cellHash } from '../lib.js';
 export const id = 'bastion';
 export const name = 'The Bastion';
 export const desc = 'Hold the keep against the horde';
-export const half = 48;            // map spans [-48, 48] on X and Z
+export const half = 36;            // map spans [-36, 36] on X and Z
 export const baseSurface = 'grass';
 
 // Arena-map contract stubs (Prop Hunt concepts — unused by Zombies).
@@ -49,7 +49,7 @@ const FY = FLOOR_Y;                // grass floor level (64)
 
 // Bedrock curtain wall rings (Chebyshev radius). The shell rises all the way
 // to the roof line, sealing the fortress into a closed siege arena.
-const WALL_IN = 46, WALL_OUT = 48;
+const WALL_IN = 32, WALL_OUT = 34;
 const ROOF_LEVEL = FY + 16;
 const WALL_TOP = ROOF_LEVEL; // the shell caps its own 3-wide top ring
 // Gate opening: 3 wide (|coord| <= 1), 3 high, one per wall midpoint.
@@ -71,16 +71,9 @@ const PLATFORM_R = 9;              // archer platform corners sit at (±R, ±R)
 // build it up, creepers can breach it. Zombies funnel through the cardinal
 // gates and clamber over the crumbled (1-high) breach spans, so the direct-
 // steering AI keeps flowing instead of humping an unbroken wall.
-const MID_R = 28;                  // Chebyshev radius of the ring
+const MID_R = 22;                  // Chebyshev radius of the ring
 const MID_TOP = FY + 3;            // intact wall height; slab parapet above
 const MID_GATE_HALF = 2;           // gates are 5 wide, on the gravel lanes
-
-// Outer curtain wall: an older, more broken ring between the mid wall and the
-// shell — narrower gates, heavier ruin. No towers; it reads as the castle's
-// crumbling first line.
-const OUTER_R = 38;
-const OUTER_TOP = FY + 3;
-const OUTER_GATE_HALF = 1;         // gates are 3 wide
 
 // Roof: plank beams over a glass-major skylight at ROOF_LEVEL (the Playroom
 // rule — glass keeps the per-column skylight alive; a solid roof would drop
@@ -99,7 +92,7 @@ function layout() {
   if (_layout && _layoutSeed === seed) return _layout;
   const rng = mulberry32((seed ^ 0xba5710) >>> 0);
   const scatter = [];
-  for (let i = 0; i < 90 && scatter.length < 16; i++) {
+  for (let i = 0; i < 60 && scatter.length < 10; i++) {
     const x = Math.floor((rng() * 2 - 1) * (WALL_IN - 4));
     const z = Math.floor((rng() * 2 - 1) * (WALL_IN - 4));
     const cheb = Math.max(Math.abs(x), Math.abs(z));
@@ -107,14 +100,12 @@ function layout() {
     if (Math.abs(x) <= 2 || Math.abs(z) <= 2) continue;              // gate paths
     if (cheb >= WALL_IN - 2) continue;                               // wall footing
     if (Math.abs(cheb - MID_R) <= 1) continue;                       // mid-wall line
-    if (Math.abs(cheb - OUTER_R) <= 1) continue;                     // outer-wall line
     scatter.push({ x, z, block: rng() < 0.35 ? HAY : ANDESITE, tall: rng() < 0.3 });
   }
 
-  // Ruined breaches in the curtain walls: crumbled spans per side, never on
-  // the gates or the mid ring's corner towers. Stored as [{side, at, span}]
-  // where `at` is the tangential offset along that side. The outer ring is
-  // the castle's derelict first line — it gets more, wider breaches.
+  // Ruined breaches in the curtain wall: crumbled spans per side, never on
+  // the gates or the ring's corner towers. Stored as [{side, at, span}]
+  // where `at` is the tangential offset along that side.
   const rollBreaches = (perSideMin, extraP, reach, spanMax) => {
     const out = [];
     for (let side = 0; side < 4; side++) {
@@ -126,10 +117,8 @@ function layout() {
     }
     return out;
   };
-  const breaches = rollBreaches(1, 0.5, 22, 5);      // mid ring: 1–2/side, 3–5 wide
-  const outerBreaches = rollBreaches(2, 0.6, 32, 6); // outer ring: 2–3/side, 3–6 wide
-
-  _layout = { scatter, breaches, outerBreaches };
+  const breaches = rollBreaches(1, 0.5, MID_R - 6, 5); // mid ring: 1–2/side, 3–5 wide
+  _layout = { scatter, breaches };
   _layoutSeed = seed;
   return _layout;
 }
@@ -152,10 +141,6 @@ export function generate(chunk) {
   groundPass(chunk, baseX, baseZ);
   emitWall(chunk, baseX, baseZ);
   emitTunnels(chunk, baseX, baseZ);
-  emitRuinRing(chunk, baseX, baseZ, {
-    r: OUTER_R, top: OUTER_TOP, gateHalf: OUTER_GATE_HALF,
-    breaches: L.outerBreaches, sagP: 0.3, skipCorners: false,
-  });
   emitMidWall(chunk, L, baseX, baseZ);
   emitKeep(chunk, baseX, baseZ);
   emitWallBuys(chunk, baseX, baseZ);

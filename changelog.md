@@ -9,6 +9,57 @@ updated with every merged PR** (and mirror a short player-facing entry in the
 
 ---
 
+## 2026-07-12 — Zombies fun pass: L4D specials, wave scaling, tighter Bastion
+
+Feedback-driven ("not fun enough"): variety, pressure, and pace. Same
+host-authoritative model — all new AI/scaling runs only on the authority;
+guests mirror via the existing mob snapshots (`GhostMobs` builds any type
+from `MOBS[s.t]`, zero netcode changes for new mob types).
+
+- **Per-instance mob multipliers** (`Mob.js`): speed is now
+  `def.speed * (speedMul||1) * (auraSpeedMul||1)`; melee + ranged damage
+  `def.attack * (attackMul||1)`. Set by `ZombiesMode._directWave` at spawn —
+  **never mutate `def`** (shared objects). Wave formulas in `ZombiesMode.js`:
+  `speedMulWave` 1.5x@w1 → 1.0x@w6 (regular mobs only, specials exempt),
+  `dmgMulWave` 1+0.1/wave capped 2.5x, specials get half the `healthMul`
+  inflation.
+- **Four arena-only specials** (`mobTypes.js`, flag `arenaOnly: true` filters
+  them out of the survival `HOSTILE` pool — category stays 'hostile' because
+  aggro/no-flee key off it): `sprinter` (3.2 speed, 12 hp, w2+),
+  `brute` (80 hp, attack 8, `breaksBlocks`, guaranteed on every 5th wave),
+  `spitter` (`ranged` + `projectile:'acid'`, w5+), `screamer`
+  (`keepsDistance` — new mid-range AI branch in Mob.js; 1@w6, 2@w10+).
+- **Brute block-breaking** (Mob.js wall-handling block): while wall-blocked
+  and chasing, breaks ONE block in front of its face every 1.5 s via
+  `world.setBlock(...,0)` — particles + `net.sendEdit` free via `World.onEdit`.
+  Skips `getBlock(id).hardness < 0` (bedrock shell, wall-buys, mystery box —
+  same unbreakable rule as Interaction).
+- **Screamer aura**: recomputed every frame in `_directWave`'s tracked sweep —
+  live non-screamer wave mobs within 12 blocks of a live screamer get
+  `auraSpeedMul = 1.5`, else 1. Dies with the screamer by construction.
+- **Spitter acid**: mob `shoot` ctx (Game.js) takes a trailing `kind`; acid
+  flies at 14 (visible arc) with `onHit → Game._acidSplash` — a
+  `DamageZones.spawn(..., hurtPlayer=true)` pool (r2, 3 dps, 4 s) + a `zone`
+  net message with `hp:1`. **DamageZones extension**: `hurtPlayer` pools tick
+  the LOCAL player on every client (`update(dt, mobs, playerCtx)`) — same
+  trust model as guest-simulated arrows; mob damage stays authority-only.
+  GOTCHA: mob→player projectiles never fire `onHit` on a direct player hit
+  (Projectiles.js) — pools only appear on ground impact, by design.
+- **KILL_POINTS**: sprinter 15, spitter 25, screamer 30, brute 100. Wave
+  composition is now a weight table in `pickType`; guaranteed brutes/screamers
+  are spliced into the front half of the LIFO spawn queue (arrive mid/late wave).
+- **Bastion tightened** (`bastion.js`): `half` 48→36, shell `WALL_IN/OUT`
+  46/48→32/34 (gates now 30 from keep center), `MID_R` 28→22, **outer ruin
+  ring deleted** (no room in the 10-block annulus). Everything else
+  (wall-buys, gates, roof, box) is constant-derived and moved automatically.
+  `arenaTest.js` literals swept to match + outer-wall section removed; both
+  seeds pass.
+- **Dev QoL**: N (localhost) skips the current Zombies phase
+  (`ZombiesMode.devSkip`: build→wave, wave→cleared); Mystery Box rolls
+  exclude guns you own (falls back to full pool = refill when you own all).
+- **PR 2 planned, not shipped**: revive mechanics (L4D downed state) +
+  leaderboard mockup (highest wave/kills/points, local until Supabase auth).
+
 ## 2026-07-11 — #47 Zombies guns: M14, AK-74u, Galil + Mystery Box Ray Gun
 
 Stacked on #46. Guns are **data-driven** via a new `gun` field on items

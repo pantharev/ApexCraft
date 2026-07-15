@@ -6,6 +6,11 @@ import React from 'react';
 
 const CHANGELOG = [
   {
+    date: 'July 15, 2026',
+    title: 'Zombies: Chargers, Tanks & living dead',
+    body: 'Two heavyweights join the horde. The Charger stalks you, rears back with a roar, then rockets across the arena in a dead-straight line — sidestep it and it eats the wall, get caught and you\'ll be sent flying. And every tenth wave the ground shakes: the Tank is a wall of muscle that shrugs off whole magazines, punches through your barricades, and hurls rocks at anyone who thinks distance means safety (250 points if your team can bring it down). The dead also learned to move like the dead: zombies now shamble with arms outstretched and twitching heads, sprinters pump their arms in a full sprint, brutes and tanks lumber with a heavy side-to-side sway, screamers wail with arms overhead, and everything swings its arms in a proper overhead slam when it hits you.',
+  },
+  {
     date: 'July 12, 2026',
     title: 'Zombies: special infected & a fiercer fight',
     body: 'The horde learned new tricks. Four special zombies join the waves: gaunt red-eyed Sprinters that close the distance terrifyingly fast, bloated Spitters that lob arcing acid globs and leave sizzling pools you\'d better not stand in, bone-pale Screamers that hang back and whip every zombie around them into a frenzy until you put them down, and — every fifth wave — a hulking Brute that smashes straight through your barricades one block at a time (only the bedrock shell can stop it). The pacing got a pass too: early waves are small but the zombies come in hot, and every wave hits harder than the last, just like the classics. The Bastion itself was pulled in tighter — the gates are much closer to the keep now, so the pressure never lets up. Kill points scale with the threat: 100 for a Brute, if you can drop it.',

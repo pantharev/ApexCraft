@@ -19,11 +19,12 @@ npm run server   # multiplayer server on :3001 (Express + Socket.IO) — optiona
 There is no lint step and no test runner/framework. The two test suites are plain Node scripts (this is exactly what CI runs, see `.github/workflows/ci.yml`):
 
 ```bash
-node server/test.js          # multiplayer protocol integration test (spins up the server on :3199)
-node src/chess/engineTest.js # chess move-gen perft + bot legality/mate/speed
+node server/test.js             # multiplayer protocol integration test (spins up the server on :3199)
+node src/chess/engineTest.js    # chess move-gen perft + bot legality/mate/speed
+node src/world/arenas/arenaTest.js # arena map structural checks (not in CI — run it when touching src/world/arenas)
 ```
 
-Both print `ok -` / `FAIL -` lines. There is no way to run a single case — edit the script to narrow it.
+They print `ok -` / `FAIL -` lines. There is no way to run a single case — edit the script to narrow it.
 
 CI = `npm run build` + the two scripts above. There is no automated test for the voxel engine itself; verify gameplay changes by running `npm run dev`. **Do not auto-start the dev server** — the user controls it (ask first).
 
@@ -36,12 +37,20 @@ React owns only the menus and HUD overlays. The 3D engine is raw Three.js driven
 - `src/core/Game.js` — the god object. Owns the renderer, scene, camera, the `requestAnimationFrame` loop (`_loop`), and every subsystem (world, player, inventory, vitals, mobs, day/night, projectiles, explosions, chess, furnaces/chests, multiplayer wiring). **Almost all cross-system glue lives here** via callback wiring set up in the constructor.
 - Game → React communication is one-directional through `onX` callback fields that `App.jsx` assigns after construction (`game.onStats`, `onScreenChange`, `onDead`, `onSleep`, `onToast`, …). The loop pushes a stats snapshot to `onStats` every frame; React `setState`s from these. **Never drive the render loop from React state.**
 
+### Game modes
+A world's `mode` is fixed at creation: `survival` (default), `creative`, `hideseek` (Prop Hunt), or `zombies` (co-op wave defense). `Game.js` sets boolean flags (`this.creative/hideseek/zombies`) in the constructor and branches on them throughout — check all four modes when touching input, vitals, spawning, or the day/night clock.
+
+- The two match modes replace procedural terrain with **fixed arena maps** from `src/world/arenas/` (`MAPS`: town, castle, playroom, bastion; selected via `setActiveMap`). Arenas emit unbreakable shells (`hardness < 0`) plus interactive blocks (wall-buys, mystery box).
+- `src/systems/HideSeek.js` + `HideSeekBots.js` and `src/systems/ZombiesMode.js` are **host-authoritative round state machines**: the host runs the FSM and mob waves; guests send intents and mirror synced `match` state. Mode UIs live in `src/ui/HideSeekUI.jsx` / `ZombiesUI.jsx`.
+- Zombies guns are data-driven via a `gun` field on items (`items.json`); magazine state lives in `Game.guns` (client-local, never synced). Mob wave scaling uses per-instance multipliers on `Mob` (`speedMul`/`attackMul`) — **never mutate the shared `def` from `mobTypes.js`**.
+
 ### Chunked voxel world
 - `src/config.js` — all world tuning constants (`CHUNK_SIZE=16`, `WORLD_HEIGHT=128`, `SEA_LEVEL=62`, load/unload radii, LRU cache size).
 - `src/core/World.js` — chunk manager. Per-frame `update(playerX, playerZ, budget)` generates/meshes chunks nearest-first within `LOAD_RADIUS` (budgeted to avoid frame hitches) and unloads beyond `UNLOAD_RADIUS` into an LRU `cache` (preserves edits, skips regen on revisit). `getBlock`/`setBlock` work in global voxel coordinates across chunk boundaries.
 - **Edits map is the source of truth for player changes.** `World.edits` (`"cx,cz"` → `Map(localIndex → blockId)`) is what gets saved, synced over the network, and replayed onto freshly generated terrain. Terrain itself is never saved — it is deterministic from the seed, so saves only store edits + player/inventory/vitals/time. This same chunk-keyed edit form is shared by the save system (`World.serializeEdits`) and the netcode (`Net.encodeEdit`).
 - `src/core/ChunkMesher.js` — greedy mesher. Merges coplanar faces into large quads; the per-face ambient-occlusion pattern is packed into the merge mask key so AO stays exact across merged quads. Non-cube blocks (plants, doors, beds, fences, ladders, panes, slabs, stairs) are in the `SPECIAL` set and drawn by a separate pass, not greedy-meshed. Geometry groups index into a shared per-tile material array; water/lava use their own materials.
 - `src/world/` — generation. `noise.js` holds ~18 independently-seeded simplex fields (terrain, climate, caves, rivers, mountains, rifts…); call `reseed(seed)` before constructing a `Game` (App.jsx does this). `generators/TerrainGen.js` is the entry point and calls into `biomes/`, `generators/` (caves, ores), and `structures/` (trees, villages).
+- `src/systems/Liquids.js` — tick-based water/lava flow. Flow levels are their own block ids; the sim is edge-triggered (only edits/neighbor changes queue ticks) and host-authoritative — flow results propagate as ordinary block edits.
 - `src/systems/TorchLights.js` — dynamic light manager. Three.js point lights are a **hard-capped pool** (10 warm torch + 6 cool glow = 16), assigned to the nearest sources within a scan radius each frame; beyond that, torches/glow flora render but cast no light. Don't add per-source `PointLight`s elsewhere — route new emitters through this pool.
 
 ### Data-driven content
@@ -52,6 +61,7 @@ Blocks, items, recipes, smelting, and mobs are defined in JSON / small JS tables
 - `src/crafting/` — `recipes.json` (shaped/shapeless; grid size decides inventory-2×2 vs table-3×3) and `smelting.json`, run by `CraftingEngine.js` / `Smelting.js`.
 - `src/entities/mobTypes.js` — mob stats + box-part models; spawning is automatic via `systems/MobManager.js`.
 - `src/textures/atlas.js` + `icons.js` + `cracks.js` — procedural canvas textures; a new block needs a `DRAW.*` routine and a `FACE_TILES` entry.
+- Audio is procedural too: `src/systems/Sound.js` (effects, Web Audio) and `Music.js` + `tracks.js` (Tone.js soundtrack composed in code, rotated by day/night/cave context).
 
 ### Multiplayer (host-authoritative)
 - `server/index.js` — Express + Socket.IO **relay only**. Manages rooms (5-letter codes), accumulates per-room block edits so late joiners get the full world (seed + edits), and relays player state / mobs / projectiles / chess / explosions. Serves `dist/` if built, so one deploy hosts both. Picks a new host on disconnect (host migration).
@@ -59,7 +69,7 @@ Blocks, items, recipes, smelting, and mobs are defined in JSON / small JS tables
 - In `Game.js`, the loop branches on `this.net && !this.net.isHost` (guest) vs host/single-player throughout — e.g. `_mobApi()` returns ghost mobs for guests, real mobs otherwise. Keep this distinction in mind when touching simulation code.
 
 ### Persistence
-`src/systems/Storage.js` saves to IndexedDB. `Game.serialize()` bundles seed + edits + player + vitals + inventory + furnaces + chests + chess + time. Autosaves every 15s, on tab close, and via the pause menu. A world's `mode` (`survival`/`creative`) and seed are fixed at creation.
+`src/systems/Storage.js` saves to IndexedDB. `Game.serialize()` bundles seed + edits + player + vitals + inventory + furnaces + chests + chess + time. Autosaves every 15s, on tab close, and via the pause menu. A world's `mode` and seed are fixed at creation.
 
 ## Conventions
 - ES modules throughout, `.js`/`.jsx`, Node ≥ 20, `"type": "module"`.

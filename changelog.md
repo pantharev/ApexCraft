@@ -9,6 +9,47 @@ updated with every merged PR** (and mirror a short player-facing entry in the
 
 ---
 
+## 2026-07-15 — Charger + Tank specials, shared gait/animation system
+
+Two more L4D-style specials plus a body-animation pass for all zombie-type
+mobs, mirrored on multiplayer ghosts. Zero new net messages.
+
+- **Shared animation** (`MobModels.js animateMob(m, dt, moving)`): called by
+  both `Mob.update` and `GhostMobs.update` AFTER the group is synced to the
+  mob position (bob/sway are ADDED on top). Driven by a new `gait` field on
+  mob defs (`shamble` | `run` | `heavy` | `raised`) and `arm: true` parts,
+  which get shoulder pivots exactly like legs (`userData.arms`). Gaits set
+  arm poses (zombie reach, run pump, heavy swing, banshee overhead), walk
+  bob, torso sway (`group.rotation.z` — safe: the death tip-over only touches
+  it on dead mobs, and animateMob never runs on them), forward lean
+  (`rotation.x`), and a head twitch for shamblers (head `rotation.z` only;
+  the look-at logic owns x/y). `m.attackTimer > 0` = overhead arm slam —
+  Mob's lunge block now decrements attackTimer even with `_lungeDir == null`
+  (tank rock throws set it for the heave alone; without that fix the arms
+  stick raised forever). Mobs without a gait (passives, villagers, bats,
+  skeleton) keep the plain leg swing.
+- **Charger** (`charges: true`, w7+ at 10% weight): per-instance FSM `_ch`
+  (stalk → windup 0.7 s with `Sound.angry()` + tremble → charge 1.3 s at
+  `speed*3.4` along a LOCKED direction → stun). Wall contact during a charge
+  is intercepted in Mob's wall-handling block BEFORE the auto-hop (1.4 s
+  daze). A hit = full damage + **power-16 knockback**; point-blank in stalk
+  it swipes at half damage so it's never helpless.
+- **Knockback power plumbing, no net changes**: `ctx.attackPlayer(dmg,
+  fromPos, power)` → MobManager → Game `attackPlayer(dmg, id, kdir, power)`.
+  Local: `player.knockback(x, z, power || 7)`. Remote: power is encoded as
+  the **kdir vector magnitude** (ordinary melee sends raw position diffs,
+  length < 2), decoded in `onHitPlayer` as `max(7, hypot(kx, kz))`.
+- **Tank** (`throwsRocks` + `breaksBlocks`, guaranteed on every 10th wave,
+  REPLACING that wave's brute): 250 hp base (specials get half wave HP
+  inflation → ~420 at w10), speed 1.9, attack 10, hw 0.7 (fits the gates,
+  smashes what doesn't). At range 7–26 it hurls a `rock` projectile every
+  4 s at 0.6× attack (new `Projectiles.mats/scales` entry, speed 15 in
+  Game's shoot ctx, arcs under the standard projectile gravity; guests get
+  it via the existing sendProjectile kind pass-through). KILL_POINTS:
+  charger 40, tank 250.
+- GOTCHA: `def` is shared — all charger/tank state (`_ch`, `_rockCd`) is
+  per-instance, same rule as speedMul/attackMul.
+
 ## 2026-07-12 — Zombies fun pass: L4D specials, wave scaling, tighter Bastion
 
 Feedback-driven ("not fun enough"): variety, pressure, and pace. Same

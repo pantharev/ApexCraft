@@ -331,7 +331,9 @@ export class Game {
       net.onTaunt = (m) => { if (m) this.playTauntFx(m.id, m.taunt); };
       net.onHitPlayer = (dmg, kx, kz) => {
         this.vitals.damage(dmg);
-        if (kx || kz) this.player.knockback(kx, kz);
+        // Shove strength rides as the vector magnitude when it beats the
+        // default 7 (charger slam) — ordinary melee kdirs are length < 2.
+        if (kx || kz) this.player.knockback(kx, kz, Math.max(7, Math.hypot(kx, kz)));
       };
       net.onMobHit = (m) => { // a guest hit one of our simulated mobs
         const mob = this.mobs.byId(m.i);
@@ -1327,18 +1329,26 @@ export class Game {
               .filter((pl) => this._playerTargetable(pl.id))
           : (this.zombiesMode && this.vitals.dead ? [] : null),
         isNight: this.dayNight.isNight,
-        attackPlayer: (dmg, id = 'self', kdir = null) => {
+        attackPlayer: (dmg, id = 'self', kdir = null, power = 0) => {
           if (id === 'self' || !this.net) {
             this.vitals.damage(dmg);
-            if (kdir) this.player.knockback(kdir.x, kdir.z);
+            if (kdir) this.player.knockback(kdir.x, kdir.z, power || 7);
           } else {
             // Melee hit on a remote player; they apply their own knockback.
-            this.net.sendHitPlayer(id, dmg, kdir);
+            // A shove stronger than the default (charger slam) rides as the
+            // kdir magnitude — knockback() normalizes direction, and plain
+            // hits send raw position diffs (length < 2), so onHitPlayer can
+            // decode power as max(7, |kdir|) with no new net fields.
+            const kl = kdir ? Math.hypot(kdir.x, kdir.z) || 1 : 1;
+            this.net.sendHitPlayer(id, dmg, kdir && power
+              ? { x: (kdir.x / kl) * power, z: (kdir.z / kl) * power }
+              : kdir);
           }
         },
         shoot: (sx, sy, sz, dx, dy, dz, dmg, kind) => {
-          // Acid globs (spitter) fly slower — a readable, dodgeable arc.
-          const speed = kind === 'acid' ? 14 : 22;
+          // Acid globs (spitter) and rocks (tank) fly slower — a readable,
+          // dodgeable arc.
+          const speed = kind === 'acid' ? 14 : kind === 'rock' ? 15 : 22;
           this.projectiles.spawn(sx, sy, sz, new THREE.Vector3(dx, dy, dz), speed, dmg, 'player', {
             kind,
             // Only the authority owns onHit, so exactly one pool per glob;

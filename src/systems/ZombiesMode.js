@@ -20,7 +20,7 @@ const DETECT_ALL = 999;      // wave mobs hunt across the whole arena
 // Per-kill points by mob type, plus a bonus for surviving the wave.
 export const KILL_POINTS = {
   zombie: 10, spider: 15, skeleton: 20, creeper: 25,
-  sprinter: 15, spitter: 25, screamer: 30, brute: 100,
+  sprinter: 15, spitter: 25, screamer: 30, charger: 40, brute: 100, tank: 250,
 };
 const WAVE_BONUS_ALIVE = 50;
 const WAVE_BONUS_DEAD = 25;
@@ -57,11 +57,13 @@ const BOX_WEIGHTS = [['ray_gun', 0.15], ['m14', 0.30], ['ak74u', 0.275], ['galil
 
 // Wave composition: how many, and what mix. Spiders climb walls (anti-turtle),
 // skeletons answer pillar-towers, creepers crack sealed boxes open, sprinters
-// keep the early waves honest, spitters flush out campers.
+// keep the early waves honest, spitters flush out campers, chargers punish
+// standing still in the open.
 function waveTotal(wave) { return Math.min(6 + wave * 3, 45); }
 function pickType(wave, rng) {
   let r = rng();
   for (const [t, w] of [
+    ['charger', wave >= 7 ? 0.10 : 0],
     ['creeper', wave >= 8 ? 0.08 : 0],
     ['skeleton', wave >= 6 ? 0.12 : 0],
     ['spitter', wave >= 5 ? 0.12 : 0],
@@ -348,16 +350,18 @@ export class ZombiesMode {
     // Build the spawn queue for this wave (Math.random is fine — the queue
     // lives only on the authority; guests just see the mobs).
     const total = waveTotal(s.wave);
-    // Guaranteed specials: a brute mini-boss every 5th wave, screamers from
-    // wave 6 (two from wave 10). Spliced into the FRONT half — the queue is
-    // consumed LIFO via .pop(), so they arrive mid/late wave.
-    const brutes = s.wave >= 5 && s.wave % 5 === 0 ? 1 : 0;
+    // Guaranteed specials: a brute mini-boss every 5th wave — upgraded to a
+    // Tank on every 10th — and screamers from wave 6 (two from wave 10).
+    // Spliced into the FRONT half — the queue is consumed LIFO via .pop(),
+    // so they arrive mid/late wave.
+    const tanks = s.wave >= 10 && s.wave % 10 === 0 ? 1 : 0;
+    const brutes = !tanks && s.wave >= 5 && s.wave % 5 === 0 ? 1 : 0;
     const screamers = s.wave >= 6 ? Math.min(2, 1 + Math.floor((s.wave - 6) / 4)) : 0;
     this._queue = [];
-    for (let i = 0; i < total - brutes - screamers; i++) this._queue.push(pickType(s.wave, Math.random));
-    for (let i = 0; i < brutes + screamers; i++) {
+    for (let i = 0; i < total - tanks - brutes - screamers; i++) this._queue.push(pickType(s.wave, Math.random));
+    for (let i = 0; i < tanks + brutes + screamers; i++) {
       const at = Math.floor(Math.random() * Math.max(1, this._queue.length / 2));
-      this._queue.splice(at, 0, i < brutes ? 'brute' : 'screamer');
+      this._queue.splice(at, 0, i < tanks ? 'tank' : i < tanks + brutes ? 'brute' : 'screamer');
     }
     s.total = total;
     s.remaining = total;

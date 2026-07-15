@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { isSolid, getBlock } from '../blocks/BlockRegistry.js';
 import { WORLD_HEIGHT } from '../config.js';
 import { MOBS } from './mobTypes.js';
-import { buildMobModel } from './MobModels.js';
+import { buildMobModel, animateMob } from './MobModels.js';
 import { Sound } from '../systems/Sound.js';
 
 const GRAVITY = 26;
@@ -60,6 +60,7 @@ export class Mob {
 
     this.group = buildMobModel(type);
     this.legs = this.group.userData.legs || [];
+    this.arms = this.group.userData.arms || [];
     this.head = this.group.userData.head || null;
     // Collect every mesh (including head sub-parts) for tint/fade effects.
     this.parts = [];
@@ -221,6 +222,56 @@ export class Mob {
           ctx.shoot(sx, sy, sz, ax / al, ay / al, az / al, def.attack * (this.attackMul || 1), def.projectile);
           this.attackCooldown = 2;
         }
+      } else if (def.charges) {
+        // Charger: stalk, roar + rear back, then rocket along a LOCKED line —
+        // sidestep to dodge. A clean hit is full damage plus a huge shove
+        // (power 16 vs the default 7); slamming a wall ends the charge in a
+        // daze (see the wall-handling block below).
+        const ch = this._ch || (this._ch = { state: 'stalk', t: 0, cd: 0 });
+        ch.cd = Math.max(0, ch.cd - dt);
+        if (ch.state === 'stalk') {
+          this.heading = { x: dx / d, z: dz / d };
+          if (d < this.hw + 1.0 && Math.abs(dy) < 1.6) {
+            // Point-blank it swipes like a regular melee mob (half strength).
+            this.heading = null;
+            if (this.attackCooldown === 0 && ctx.attackPlayer) {
+              ctx.attackPlayer(def.attack * 0.5 * (this.attackMul || 1), this.pos);
+              this.attackCooldown = 1;
+              this.attackTimer = 0.25;
+              this._lungeDir = { x: dx / d, z: dz / d };
+              this.targetYaw = Math.atan2(dx, dz);
+            }
+          } else if (ch.cd === 0 && d > 4 && d < 15 && Math.abs(dy) < 3 && this.onGround) {
+            ch.state = 'windup';
+            ch.t = 0.7;
+            Sound.angry();
+          }
+        } else if (ch.state === 'windup') {
+          this.heading = null;
+          this.targetYaw = Math.atan2(dx, dz); // tracks while rearing back
+          ch.t -= dt;
+          if (ch.t <= 0) {
+            ch.state = 'charge';
+            ch.t = 1.3;
+            ch.dir = { x: dx / d, z: dz / d }; // locked in
+          }
+        } else if (ch.state === 'charge') {
+          ch.t -= dt;
+          this.heading = ch.dir;
+          speed = def.speed * 3.4 * (this.speedMul || 1) * (this.auraSpeedMul || 1);
+          if (d < this.hw + 1.1 && Math.abs(dy) < 1.8 && ctx.attackPlayer) {
+            ctx.attackPlayer(def.attack * (this.attackMul || 1), this.pos, 16);
+            this.attackTimer = 0.25;
+            this._lungeDir = { x: dx / d, z: dz / d };
+            ch.state = 'stun'; ch.t = 1.0; ch.cd = 5;
+          } else if (ch.t <= 0) {
+            ch.state = 'stun'; ch.t = 0.6; ch.cd = 4; // whiffed
+          }
+        } else { // stun
+          this.heading = null;
+          ch.t -= dt;
+          if (ch.t <= 0) ch.state = 'stalk';
+        }
       } else if (def.keepsDistance) {
         // Screamer: lurk mid-range and let the buffed horde do the work —
         // but swipe back if cornered.
@@ -238,6 +289,20 @@ export class Mob {
         // Melee: chase, attack when within reach (and vertically close so a mob
         // on the ground can't hit a player perched on a pillar above).
         this.heading = { x: dx / d, z: dz / d };
+        // Tank: out of punching range, it heaves a rock instead — a slow,
+        // readable arc (Projectiles gravity does the rest).
+        if (def.throwsRocks && ctx.shoot) {
+          this._rockCd = Math.max(0, (this._rockCd ?? 2) - dt);
+          if (this._rockCd === 0 && d > 7 && d < 26) {
+            this._rockCd = 4;
+            this.attackTimer = 0.3; // arm heave (animateMob's slam pose)
+            const sx = this.pos.x, sy = this.pos.y + this.h * 0.8, sz = this.pos.z;
+            let ax = player.x - sx, ay = (player.y + 1.2) - sy + d * 0.06, az = player.z - sz;
+            const al = Math.hypot(ax, ay, az) || 1;
+            ctx.shoot(sx, sy, sz, ax / al, ay / al, az / al, def.attack * 0.6 * (this.attackMul || 1), 'rock');
+            Sound.rumble();
+          }
+        }
         if (d < this.hw + 1.0 && Math.abs(dy) < 1.6) {
           this.heading = null;
           if (this.attackCooldown === 0 && ctx.attackPlayer) {
@@ -343,7 +408,12 @@ export class Mob {
     }
     // Wall handling while moving: spiders climb, everyone else auto-hops a step.
     if ((blockedX || blockedZ) && this.heading) {
-      if (def.climbs) {
+      if (this._ch && this._ch.state === 'charge') {
+        // Full tilt into a wall: the charge ends in a heap.
+        this._ch.state = 'stun'; this._ch.t = 1.4; this._ch.cd = 5;
+        this.heading = null;
+        Sound.rumble();
+      } else if (def.climbs) {
         this.vel.y = 4; // scale the wall
         this.onGround = false;
       } else if (this.onGround) {
@@ -405,22 +475,31 @@ export class Mob {
       this.head.rotation.x += (hp - this.head.rotation.x) * k;
     }
 
-    // Attack lunge: nudge the model toward the player and back.
-    if (this.attackTimer > 0 && this._lungeDir) {
+    // Attack lunge: nudge the model toward the player and back. The timer
+    // also drives the arm slam in animateMob, so it ticks down even without
+    // a lunge direction (tank rock throws set it for the heave alone).
+    if (this.attackTimer > 0) {
       this.attackTimer -= dt;
-      const t = Math.sin(Math.max(0, this.attackTimer) / 0.25 * Math.PI) * 0.35;
-      this.group.position.x += this._lungeDir.x * t;
-      this.group.position.z += this._lungeDir.z * t;
+      if (this._lungeDir) {
+        const t = Math.sin(Math.max(0, this.attackTimer) / 0.25 * Math.PI) * 0.35;
+        this.group.position.x += this._lungeDir.x * t;
+        this.group.position.z += this._lungeDir.z * t;
+      }
     }
 
     const moving = Math.abs(this.vel.x) + Math.abs(this.vel.z) > 0.5;
-    if (moving) {
-      this.walkPhase += dt * 8;
-      for (let i = 0; i < this.legs.length; i++) {
-        this.legs[i].rotation.x = Math.sin(this.walkPhase + i * Math.PI) * 0.5;
+    animateMob(this, dt, moving);
+
+    // Charger body language on top of the gait: rear back + tremble during
+    // the windup, lean hard into the charge.
+    if (this._ch) {
+      if (this._ch.state === 'windup') {
+        this.group.rotation.x -= 0.4;
+        this.group.position.x += (Math.random() - 0.5) * 0.05;
+        this.group.position.z += (Math.random() - 0.5) * 0.05;
+      } else if (this._ch.state === 'charge') {
+        this.group.rotation.x += 0.35;
       }
-    } else {
-      for (const l of this.legs) l.rotation.x *= 0.8;
     }
   }
 

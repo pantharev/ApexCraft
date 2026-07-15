@@ -267,12 +267,14 @@ export class MobManager {
         threat,
         isNight: ctx.isNight,
         // fromPos (the mob) -> knockback direction for whoever got hit.
-        attackPlayer: (dmg, fromPos) => {
+        // power (optional) overrides the default shove strength (charger slam).
+        attackPlayer: (dmg, fromPos, power = 0) => {
           if (victim) { victim.takeDamage(dmg, fromPos || mob.pos); return; }
           if (mob.def.category === 'golem') return; // golems never hit players
           ctx.attackPlayer(
             dmg, near.id,
-            fromPos ? { x: near.pos.x - fromPos.x, z: near.pos.z - fromPos.z } : null
+            fromPos ? { x: near.pos.x - fromPos.x, z: near.pos.z - fromPos.z } : null,
+            power
           );
         },
         shoot: ctx.shoot,

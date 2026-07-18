@@ -99,11 +99,22 @@ try {
   guest.emit('projectile', { x: 0, y: 70, z: 0, dx: 1, dy: 0, dz: 0, speed: 30, dmg: 0, target: 'none' });
   ok((await projP).speed === 30, 'projectile spawn relays');
 
-  // --- explosions relay ---
+  // --- explosions relay (with optional shooter attribution) ---
   const boomP = once(guest, 'boom');
   host.emit('boom', { x: 10, y: 65, z: -4, r: 3.4 });
   const bm = await boomP;
   ok(bm.x === 10 && bm.r === 3.4, 'explosion event relays to the room');
+  const boomP2 = once(host, 'boom');
+  guest.emit('boom', { x: 1, y: 65, z: 1, r: 1.7, by: guest.id });
+  const bm2 = await boomP2;
+  ok(bm2.by === guest.id, 'explosion `by` attribution passes through');
+
+  // --- damage zones (venom arrows): relay with server-stamped owner ---
+  const zoneP = once(host, 'zone');
+  guest.emit('zone', { x: 5, y: 65, z: 5, r: 2.5, dps: 4, ttl: 6, owner: 'spoofed' });
+  const zn = await zoneP;
+  ok(zn.r === 2.5 && zn.dps === 4 && zn.ttl === 6, 'damage zone relays to the room');
+  ok(zn.owner === guest.id, 'zone owner is stamped by the server (spoof ignored)');
 
   // --- hit routing: host -> specific player, guest -> host ---
   const hitP = once(guest, 'hitPlayer');
@@ -114,7 +125,8 @@ try {
   const mobHitP = once(host, 'mobHit');
   guest.emit('mobHit', { i: 9, dmg: 5, x: 1, y: 2, z: 3 });
   const mh = await mobHitP;
-  ok(mh.i === 9 && mh.dmg === 5 && mh.from === guest.id, 'guest mob hit routes to the host with sender id');
+  ok(mh.i === 9 && mh.dmg === 5, 'guest mob hit routes to the host');
+  ok(mh.from === guest.id, 'mob hit carries the sender id (kill attribution)');
 
   // --- pet actions: guest tame/feed/sit intent -> host ---
   const petP = once(host, 'petAction');
@@ -163,6 +175,16 @@ try {
   const timeP = once(guest, 'time');
   host.emit('time', 0.77);
   ok(Math.abs((await timeP) - 0.77) < 1e-9, 'world clock relays from host');
+
+  // --- zombies mode is whitelisted end-to-end ---
+  const zHost = io(URL);
+  const zr = await ack(zHost, 'host', { name: 'Z', seed: 1, mode: 'zombies', map: 'bastion' });
+  const zGuest = io(URL);
+  const zj = await ack(zGuest, 'join', { code: zr.code, name: 'ZG' });
+  ok(zj.mode === 'zombies' && zj.map === 'bastion', 'zombies mode + map round-trip through host/join');
+  zHost.disconnect();
+  zGuest.disconnect();
+  await wait(50);
 
   // --- host migration ---
   const becomeHostP = once(guest, 'becomeHost');

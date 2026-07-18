@@ -42,8 +42,10 @@ export class MobManager {
     this.spawnTimer = 2;
     this.caveSpawnTimer = 3; // offset from surface timer to avoid same-frame bursts
     this.villagerTimer = 3;
-    // Ambient spawning + distance despawn. Off in creative, where mobs exist
-    // only when placed with spawner items (and shouldn't vanish behind you).
+    // Ambient spawning + far-despawn. Off in zombies mode (the wave director
+    // is the only spawner, and gate mobs must survive being far from a team
+    // huddled at the opposite wall) and in creative (mobs exist only when
+    // placed with spawner items, and shouldn't vanish behind you).
     this.autoSpawn = true;
   }
 
@@ -285,13 +287,17 @@ export class MobManager {
         targetPos = victim ? victim.pos : mob.pos; // no prey -> just wander
       } else if (mob.type === 'wolf' && mob.owner && !mob.sitting && ownerPos) {
         // Wolf assist: avenge the owner. Candidates are mobs only (never
-        // players) and never anyone's pet.
+        // players) and never anyone's pet. Attribution stamps use _selfPid()
+        // (socket id online) while the host's pets are owned by 'self' —
+        // canon() folds the two into one identity.
+        const canon = (pid) => (pid === ctx.selfPid ? 'self' : pid);
+        const owner = canon(mob.owner);
         const now = performance.now() / 1000;
         let bestSq = ASSIST_RANGE * ASSIST_RANGE;
         for (const c of this.mobs) {
           if (c === mob || c.dead || c.owner) continue;
-          const hitByOwner = c.lastHitBy === mob.owner && now - (c.lastHitAt ?? -Infinity) < REVENGE_WINDOW;
-          const hurtOwner = c._hurtPid === mob.owner && now - (c._hurtT ?? -Infinity) < REVENGE_WINDOW;
+          const hitByOwner = canon(c.lastHitBy) === owner && now - (c.lastHitAt ?? -Infinity) < REVENGE_WINDOW;
+          const hurtOwner = canon(c._hurtPid) === owner && now - (c._hurtT ?? -Infinity) < REVENGE_WINDOW;
           if (!hitByOwner && !hurtOwner) continue;
           if (distSq(c, ownerPos) > ASSIST_LEASH * ASSIST_LEASH) continue;
           const d2 = distSq(mob, c.pos);
@@ -335,7 +341,8 @@ export class MobManager {
         threat,
         isNight: ctx.isNight,
         // fromPos (the mob) -> knockback direction for whoever got hit.
-        attackPlayer: (dmg, fromPos) => {
+        // power (optional) overrides the default shove strength (charger slam).
+        attackPlayer: (dmg, fromPos, power = 0) => {
           if (victim) { victim.takeDamage(dmg, fromPos || mob.pos); return; }
           if (mob.owner) return; // pets never hit players
           if (mob.def.category === 'golem') return; // golems never hit players
@@ -344,7 +351,8 @@ export class MobManager {
           mob._hurtT = performance.now() / 1000;
           ctx.attackPlayer(
             dmg, near.id,
-            fromPos ? { x: near.pos.x - fromPos.x, z: near.pos.z - fromPos.z } : null
+            fromPos ? { x: near.pos.x - fromPos.x, z: near.pos.z - fromPos.z } : null,
+            power
           );
         },
         shoot: ctx.shoot,
@@ -366,7 +374,8 @@ export class MobManager {
       } else if (!mob.dead && (mob.owner
         ? mob.pos.y < -30 // pets never distance-despawn; only a void fall with the owner offline ends them
         : ((this.autoSpawn && nearSq > DESPAWN * DESPAWN) || mob.pos.y < -10))) {
-        // Despawn only when far from *every* player.
+        // Despawn only when far from *every* player (never in wave mode —
+        // a gate mob across the arena is still part of the wave).
         mob.removed = true;
       }
     }

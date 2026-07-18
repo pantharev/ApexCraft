@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { MOBS } from '../entities/mobTypes.js';
-import { buildMobModel } from '../entities/MobModels.js';
+import { buildMobModel, animateMob } from '../entities/MobModels.js';
 import { rayAABB } from '../systems/MobManager.js';
 import { nameTag } from './RemotePlayers.js';
 
@@ -103,6 +103,7 @@ export class GhostMobs {
       target: null,
       group,
       legs: group.userData.legs || [],
+      arms: group.userData.arms || [],
       parts: [],
       walkPhase: 0,
       hurtTimer: 0,
@@ -186,21 +187,20 @@ export class GhostMobs {
         g.group.position.copy(g.pos);
         g.group.rotation.y = g.yaw;
 
+        // Shared gait animation (arms/bob/sway) so ghosts move like the
+        // host's real mobs. Must run after the group sync above — it adds
+        // bob/sway on top of the synced transform.
         const speed = Math.hypot(dx, dz) / Math.max(dt, 1e-4) * k;
         if (g.sitting && speed <= 0.4) {
-          // Mirror the host's sitting pose: folded legs, dropped haunches.
+          // Mirror the host's sitting pose (folded legs, dropped haunches) —
+          // it replaces the gait, which would relax the legs back to standing.
           for (let i = 0; i < g.legs.length; i++) {
             const target = i < 2 ? 1.3 : -1.3;
             g.legs[i].rotation.x += (target - g.legs[i].rotation.x) * Math.min(1, dt * 8);
           }
           g.group.position.y -= 0.12;
-        } else if (speed > 0.4) {
-          g.walkPhase += dt * 8;
-          for (let i = 0; i < g.legs.length; i++) {
-            g.legs[i].rotation.x = Math.sin(g.walkPhase + i * Math.PI) * 0.5;
-          }
         } else {
-          for (const l of g.legs) l.rotation.x *= 0.8;
+          animateMob(g, dt, speed > 0.4);
         }
       }
       if (g.hurtTimer > 0) {

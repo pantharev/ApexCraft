@@ -353,10 +353,50 @@
     "maxStack": 64
   },
   {
+    "name": "arrow_explosive",
+    "display": "Exploding Arrow",
+    "color": "#e0622a",
+    "maxStack": 64
+  },
+  {
+    "name": "arrow_venom",
+    "display": "Venom Arrow",
+    "color": "#5ac83a",
+    "maxStack": 64
+  },
+  {
     "name": "bow",
     "display": "Bow",
     "color": "#8a6a36",
     "maxStack": 1
+  },
+  {
+    "name": "m14",
+    "display": "M14",
+    "color": "#7a5a30",
+    "maxStack": 1,
+    "gun": { "auto": false, "dmg": 9, "rpm": 300, "mag": 8, "reserve": 64, "speed": 90, "spread": 0.01, "reload": 1.6 }
+  },
+  {
+    "name": "ak74u",
+    "display": "AK-74u",
+    "color": "#4a4438",
+    "maxStack": 1,
+    "gun": { "auto": true, "dmg": 4, "rpm": 700, "mag": 20, "reserve": 160, "speed": 80, "spread": 0.03, "reload": 1.8 }
+  },
+  {
+    "name": "galil",
+    "display": "Galil",
+    "color": "#3a3f46",
+    "maxStack": 1,
+    "gun": { "auto": true, "dmg": 6, "rpm": 600, "mag": 35, "reserve": 280, "speed": 90, "spread": 0.02, "reload": 2.2 }
+  },
+  {
+    "name": "ray_gun",
+    "display": "Ray Gun",
+    "color": "#3ad24a",
+    "maxStack": 1,
+    "gun": { "auto": false, "dmg": 12, "rpm": 180, "mag": 20, "reserve": 160, "speed": 40, "spread": 0, "reload": 2.5, "boom": 1.6 }
   },
   {
     "name": "wool",

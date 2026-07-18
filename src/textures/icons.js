@@ -397,6 +397,25 @@ function drawBucket(ctx, fillHex) {
   }
 }
 
+// Side-on fish: oval body, forked tail, pale belly, one dark eye pixel.
+function drawFish(ctx, color) {
+  const dark = shade(color, 0.7), belly = lighten(color, 0.35);
+  for (let x = 2; x <= 10; x++) {
+    // Body tapers at the nose and toward the tail.
+    const half = x <= 3 ? 1 : x >= 9 ? 1 : 2;
+    for (let y = 8 - half; y <= 8 + half; y++) {
+      px(ctx, x, y, y >= 8 + half - (half > 1 ? 1 : 0) ? belly : x >= 9 ? dark : color);
+    }
+  }
+  // Forked tail.
+  px(ctx, 11, 8, dark);
+  px(ctx, 12, 7, dark); px(ctx, 12, 9, dark);
+  px(ctx, 13, 6, dark); px(ctx, 13, 7, dark); px(ctx, 13, 9, dark); px(ctx, 13, 10, dark);
+  // Dorsal fin and eye.
+  px(ctx, 5, 5, dark); px(ctx, 6, 5, dark); px(ctx, 7, 5, dark);
+  px(ctx, 4, 7, '#1a2430');
+}
+
 const MEATS = new Set(['raw_porkchop', 'cooked_porkchop', 'raw_beef', 'cooked_beef', 'raw_mutton', 'cooked_mutton', 'rotten_flesh']);
 const GEMS = new Set(['diamond', 'emerald', 'lapis', 'redstone']);
 const LUMPS = new Set(['coal', 'charcoal', 'raw_iron', 'raw_gold', 'clay_ball', 'gunpowder']);
@@ -417,6 +436,7 @@ function drawItem(def) {
   else if (name === 'stick') drawStick(ctx);
   else if (name === 'apple') drawApple(ctx, color);
   else if (name === 'raw_chicken' || name === 'cooked_chicken') drawDrumstick(ctx, color);
+  else if (name === 'raw_fish') drawFish(ctx, color);
   else if (MEATS.has(name)) drawMeat(ctx, color);
   else if (name === 'feather') drawFeather(ctx);
   else if (name === 'bone') drawBone(ctx);

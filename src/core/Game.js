@@ -175,6 +175,11 @@ export class Game {
       if (this.creative) return;
       this.inventory.consumeSelected(1);
       this.inventory.addItem(action === 'fill' ? `${kind}_bucket` : 'bucket', 1);
+      // Scooping water sometimes nets a fish — the only fish source (tames cats).
+      if (action === 'fill' && kind === 'water' && Math.random() < 0.2) {
+        this.inventory.addItem('raw_fish', 1);
+        if (this.onToast) this.onToast('You caught a fish!');
+      }
     };
     this.vitals.onDeath = () => this._handleDeath();
     this.onPlayerHurt = null; // React red-flash callback

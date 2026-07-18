@@ -69,6 +69,19 @@ export class MobManager {
     return mob;
   }
 
+  // Recreate a saved tamed pet (world load): spawn it and restore tame state.
+  // rec: { t, x, y, z, hp, owner, name, sitting }.
+  spawnPet(rec) {
+    if (!MOBS[rec.t] || !MOBS[rec.t].tamable) return null; // stale/corrupt save
+    const mob = this._spawn(rec.t, rec.x, rec.y, rec.z);
+    mob.health = rec.hp ?? mob.def.health;
+    mob.owner = rec.owner ?? null;
+    mob.ownerName = rec.name ?? null;
+    mob.sitting = !!rec.sitting;
+    mob.setTag(mob.ownerName ? `♥ ${mob.ownerName}` : '♥');
+    return mob;
+  }
+
   // Villages repopulate while a player is nearby: a few villagers around the
   // well (leashed to it) up to a small cap, plus one iron golem on patrol.
   _trySpawnVillagers(players) {

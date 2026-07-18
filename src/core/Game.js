@@ -497,6 +497,19 @@ export class Game {
       this.player.spawnAtSurface();
     }
 
+    // Restore tamed pets — after pregen so their chunks exist, host/SP only
+    // (guests mirror the host's mobs). A guest's pet loads orphaned + sitting
+    // and rebinds when that player rejoins.
+    if (this._save?.pets && !this.creative && !this.hideseek && (!net || net.isHost)) {
+      for (const r of this._save.pets) {
+        this.mobs.spawnPet({
+          t: r.t, x: r.x, y: r.y, z: r.z, hp: r.hp, name: r.name,
+          owner: r.own ? 'self' : null,
+          sitting: r.own ? !!r.sit : true,
+        });
+      }
+    }
+
     this.clock = new THREE.Clock();
     this._autosaveTimer = 0;
     this._running = false;
@@ -829,6 +842,15 @@ export class Game {
       furnaces: this.furnaces.serialize(),
       chests: this.chests.serialize(),
       jukeboxes: Object.fromEntries(this.jukeboxes),
+      // Tamed pets are the only mobs that persist. `own: 1` = the saving
+      // player's own pet; guests' pets are stored by name and rebind on join.
+      pets: this.mobs.mobs
+        .filter((m) => m.owner && !m.dead)
+        .map((m) => ({
+          t: m.type, x: +m.pos.x.toFixed(1), y: +m.pos.y.toFixed(1), z: +m.pos.z.toFixed(1),
+          hp: m.health, sit: m.sitting ? 1 : 0,
+          own: m.owner === 'self' ? 1 : 0, name: m.ownerName || null,
+        })),
       chess: this.chessGames.serialize(),
       time: this.dayNight.t,
     };

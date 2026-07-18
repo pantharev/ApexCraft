@@ -31,6 +31,7 @@ import { HideSeekBots } from '../systems/HideSeekBots.js';
 import { TAUNTS, tauntById } from '../systems/taunts.js';
 import { getBlockId, isSolid, liquidKind } from '../blocks/BlockRegistry.js';
 import { getItem } from '../items/ItemRegistry.js';
+import { MOBS } from '../entities/mobTypes.js';
 import { SEA_LEVEL } from '../config.js';
 
 // A small starter kit so placement and tools are usable before crafting exists
@@ -181,6 +182,14 @@ export class Game {
         if (this.onToast) this.onToast('You caught a fish!');
       }
     };
+    // Creative spawner items: place a live mob at the targeted cell. Guests
+    // ask the host, who owns the simulation.
+    this.interaction.onSpawnMob = (type, cell) => {
+      if (!this.creative || !MOBS[type]) return;
+      const x = cell.x + 0.5, y = cell.y, z = cell.z + 0.5;
+      if (this.net && !this.net.isHost) this.net.sendSpawnMob({ t: type, x, y, z });
+      else this.mobs.spawnAt(type, x, y, z);
+    };
     this.vitals.onDeath = () => this._handleDeath();
     this.onPlayerHurt = null; // React red-flash callback
     this.vitals.onDamage = () => { if (this.onPlayerHurt) this.onPlayerHurt(); };
@@ -192,6 +201,8 @@ export class Game {
     this.dayNight = new DayNight(this.scene, this.sun, this.hemi, this.camera);
     if (this._save?.time != null) { this.dayNight.t = this._save.time; this.dayNight.update(0); }
     this.mobs = new MobManager(this.world, this.scene, this.itemDrops);
+    // Creative: no ambient mobs or distance despawn — only spawner-item mobs.
+    this.mobs.autoSpawn = !this.creative;
     this.torchLights = new TorchLights(this.scene, this.world);
     this.projectiles = new Projectiles(this.world, this.scene);
     this.particles = new Particles(this.scene);
@@ -331,6 +342,10 @@ export class Game {
         const mob = this.mobs.byId(m.i);
         if (mob) this._petInteract(mob, m.from, m.item, m.action);
       };
+      net.onSpawnMob = (m) => { // a guest used a creative spawner item
+        if (!net.isHost || !m || !this.creative) return;
+        this.mobs.spawnAt(m.t, +m.x || 0, +m.y || 0, +m.z || 0);
+      };
       net.onBecomeHost = () => {
         this.ghostMobs.clear(); // our MobManager takes over
         // Take over the hide & seek simulation from our last-synced state.
@@ -339,6 +354,7 @@ export class Game {
       net.onTime = (t) => { this.dayNight.t = t; };
       this._netT = 0;     // player-state send accumulator (~15 Hz)
       this._mobNetT = 0;  // mob snapshot accumulator (~10 Hz)
+      this._mobsWereLive = false; // creative: was the last sent snapshot non-empty?
       this._timeNetT = 0; // clock sync accumulator (every 5 s)
     }
 
@@ -540,7 +556,7 @@ export class Game {
     // Restore tamed pets — after pregen so their chunks exist, host/SP only
     // (guests mirror the host's mobs). A guest's pet loads orphaned + sitting
     // and rebinds when that player rejoins.
-    if (this._save?.pets && !this.creative && !this.hideseek && (!net || net.isHost)) {
+    if (this._save?.pets && !this.hideseek && (!net || net.isHost)) {
       for (const r of this._save.pets) {
         this.mobs.spawnPet({
           t: r.t, x: r.x, y: r.y, z: r.z, hp: r.hp, name: r.name,
@@ -1032,7 +1048,7 @@ export class Game {
     if (!mob.owner) {
       if (action && action !== 'tame') return true; // raced: owner just left
       if (item !== def.tameItem) return false; // wild + wrong item: not our click
-      if (local) this.inventory.consumeSelected(1);
+      if (local && !this.creative) this.inventory.consumeSelected(1);
       if (Math.random() < 1 / 3) {
         mob.owner = pid;
         mob.ownerName = local ? null : (this.net?.players.get(pid)?.name ?? null);
@@ -1054,7 +1070,7 @@ export class Game {
     const itemDef = item && getItem(item);
     const canFeed = itemDef && def.petFoods?.includes(item) && mob.health < def.health;
     if (canFeed && (!action || action === 'feed')) {
-      if (local) this.inventory.consumeSelected(1);
+      if (local && !this.creative) this.inventory.consumeSelected(1);
       mob.health = Math.min(def.health, mob.health + Math.max(2, (itemDef.food || 1) * 2));
       hearts();
       Sound.eat();
@@ -1079,7 +1095,7 @@ export class Game {
     const label = g.type[0].toUpperCase() + g.type.slice(1);
     if (!g.owner) {
       if (item !== def.tameItem) return false;
-      this.inventory.consumeSelected(1);
+      if (!this.creative) this.inventory.consumeSelected(1);
       this._pendingTameId = g.id;
       this.net.sendPetAction({ i: g.id, action: 'tame', item });
       return true;
@@ -1090,7 +1106,7 @@ export class Game {
     }
     const itemDef = item && getItem(item);
     if (itemDef && def.petFoods?.includes(item) && g.health < def.health) {
-      this.inventory.consumeSelected(1);
+      if (!this.creative) this.inventory.consumeSelected(1);
       this.net.sendPetAction({ i: g.id, action: 'feed', item });
       Sound.eat();
       if (this.onToast) this.onToast(`${label} fed (+health)`);
@@ -1202,8 +1218,9 @@ export class Game {
     if (isGuest) {
       // Guests mirror the host's mob simulation instead of running their own.
       this.ghostMobs.update(dt);
-    } else if (!this.creative && !this.hideseek) {
-      // Creative + hide & seek worlds have no mobs at all, so the simulation is skipped.
+    } else if (!this.hideseek) {
+      // Hide & seek worlds have no mobs at all. Creative ticks the simulation
+      // too, but with autoSpawn off only spawner-item mobs ever exist.
       this.mobs.update(dt, {
         playerPos: this.player.pos,
         // Host: mobs hunt every player in the room.
@@ -1256,11 +1273,17 @@ export class Game {
         });
       }
       if (this.net.isHost) {
-        // Creative and Prop Hunt never simulate mobs — don't stream empty
-        // snapshots at 10 Hz for the whole session.
-        const simMobs = !this.creative && !this.hideseek;
+        // Prop Hunt never simulates mobs. Creative only streams while mobs
+        // exist (plus one empty snapshot to clear guests' ghosts) — don't
+        // broadcast empty snapshots at 10 Hz for a whole mob-less session.
+        const haveMobs = this.mobs.mobs.length > 0;
+        const simMobs = !this.hideseek && (!this.creative || haveMobs || this._mobsWereLive);
         this._mobNetT += dt;
-        if (simMobs && this._mobNetT >= 0.1) { this._mobNetT = 0; this.net.sendMobs(this.mobs.snapshot()); }
+        if (simMobs && this._mobNetT >= 0.1) {
+          this._mobNetT = 0;
+          this.net.sendMobs(this.mobs.snapshot());
+          this._mobsWereLive = haveMobs;
+        }
         this._timeNetT += dt;
         if (this._timeNetT >= 5) { this._timeNetT = 0; this.net.sendTime(this.dayNight.t); }
       }

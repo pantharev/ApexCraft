@@ -123,6 +123,12 @@ try {
   ok(pa.i === 7 && pa.action === 'tame' && pa.item === 'bone' && pa.from === guest.id,
     'guest pet action routes to the host with sender id');
 
+  const spawnP = once(host, 'spawnMob');
+  guest.emit('spawnMob', { t: 'wolf', x: 4.5, y: 70, z: -2.5 });
+  const sm = await spawnP;
+  ok(sm.t === 'wolf' && sm.x === 4.5 && sm.y === 70 && sm.z === -2.5,
+    'guest creative mob spawn routes to the host');
+
   // --- chess routing: guest action -> host; host state -> room ---
   const chessP = once(host, 'chess');
   guest.emit('chess', { action: 'open', key: '1,64,2' });

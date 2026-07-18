@@ -42,6 +42,9 @@ export class MobManager {
     this.spawnTimer = 2;
     this.caveSpawnTimer = 3; // offset from surface timer to avoid same-frame bursts
     this.villagerTimer = 3;
+    // Ambient spawning + distance despawn. Off in creative, where mobs exist
+    // only when placed with spawner items (and shouldn't vanish behind you).
+    this.autoSpawn = true;
   }
 
   count(category) {
@@ -67,6 +70,13 @@ export class MobManager {
     this.scene.add(mob.group);
     this.mobs.push(mob);
     return mob;
+  }
+
+  // Spawn a mob of the given type at a world position (creative spawner
+  // items). Returns the mob, or null for an unknown type.
+  spawnAt(type, x, y, z) {
+    if (!MOBS[type]) return null;
+    return this._spawn(type, x, y, z);
   }
 
   // Recreate a saved tamed pet (world load): spawn it and restore tame state.
@@ -199,26 +209,28 @@ export class MobManager {
       ? ctx.players
       : [{ id: 'self', pos: ctx.playerPos }];
 
-    this.spawnTimer -= dt;
-    if (this.spawnTimer <= 0) {
-      this.spawnTimer = 2;
-      const anchor = players[Math.floor(Math.random() * players.length)];
-      this._trySpawn({ ...ctx, playerPos: anchor.pos });
-    }
+    if (this.autoSpawn) {
+      this.spawnTimer -= dt;
+      if (this.spawnTimer <= 0) {
+        this.spawnTimer = 2;
+        const anchor = players[Math.floor(Math.random() * players.length)];
+        this._trySpawn({ ...ctx, playerPos: anchor.pos });
+      }
 
-    // Cave hostile spawning: runs on its own timer and cap, independent of the
-    // surface hostile pool so daytime caving is always dangerous.
-    this.caveSpawnTimer -= dt;
-    if (this.caveSpawnTimer <= 0) {
-      this.caveSpawnTimer = 3.5;
-      const anchor = players[Math.floor(Math.random() * players.length)];
-      this._trySpawnCave(anchor.pos);
-    }
+      // Cave hostile spawning: runs on its own timer and cap, independent of
+      // the surface hostile pool so daytime caving is always dangerous.
+      this.caveSpawnTimer -= dt;
+      if (this.caveSpawnTimer <= 0) {
+        this.caveSpawnTimer = 3.5;
+        const anchor = players[Math.floor(Math.random() * players.length)];
+        this._trySpawnCave(anchor.pos);
+      }
 
-    this.villagerTimer -= dt;
-    if (this.villagerTimer <= 0) {
-      this.villagerTimer = 4;
-      this._trySpawnVillagers(players);
+      this.villagerTimer -= dt;
+      if (this.villagerTimer <= 0) {
+        this.villagerTimer = 4;
+        this._trySpawnVillagers(players);
+      }
     }
 
     // Census for cross-mob behaviour: zombies hunt villagers, golems hunt
@@ -353,7 +365,7 @@ export class MobManager {
         }
       } else if (!mob.dead && (mob.owner
         ? mob.pos.y < -30 // pets never distance-despawn; only a void fall with the owner offline ends them
-        : (nearSq > DESPAWN * DESPAWN || mob.pos.y < -10))) {
+        : ((this.autoSpawn && nearSq > DESPAWN * DESPAWN) || mob.pos.y < -10))) {
         // Despawn only when far from *every* player.
         mob.removed = true;
       }

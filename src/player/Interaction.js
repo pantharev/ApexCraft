@@ -32,6 +32,7 @@ export class Interaction {
     this.onBucket = null; // called after a bucket fills ('fill', kind) or pours ('pour', kind)
     this.onAttack = null; // returns true if a mob was hit (suppresses mining)
     this.onUseMob = null; // returns true if a mob interaction consumed the right-click
+    this.onSpawnMob = null; // (type, cell) — creative spawner item used on a block face
     this.target = null; // last raycast result
     this.breaking = false;
     this.breakProgress = 0;
@@ -121,6 +122,9 @@ export class Interaction {
     }
     if (this.heldItem && this.heldItem.bucket) {
       this._useBucket(this.heldItem);
+    } else if (this.heldItem && this.heldItem.spawnMob) {
+      // Spawner items use the same free cell block placement would fill.
+      if (this.onSpawnMob && this.target) this.onSpawnMob(this.heldItem.spawnMob, this.target.place);
     } else if (this.selectedBlock) {
       this._place();
     } else if (this.heldFood > 0 && this.onEat) {

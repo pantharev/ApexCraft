@@ -62,6 +62,7 @@ export class Net {
     this.onHitPlayer = null;    // (dmg)
     this.onMobHit = null;       // ({i, dmg, x, y, z, from}) — host only
     this.onPetAction = null;    // ({i, action, item, from}) — pet tame/feed/sit, host only
+    this.onSpawnMob = null;     // ({t, x, y, z}) — creative spawner item, host only
     this.onBecomeHost = null;   // ()
     this.onTime = null;         // (t)
     this.onPeers = null;        // () — player list changed
@@ -108,6 +109,7 @@ export class Net {
     this.socket.on('hitPlayer', (m) => this.onHitPlayer && this.onHitPlayer(m.dmg, m.kx || 0, m.kz || 0));
     this.socket.on('mobHit', (m) => this.onMobHit && this.onMobHit(m));
     this.socket.on('petAction', (m) => this.onPetAction && this.onPetAction(m));
+    this.socket.on('spawnMob', (m) => this.onSpawnMob && this.onSpawnMob(m));
     this.socket.on('time', (t) => this.onTime && this.onTime(t));
     this.socket.on('becomeHost', () => {
       this.isHost = true;
@@ -179,6 +181,7 @@ export class Net {
   }
   sendMobHit(m) { this.socket.emit('mobHit', m); }
   sendPetAction(m) { this.socket.emit('petAction', m); } // guest -> host
+  sendSpawnMob(m) { this.socket.emit('spawnMob', m); }   // guest -> host
 
   get peerCount() { return this.players.size; }
 

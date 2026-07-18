@@ -128,6 +128,13 @@ try {
   ok(mh.i === 9 && mh.dmg === 5, 'guest mob hit routes to the host');
   ok(mh.from === guest.id, 'mob hit carries the sender id (kill attribution)');
 
+  // --- pet actions: guest tame/feed/sit intent -> host ---
+  const petP = once(host, 'petAction');
+  guest.emit('petAction', { i: 7, action: 'tame', item: 'bone' });
+  const pa = await petP;
+  ok(pa.i === 7 && pa.action === 'tame' && pa.item === 'bone' && pa.from === guest.id,
+    'guest pet action routes to the host with sender id');
+
   // --- chess routing: guest action -> host; host state -> room ---
   const chessP = once(host, 'chess');
   guest.emit('chess', { action: 'open', key: '1,64,2' });

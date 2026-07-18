@@ -19,6 +19,13 @@ const DESPAWN = 70;
 const SPAWN_MIN = 16;
 const SPAWN_MAX = 34;
 
+// Tamed-wolf combat assist: a wolf picks targets within ASSIST_RANGE of
+// itself that recently (REVENGE_WINDOW seconds) hurt its owner or were hit by
+// them, and drops the chase beyond ASSIST_LEASH from the owner.
+const ASSIST_RANGE = 12;
+const ASSIST_LEASH = 20;
+const REVENGE_WINDOW = 8;
+
 // Y below which we treat a position as "underground" for cave spawning.
 // SEA_LEVEL (62) minus a few blocks so overhangs / shallow caves don't count.
 const CAVE_MAX_Y = 58;
@@ -43,7 +50,8 @@ export class MobManager {
 
   count(category) {
     let n = 0;
-    for (const m of this.mobs) if (m.def.category === category) n++;
+    // Tamed pets never count against the wild spawn budget.
+    for (const m of this.mobs) if (m.def.category === category && !m.owner) n++;
     return n;
   }
 
@@ -62,6 +70,19 @@ export class MobManager {
     mob.world = this.world;
     this.scene.add(mob.group);
     this.mobs.push(mob);
+    return mob;
+  }
+
+  // Recreate a saved tamed pet (world load): spawn it and restore tame state.
+  // rec: { t, x, y, z, hp, owner, name, sitting }.
+  spawnPet(rec) {
+    if (!MOBS[rec.t] || !MOBS[rec.t].tamable) return null; // stale/corrupt save
+    const mob = this._spawn(rec.t, rec.x, rec.y, rec.z);
+    mob.health = rec.hp ?? mob.def.health;
+    mob.owner = rec.owner ?? null;
+    mob.ownerName = rec.name ?? null;
+    mob.sitting = !!rec.sitting;
+    mob.setTag(mob.ownerName ? `♥ ${mob.ownerName}` : '♥');
     return mob;
   }
 
@@ -210,9 +231,11 @@ export class MobManager {
     // hostiles, villagers panic near monsters.
     const villagers = [];
     const hostiles = [];
+    const cats = []; // creepers keep their distance from cats
     for (const m of this.mobs) {
       if (m.dead) continue;
       if (m.type === 'villager') villagers.push(m);
+      else if (m.type === 'cat') cats.push(m);
       else if (m.def.category === 'hostile') hostiles.push(m);
     }
     const distSq = (a, b) => {
@@ -228,6 +251,12 @@ export class MobManager {
       for (const pl of players) {
         const d2 = distSq(mob, pl.pos);
         if (d2 < nearSq) { nearSq = d2; near = pl; }
+      }
+
+      // Pets: resolve the owner's live position (null while they're offline).
+      let ownerPos = null;
+      if (mob.owner) {
+        for (const pl of players) if (pl.id === mob.owner) { ownerPos = pl.pos; break; }
       }
 
       // Aggro target: zombies take a villager if one is closer than every
@@ -248,6 +277,42 @@ export class MobManager {
           if (d2 < bestSq) { bestSq = d2; victim = h; }
         }
         targetPos = victim ? victim.pos : mob.pos; // no prey -> just wander
+      } else if (mob.type === 'wolf' && mob.owner && !mob.sitting && ownerPos) {
+        // Wolf assist: avenge the owner. Candidates are mobs only (never
+        // players) and never anyone's pet. Attribution stamps use _selfPid()
+        // (socket id online) while the host's pets are owned by 'self' —
+        // canon() folds the two into one identity.
+        const canon = (pid) => (pid === ctx.selfPid ? 'self' : pid);
+        const owner = canon(mob.owner);
+        const now = performance.now() / 1000;
+        let bestSq = ASSIST_RANGE * ASSIST_RANGE;
+        for (const c of this.mobs) {
+          if (c === mob || c.dead || c.owner) continue;
+          const hitByOwner = canon(c.lastHitBy) === owner && now - (c.lastHitAt ?? -Infinity) < REVENGE_WINDOW;
+          const hurtOwner = canon(c._hurtPid) === owner && now - (c._hurtT ?? -Infinity) < REVENGE_WINDOW;
+          if (!hitByOwner && !hurtOwner) continue;
+          if (distSq(c, ownerPos) > ASSIST_LEASH * ASSIST_LEASH) continue;
+          const d2 = distSq(mob, c.pos);
+          if (d2 < bestSq) { bestSq = d2; victim = c; }
+        }
+        if (victim) targetPos = victim.pos;
+      }
+
+      // Cats spook creepers: one within 8 blocks defuses and routs it. The
+      // short fleeTimer refreshes every tick while the cat stays close.
+      if (mob.type === 'creeper') {
+        for (const c of cats) {
+          const d2 = distSq(mob, c.pos);
+          if (d2 >= 64) continue;
+          const d = Math.sqrt(d2) || 1;
+          mob.fleeTimer = 0.3;
+          mob.heading = { x: (mob.pos.x - c.pos.x) / d, z: (mob.pos.z - c.pos.z) / d };
+          if (mob._fuse != null) {
+            mob._fuse = null;
+            mob.group.scale.setScalar(1);
+          }
+          break;
+        }
       }
 
       // Villagers panic when a monster gets close.
@@ -264,13 +329,18 @@ export class MobManager {
         world: this.world,
         playerPos: targetPos,
         hasTarget: !!victim,
+        ownerPos,
         threat,
         isNight: ctx.isNight,
         // fromPos (the mob) -> knockback direction for whoever got hit.
         // power (optional) overrides the default shove strength (charger slam).
         attackPlayer: (dmg, fromPos, power = 0) => {
           if (victim) { victim.takeDamage(dmg, fromPos || mob.pos); return; }
+          if (mob.owner) return; // pets never hit players
           if (mob.def.category === 'golem') return; // golems never hit players
+          // Revenge mark: this mob hurt a player — their wolves come for it.
+          mob._hurtPid = near.id;
+          mob._hurtT = performance.now() / 1000;
           ctx.attackPlayer(
             dmg, near.id,
             fromPos ? { x: near.pos.x - fromPos.x, z: near.pos.z - fromPos.z } : null,
@@ -293,8 +363,9 @@ export class MobManager {
           const c = lo + Math.floor(Math.random() * (hi - lo + 1));
           if (c > 0) this.itemDrops.spawn(d.item, c, Math.floor(mob.pos.x), Math.floor(mob.pos.y), Math.floor(mob.pos.z));
         }
-      } else if (!mob.dead &&
-                 ((this.autoSpawn && nearSq > DESPAWN * DESPAWN) || mob.pos.y < -10)) {
+      } else if (!mob.dead && (mob.owner
+        ? mob.pos.y < -30 // pets never distance-despawn; only a void fall with the owner offline ends them
+        : ((this.autoSpawn && nearSq > DESPAWN * DESPAWN) || mob.pos.y < -10))) {
         // Despawn only when far from *every* player (never in wave mode —
         // a gate mob across the arena is still part of the wave).
         mob.removed = true;
@@ -305,6 +376,7 @@ export class MobManager {
     if (this.mobs.some((m) => m.removed)) {
       for (const m of this.mobs) {
         if (m.removed) {
+          m.clearTag(); // pet tag sprite holds a canvas texture
           this.scene.remove(m.group);
           m.group.traverse((o) => o.geometry && o.geometry.dispose());
         }
@@ -314,11 +386,14 @@ export class MobManager {
   }
 
   // Compact state for multiplayer broadcast (host -> guests, ~10 Hz).
+  // Pet fields (owner/sitting/name) ride along only for tamed or orphaned
+  // pets so wild-mob entries stay small.
   snapshot() {
     return this.mobs.map((m) => ({
       i: m.id, t: m.type,
       x: +m.pos.x.toFixed(2), y: +m.pos.y.toFixed(2), z: +m.pos.z.toFixed(2),
       yaw: +m.yaw.toFixed(2), h: m.health,
+      ...(m.owner || m.ownerName ? { o: m.owner, s: m.sitting ? 1 : 0, n: m.ownerName || '' } : {}),
     }));
   }
 

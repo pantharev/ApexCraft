@@ -309,6 +309,13 @@
     "food": 6
   },
   {
+    "name": "raw_fish",
+    "display": "Raw Fish",
+    "color": "#7fa8c8",
+    "maxStack": 64,
+    "food": 2
+  },
+  {
     "name": "rotten_flesh",
     "display": "Rotten Flesh",
     "color": "#6b5535",

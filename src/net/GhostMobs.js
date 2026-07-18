@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { MOBS } from '../entities/mobTypes.js';
 import { buildMobModel, animateMob } from '../entities/MobModels.js';
 import { rayAABB } from '../systems/MobManager.js';
+import { nameTag } from './RemotePlayers.js';
 
 // Guest-side mirror of the host's mob simulation. The host broadcasts
 // snapshots (~10 Hz); ghosts interpolate between them — no AI or physics here.
@@ -16,6 +17,7 @@ export class GhostMobs {
     this.net = net;
     this.mobs = []; // ghost objects (API-compatible with Mob where needed)
     this._byId = new Map();
+    this.onPetUpdate = null; // (ghost, previousOwner) — pet ownership changed
   }
 
   apply(snap) {
@@ -37,6 +39,25 @@ export class GhostMobs {
       if (s.h <= 0) g.dead = true;
       g.health = s.h;
       g.target = { x: s.x, y: s.y, z: s.z, yaw: s.yaw };
+
+      // Pet state mirror: owner / sitting / owner-name tag.
+      g.sitting = !!s.s;
+      g.ownerName = s.n || null;
+      const owner = s.o || null;
+      if (owner !== g.owner) {
+        const was = g.owner;
+        g.owner = owner;
+        if (this.onPetUpdate) this.onPetUpdate(g, was);
+      }
+      const tagText = g.owner || g.ownerName ? (g.ownerName ? `♥ ${g.ownerName}` : '♥') : null;
+      if (tagText !== g._tagText) {
+        g._tagText = tagText;
+        this._disposeTag(g);
+        if (tagText) {
+          g.tag = nameTag(tagText, { y: g.h + 0.45, scale: 0.7 });
+          g.group.add(g.tag);
+        }
+      }
     }
     // Remove ghosts the host no longer reports (dead/despawned).
     for (const g of this.mobs) if (!seen.has(g.id)) g.removed = true;
@@ -44,12 +65,23 @@ export class GhostMobs {
       for (const g of this.mobs) {
         if (g.removed) {
           this._byId.delete(g.id);
+          this._disposeTag(g);
           this.scene.remove(g.group);
           g.group.traverse((o) => o.geometry && o.geometry.dispose());
         }
       }
       this.mobs = this.mobs.filter((g) => !g.removed);
     }
+  }
+
+  // Pet tag sprites hold a canvas texture the generic geometry-dispose pass
+  // doesn't reach.
+  _disposeTag(g) {
+    if (!g.tag) return;
+    g.group.remove(g.tag);
+    g.tag.material.map.dispose();
+    g.tag.material.dispose();
+    g.tag = null;
   }
 
   _create(s) {
@@ -77,6 +109,11 @@ export class GhostMobs {
       hurtTimer: 0,
       removed: false,
       dead: false,
+      owner: null,      // pet mirror state (see apply)
+      ownerName: null,
+      sitting: false,
+      tag: null,
+      _tagText: null,
       deathT: 0,
       _deathSpin: (s.i & 1) === 0 ? 1 : -1,
       aabb() {
@@ -154,7 +191,17 @@ export class GhostMobs {
         // host's real mobs. Must run after the group sync above — it adds
         // bob/sway on top of the synced transform.
         const speed = Math.hypot(dx, dz) / Math.max(dt, 1e-4) * k;
-        animateMob(g, dt, speed > 0.4);
+        if (g.sitting && speed <= 0.4) {
+          // Mirror the host's sitting pose (folded legs, dropped haunches) —
+          // it replaces the gait, which would relax the legs back to standing.
+          for (let i = 0; i < g.legs.length; i++) {
+            const target = i < 2 ? 1.3 : -1.3;
+            g.legs[i].rotation.x += (target - g.legs[i].rotation.x) * Math.min(1, dt * 8);
+          }
+          g.group.position.y -= 0.12;
+        } else {
+          animateMob(g, dt, speed > 0.4);
+        }
       }
       if (g.hurtTimer > 0) {
         g.hurtTimer -= dt;
@@ -178,6 +225,7 @@ export class GhostMobs {
 
   clear() {
     for (const g of this.mobs) {
+      this._disposeTag(g);
       this.scene.remove(g.group);
       g.group.traverse((o) => o.geometry && o.geometry.dispose());
     }

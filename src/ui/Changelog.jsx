@@ -6,6 +6,11 @@ import React from 'react';
 
 const CHANGELOG = [
   {
+    date: 'July 17, 2026',
+    title: 'Pets: tame wolves and cats!',
+    body: 'Wolves and cats now roam the wild. Win a wolf over with skeleton bones and it will follow you anywhere — teleporting to catch up — and leap to your defense against anything that hurts you (or anything you pick a fight with). Cats are tamed with raw fish, sometimes caught while scooping water with a bucket, and creepers are terrified of them. Right-click your pet to have it sit and guard the base, feed it meat or fish to heal it, and it will still be waiting for you when you reload the world — pets work in multiplayer too.',
+  },
+  {
     date: 'July 15, 2026',
     title: 'Zombies: Chargers, Tanks & living dead',
     body: 'Two heavyweights join the horde. The Charger stalks you, rears back with a roar, then rockets across the arena in a dead-straight line — sidestep it and it eats the wall, get caught and you\'ll be sent flying. And every tenth wave the ground shakes: the Tank is a wall of muscle that shrugs off whole magazines, punches through your barricades, and hurls rocks at anyone who thinks distance means safety (250 points if your team can bring it down). The dead also learned to move like the dead: zombies now shamble with arms outstretched and twitching heads, sprinters pump their arms in a full sprint, brutes and tanks lumber with a heavy side-to-side sway, screamers wail with arms overhead, and everything swings its arms in a proper overhead slam when it hits you.',

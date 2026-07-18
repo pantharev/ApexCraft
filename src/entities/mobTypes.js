@@ -50,6 +50,46 @@ export const MOBS = {
     ],
   },
 
+  // ---- Tamable ----
+  // Wolves and cats spawn wild through the passive pool. Right-clicking one
+  // while holding its `tameItem` rolls a tame chance; once owned they follow
+  // their owner, can sit, and can be healed with `petFoods` (Game._petInteract
+  // + Mob._petAI). Tamed individuals are exempt from despawn/caps in
+  // MobManager, so `passive` here only governs the wild ones.
+  wolf: {
+    category: 'passive', health: 20, speed: 1.9, attack: 4, hw: 0.4, h: 0.85,
+    tamable: true, tameItem: 'bone',
+    petFoods: ['raw_porkchop', 'cooked_porkchop', 'raw_beef', 'cooked_beef',
+      'raw_mutton', 'cooked_mutton', 'raw_chicken', 'cooked_chicken', 'rotten_flesh'],
+    drops: [],
+    parts: [
+      { size: [0.5, 0.5, 0.9], pos: [0, 0.55, -0.1], color: '#b7b3ab' },               // body
+      { size: [0.58, 0.55, 0.35], pos: [0, 0.58, 0.32], color: '#c9c5bd' },            // chest/mane
+      { size: [0.42, 0.4, 0.4], pos: [0, 0.75, 0.68], color: '#c2beb6', head: true },  // head
+      { size: [0.2, 0.18, 0.24], pos: [0, 0.66, 0.95], color: '#d8d4cc', head: true }, // snout
+      { size: [0.1, 0.14, 0.08], pos: [-0.13, 1.0, 0.6], color: '#a5a19a', head: true }, // ears
+      { size: [0.1, 0.14, 0.08], pos: [0.13, 1.0, 0.6], color: '#a5a19a', head: true },
+      { size: [0.12, 0.12, 0.45], pos: [0, 0.68, -0.65], color: '#b7b3ab' },           // tail
+      leg(-0.16, 0.28, 0.14, 0.42, 0.14, '#a5a19a'), leg(0.16, 0.28, 0.14, 0.42, 0.14, '#a5a19a'),
+      leg(-0.16, -0.32, 0.14, 0.42, 0.14, '#a5a19a'), leg(0.16, -0.32, 0.14, 0.42, 0.14, '#a5a19a'),
+    ],
+  },
+  cat: {
+    category: 'passive', health: 12, speed: 2.2, hw: 0.3, h: 0.6,
+    tamable: true, tameItem: 'raw_fish', petFoods: ['raw_fish', 'raw_chicken'],
+    drops: [],
+    parts: [
+      { size: [0.32, 0.3, 0.75], pos: [0, 0.38, -0.05], color: '#d9964e' },             // body (ginger)
+      { size: [0.3, 0.28, 0.28], pos: [0, 0.5, 0.48], color: '#e0a25c', head: true },   // head
+      { size: [0.08, 0.1, 0.06], pos: [-0.09, 0.68, 0.42], color: '#c9853d', head: true }, // ears
+      { size: [0.08, 0.1, 0.06], pos: [0.09, 0.68, 0.42], color: '#c9853d', head: true },
+      { size: [0.12, 0.09, 0.08], pos: [0, 0.44, 0.65], color: '#f0e0d0', head: true }, // muzzle
+      { size: [0.08, 0.08, 0.5], pos: [0, 0.45, -0.55], color: '#c9853d' },             // tail
+      leg(-0.1, 0.22, 0.1, 0.25, 0.1, '#c9853d'), leg(0.1, 0.22, 0.1, 0.25, 0.1, '#c9853d'),
+      leg(-0.1, -0.25, 0.1, 0.25, 0.1, '#c9853d'), leg(0.1, -0.25, 0.1, 0.25, 0.1, '#c9853d'),
+    ],
+  },
+
   villager: {
     // Own category: not in the random passive spawn pool — villagers spawn at
     // their village (MobManager) and stay leashed to it.

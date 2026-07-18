@@ -52,7 +52,8 @@ function box(w, h, d, color, x, y, z, legPivot = false) {
   return mesh;
 }
 
-function nameTag(name) {
+// Exported: pets reuse this for their owner tag (smaller, lower over the mob).
+export function nameTag(name, { y = 2.25, scale = 1 } = {}) {
   const c = document.createElement('canvas');
   c.width = 256; c.height = 64;
   const ctx = c.getContext('2d');
@@ -66,8 +67,8 @@ function nameTag(name) {
   const tex = new THREE.CanvasTexture(c);
   tex.colorSpace = THREE.SRGBColorSpace;
   const sprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, depthTest: false, transparent: true }));
-  sprite.scale.set(1.6, 0.4, 1);
-  sprite.position.y = 2.25;
+  sprite.scale.set(1.6 * scale, 0.4 * scale, 1);
+  sprite.position.y = y;
   return sprite;
 }
 

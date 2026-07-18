@@ -79,7 +79,10 @@ export class Projectiles {
           if (m.dead) continue; // corpses don't stop arrows
           const { min, max } = m.aabb();
           if (next.x > min.x && next.x < max.x && next.y > min.y && next.y < max.y && next.z > min.z && next.z < max.z) {
-            if (p.owner != null) m.lastHitBy = p.owner; // kill attribution
+            if (p.owner != null) { // kill attribution + pet revenge marks
+              m.lastHitBy = p.owner;
+              m.lastHitAt = performance.now() / 1000;
+            }
             m.takeDamage(p.damage, next);
             Sound.mobHurt();
             hit = true;

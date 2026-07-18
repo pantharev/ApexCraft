@@ -114,7 +114,14 @@ try {
   const mobHitP = once(host, 'mobHit');
   guest.emit('mobHit', { i: 9, dmg: 5, x: 1, y: 2, z: 3 });
   const mh = await mobHitP;
-  ok(mh.i === 9 && mh.dmg === 5, 'guest mob hit routes to the host');
+  ok(mh.i === 9 && mh.dmg === 5 && mh.from === guest.id, 'guest mob hit routes to the host with sender id');
+
+  // --- pet actions: guest tame/feed/sit intent -> host ---
+  const petP = once(host, 'petAction');
+  guest.emit('petAction', { i: 7, action: 'tame', item: 'bone' });
+  const pa = await petP;
+  ok(pa.i === 7 && pa.action === 'tame' && pa.item === 'bone' && pa.from === guest.id,
+    'guest pet action routes to the host with sender id');
 
   // --- chess routing: guest action -> host; host state -> room ---
   const chessP = once(host, 'chess');

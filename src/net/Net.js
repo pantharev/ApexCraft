@@ -60,7 +60,8 @@ export class Net {
     this.onMatchState = null;   // (state) — authoritative hide & seek round state
     this.onTaunt = null;        // ({id, taunt}) — a taunt to render (host -> room)
     this.onHitPlayer = null;    // (dmg)
-    this.onMobHit = null;       // ({i, dmg, x, y, z}) — host only
+    this.onMobHit = null;       // ({i, dmg, x, y, z, from}) — host only
+    this.onPetAction = null;    // ({i, action, item, from}) — pet tame/feed/sit, host only
     this.onBecomeHost = null;   // ()
     this.onTime = null;         // (t)
     this.onPeers = null;        // () — player list changed
@@ -106,6 +107,7 @@ export class Net {
     this.socket.on('taunt', (m) => this.onTaunt && this.onTaunt(m));
     this.socket.on('hitPlayer', (m) => this.onHitPlayer && this.onHitPlayer(m.dmg, m.kx || 0, m.kz || 0));
     this.socket.on('mobHit', (m) => this.onMobHit && this.onMobHit(m));
+    this.socket.on('petAction', (m) => this.onPetAction && this.onPetAction(m));
     this.socket.on('time', (t) => this.onTime && this.onTime(t));
     this.socket.on('becomeHost', () => {
       this.isHost = true;
@@ -176,6 +178,7 @@ export class Net {
     this.socket.emit('hitPlayer', { to, dmg, kx: kdir ? kdir.x : 0, kz: kdir ? kdir.z : 0 });
   }
   sendMobHit(m) { this.socket.emit('mobHit', m); }
+  sendPetAction(m) { this.socket.emit('petAction', m); } // guest -> host
 
   get peerCount() { return this.players.size; }
 

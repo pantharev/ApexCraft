@@ -208,6 +208,19 @@ io.on('connection', (socket) => {
     });
   });
 
+  // A guest interacted with a tamable mob (tame/feed/sit); route to the host
+  // who owns the simulation and validates against the real mob state.
+  socket.on('petAction', (m) => {
+    const r = room();
+    if (!r || !m) return;
+    io.to(r.host).emit('petAction', {
+      i: m.i | 0,
+      action: String(m.action || '').slice(0, 8),
+      item: m.item == null ? null : String(m.item).slice(0, 24),
+      from: socket.id,
+    });
+  });
+
   socket.on('disconnect', () => {
     const r = room();
     if (!r) return;

@@ -354,11 +354,14 @@ export class MobManager {
   }
 
   // Compact state for multiplayer broadcast (host -> guests, ~10 Hz).
+  // Pet fields (owner/sitting/name) ride along only for tamed or orphaned
+  // pets so wild-mob entries stay small.
   snapshot() {
     return this.mobs.map((m) => ({
       i: m.id, t: m.type,
       x: +m.pos.x.toFixed(2), y: +m.pos.y.toFixed(2), z: +m.pos.z.toFixed(2),
       yaw: +m.yaw.toFixed(2), h: m.health,
+      ...(m.owner || m.ownerName ? { o: m.owner, s: m.sitting ? 1 : 0, n: m.ownerName || '' } : {}),
     }));
   }
 

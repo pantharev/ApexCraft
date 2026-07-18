@@ -242,15 +242,50 @@ export class Game {
       // A bulk edit message is an explosion crater: suppress per-block break
       // particles while it applies (the 'boom' event renders the visuals).
       net.onEditBatch = (active) => { this._blastEdits = active; };
-      net.onPlayerJoined = (p) => this.remotePlayers.add(p.id, p.name);
+      net.onPlayerJoined = (p) => {
+        this.remotePlayers.add(p.id, p.name);
+        // Host: rebind orphaned pets to a returning owner, matched by name.
+        if (net.isHost) {
+          for (const m of this.mobs.mobs) {
+            if (!m.owner && m.ownerName === p.name && m.def.tamable) {
+              m.owner = p.id;
+              m.sitting = false;
+            }
+          }
+        }
+      };
       net.onPlayerLeft = (p) => {
         this.remotePlayers.remove(p.id);
         // Prop Hunt: drop them from the round roster too, or a departed hider
         // becomes an untaggable ghost and the round can never be won.
         if (this.hideSeek) this.hideSeek.playerLeft(p.id);
+        // Host: orphan the leaver's pets — they sit and wait, keeping the
+        // owner's name so they rebind if that player rejoins.
+        if (net.isHost) {
+          for (const m of this.mobs.mobs) {
+            if (m.owner === p.id) {
+              m.owner = null;
+              m.sitting = true;
+            }
+          }
+        }
       };
       net.onPlayerState = (s) => this.remotePlayers.setState(s);
       net.onMobs = (snap) => { if (!net.isHost) this.ghostMobs.apply(snap); };
+      // Guest: the snapshot flipping a ghost's owner to us resolves our tame
+      // attempt (or greets us with a rebound pet after a rejoin).
+      this._pendingTameId = null;
+      this.ghostMobs.onPetUpdate = (g, was) => {
+        if (was || g.owner !== net.id) return;
+        const label = g.type[0].toUpperCase() + g.type.slice(1);
+        if (this._pendingTameId === g.id) {
+          this._pendingTameId = null;
+          this.particles.burst(g.pos.x, g.pos.y + g.h + 0.3, g.pos.z, '#ff6a9a', 12, 1.8);
+          if (this.onToast) this.onToast(`${label} tamed! It will follow you`);
+        } else if (this.onToast) {
+          this.onToast(`${label} is following you`);
+        }
+      };
       net.onProjectile = (p) => {
         this.projectiles.spawn(p.x, p.y, p.z, new THREE.Vector3(p.dx, p.dy, p.dz), p.speed, p.dmg || 0, p.target);
         Sound.shoot();
@@ -290,6 +325,11 @@ export class Game {
           mob.takeDamage(m.dmg, new THREE.Vector3(m.x, m.y, m.z));
           Sound.mobHurt();
         }
+      };
+      net.onPetAction = (m) => { // a guest right-clicked one of our tamable mobs
+        if (!net.isHost || !m) return;
+        const mob = this.mobs.byId(m.i);
+        if (mob) this._petInteract(mob, m.from, m.item, m.action);
       };
       net.onBecomeHost = () => {
         this.ghostMobs.clear(); // our MobManager takes over
@@ -976,10 +1016,11 @@ export class Game {
   // Fire an arrow from the camera if the player has ammo.
   // Right-click on a mob, run by the simulation owner (host / single-player).
   // `pid` is the acting player: 'self' for the local player, else a guest
-  // socket id (via net, where `itemName` comes from the message and the guest
-  // already consumed the item client-side). Returns true when the click was
-  // consumed (so it doesn't fall through to block placement).
-  _petInteract(mob, pid, itemName) {
+  // socket id (via net, where `itemName`/`action` come from the message and
+  // the guest already consumed the item client-side — a raced intent, e.g.
+  // taming a mob someone else just claimed, is simply dropped). Returns true
+  // when the click was consumed (so it doesn't fall through to block use).
+  _petInteract(mob, pid, itemName, action) {
     const def = mob.def;
     if (!def || !def.tamable || mob.dead) return false;
     const local = pid === 'self';
@@ -989,11 +1030,12 @@ export class Game {
       this.particles.burst(mob.pos.x, mob.pos.y + mob.h + 0.3, mob.pos.z, '#ff6a9a', 12, 1.8);
 
     if (!mob.owner) {
+      if (action && action !== 'tame') return true; // raced: owner just left
       if (item !== def.tameItem) return false; // wild + wrong item: not our click
       if (local) this.inventory.consumeSelected(1);
       if (Math.random() < 1 / 3) {
         mob.owner = pid;
-        mob.ownerName = local ? null : (this.remotePlayers?.nameOf?.(pid) ?? null);
+        mob.ownerName = local ? null : (this.net?.players.get(pid)?.name ?? null);
         mob.sitting = false;
         mob.fleeTimer = 0;
         mob.setTag(mob.ownerName ? `♥ ${mob.ownerName}` : '♥');
@@ -1010,7 +1052,8 @@ export class Game {
     }
     // Our pet: feed it if we're holding pet food and it's hurt, else sit/stay.
     const itemDef = item && getItem(item);
-    if (itemDef && def.petFoods?.includes(item) && mob.health < def.health) {
+    const canFeed = itemDef && def.petFoods?.includes(item) && mob.health < def.health;
+    if (canFeed && (!action || action === 'feed')) {
       if (local) this.inventory.consumeSelected(1);
       mob.health = Math.min(def.health, mob.health + Math.max(2, (itemDef.food || 1) * 2));
       hearts();
@@ -1018,15 +1061,45 @@ export class Game {
       if (local && this.onToast) this.onToast(`${label} fed (+health)`);
       return true;
     }
+    if (action && action !== 'sit') return true; // raced guest intent: drop it
     mob.sitting = !mob.sitting;
     mob.heading = null;
     if (local && this.onToast) this.onToast(mob.sitting ? `${label} is sitting` : `${label} is following you`);
     return true;
   }
 
-  // Guest-side mob right-click: filled in with the multiplayer pet wiring.
-  _guestPetInteract(ghost) {
-    return false;
+  // Guest-side mob right-click: precheck against the ghost's mirrored state,
+  // send the intent to the host, and consume/toast optimistically. The
+  // authoritative result comes back through the mob snapshot (a tame success
+  // lands via ghostMobs.onPetUpdate).
+  _guestPetInteract(g) {
+    const def = g.def;
+    if (!def || !def.tamable || g.dead) return false;
+    const item = this.inventory.selectedStack()?.item ?? null;
+    const label = g.type[0].toUpperCase() + g.type.slice(1);
+    if (!g.owner) {
+      if (item !== def.tameItem) return false;
+      this.inventory.consumeSelected(1);
+      this._pendingTameId = g.id;
+      this.net.sendPetAction({ i: g.id, action: 'tame', item });
+      return true;
+    }
+    if (g.owner !== this.net.id) {
+      if (this.onToast) this.onToast(`That's ${g.ownerName || 'someone else'}'s pet`);
+      return true;
+    }
+    const itemDef = item && getItem(item);
+    if (itemDef && def.petFoods?.includes(item) && g.health < def.health) {
+      this.inventory.consumeSelected(1);
+      this.net.sendPetAction({ i: g.id, action: 'feed', item });
+      Sound.eat();
+      if (this.onToast) this.onToast(`${label} fed (+health)`);
+      return true;
+    }
+    this.net.sendPetAction({ i: g.id, action: 'sit', item: null });
+    // Optimistic toast; the pose itself arrives with the next snapshot.
+    if (this.onToast) this.onToast(g.sitting ? `${label} is following you` : `${label} is sitting`);
+    return true;
   }
 
   _shootBow() {

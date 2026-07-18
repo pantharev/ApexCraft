@@ -31,6 +31,7 @@ export class Interaction {
     this.onEat = null; // called to consume held food
     this.onBucket = null; // called after a bucket fills ('fill', kind) or pours ('pour', kind)
     this.onAttack = null; // returns true if a mob was hit (suppresses mining)
+    this.onUseMob = null; // returns true if a mob interaction consumed the right-click
     this.target = null; // last raycast result
     this.breaking = false;
     this.breakProgress = 0;
@@ -103,6 +104,9 @@ export class Interaction {
   // furnace, chest, bed), or place the held block.
   _rightClick() {
     if (this.locked) return; // no placing/using in a locked (hide & seek) world
+    // Mobs first: pet reach (3.5) is shorter than block reach, so a pet
+    // standing in front of a chest wins the click.
+    if (this.onUseMob && this.onUseMob()) return;
     if (this.target) {
       const b = this.target.block;
       const block = getBlock(this.world.getBlock(b.x, b.y, b.z));

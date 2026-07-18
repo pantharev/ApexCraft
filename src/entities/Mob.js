@@ -4,12 +4,19 @@ import { WORLD_HEIGHT } from '../config.js';
 import { MOBS } from './mobTypes.js';
 import { buildMobModel } from './MobModels.js';
 import { Sound } from '../systems/Sound.js';
+import { nameTag } from '../net/RemotePlayers.js';
 
 const GRAVITY = 26;
 const JUMP = 7;
 const TURN_SPEED = 9;     // body yaw easing (rad-ish/s factor)
 const HEAD_SPEED = 7;     // head look easing
 const DEATH_TIME = 0.6;   // tip-over + fade duration
+
+// Tamed-pet tuning (wolves/cats — see mobTypes `tamable`).
+const FOLLOW_START = 4;    // start walking toward the owner beyond this
+const FOLLOW_STOP = 2.5;   // stop this close (hysteresis band avoids jitter)
+const FOLLOW_RUN = 10;     // beyond this, sprint
+const TELEPORT_DIST = 20;  // beyond this (or falling into the void), pop to the owner
 
 let nextId = 1;
 
@@ -58,6 +65,12 @@ export class Mob {
     this.anchor = null;     // {x, z} home point (villagers leash to their village)
     this.home = null;       // {x, z} house to run to at night (villagers)
 
+    this.owner = null;      // pet owner pid: 'self' (host/SP) or guest socket id; null = wild
+    this.ownerName = null;  // owner display name; kept through disconnects for rebinding
+    this.sitting = false;   // sit/stay toggle (pets)
+    this.tag = null;        // floating owner-tag sprite (pets)
+    this._following = false; // follow hysteresis state
+
     this.group = buildMobModel(type);
     this.legs = this.group.userData.legs || [];
     this.head = this.group.userData.head || null;
@@ -65,6 +78,21 @@ export class Mob {
     this.parts = [];
     this.group.traverse((o) => { if (o.isMesh) this.parts.push(o); });
     this.group.position.copy(this.pos);
+  }
+
+  // Floating owner tag over a tamed pet ("♥ Wolf" / "♥ Nico").
+  setTag(text) {
+    this.clearTag();
+    this.tag = nameTag(text, { y: this.h + 0.45, scale: 0.7 });
+    this.group.add(this.tag);
+  }
+
+  clearTag() {
+    if (!this.tag) return;
+    this.group.remove(this.tag);
+    this.tag.material.map.dispose();
+    this.tag.material.dispose();
+    this.tag = null;
   }
 
   _flashRed() {
@@ -116,7 +144,8 @@ export class Mob {
       this.vel.x += (dx / len) * 5;
       this.vel.z += (dz / len) * 5;
       this.vel.y = 5;
-      if (this.def.category !== 'hostile') {
+      if (this.def.category !== 'hostile' && !this.owner) {
+        // Tamed pets never flee — least of all from their owner's misclick.
         this.fleeTimer = 5;
         this.heading = { x: dx / len, z: dz / len };
       }

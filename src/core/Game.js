@@ -346,9 +346,24 @@ export class Game {
       Sound.swing();
       if (!mob) return false;
       const tool = this.interaction.currentTool;
+      mob.lastHitBy = 'self'; // pet combat assist: wolves avenge their owner
+      mob.lastHitAt = performance.now() / 1000;
       mob.takeDamage(tool && tool.attackDamage ? tool.attackDamage : 1, this.player.pos);
       Sound.mobHurt();
       return true;
+    };
+
+    // Right-clicking a mob: tame / feed / sit-toggle for tamable pets.
+    // Guests act on ghost mirrors and send the intent to the host (see
+    // _guestPetInteract, added with the multiplayer wiring).
+    this.interaction.onUseMob = () => {
+      if (this.hideseek || this.vitals.dead) return false;
+      const dir = new THREE.Vector3();
+      this.camera.getWorldDirection(dir);
+      const mob = this._mobApi().raycast(this.camera.position, dir, 3.5);
+      if (!mob) return false;
+      if (this.net && !this.net.isHost) return this._guestPetInteract(mob);
+      return this._petInteract(mob, 'self');
     };
 
     // Chess tables: per-position games. Single-player is hotseat (you play
@@ -930,6 +945,61 @@ export class Game {
   }
 
   // Fire an arrow from the camera if the player has ammo.
+  // Right-click on a mob, run by the simulation owner (host / single-player).
+  // `pid` is the acting player: 'self' for the local player, else a guest
+  // socket id (via net, where `itemName` comes from the message and the guest
+  // already consumed the item client-side). Returns true when the click was
+  // consumed (so it doesn't fall through to block placement).
+  _petInteract(mob, pid, itemName) {
+    const def = mob.def;
+    if (!def || !def.tamable || mob.dead) return false;
+    const local = pid === 'self';
+    const item = local ? (this.inventory.selectedStack()?.item ?? null) : (itemName ?? null);
+    const label = mob.type[0].toUpperCase() + mob.type.slice(1);
+    const hearts = () =>
+      this.particles.burst(mob.pos.x, mob.pos.y + mob.h + 0.3, mob.pos.z, '#ff6a9a', 12, 1.8);
+
+    if (!mob.owner) {
+      if (item !== def.tameItem) return false; // wild + wrong item: not our click
+      if (local) this.inventory.consumeSelected(1);
+      if (Math.random() < 1 / 3) {
+        mob.owner = pid;
+        mob.ownerName = local ? null : (this.remotePlayers?.nameOf?.(pid) ?? null);
+        mob.sitting = false;
+        mob.fleeTimer = 0;
+        mob.setTag(mob.ownerName ? `♥ ${mob.ownerName}` : '♥');
+        hearts();
+        if (local && this.onToast) this.onToast(`${label} tamed! It will follow you`);
+      } else if (local && this.onToast) {
+        this.onToast(`The ${mob.type} ignores you...`);
+      }
+      return true;
+    }
+    if (mob.owner !== pid) {
+      if (local && this.onToast) this.onToast(`That's ${mob.ownerName || 'someone else'}'s pet`);
+      return true;
+    }
+    // Our pet: feed it if we're holding pet food and it's hurt, else sit/stay.
+    const itemDef = item && getItem(item);
+    if (itemDef && def.petFoods?.includes(item) && mob.health < def.health) {
+      if (local) this.inventory.consumeSelected(1);
+      mob.health = Math.min(def.health, mob.health + Math.max(2, (itemDef.food || 1) * 2));
+      hearts();
+      Sound.eat();
+      if (local && this.onToast) this.onToast(`${label} fed (+health)`);
+      return true;
+    }
+    mob.sitting = !mob.sitting;
+    mob.heading = null;
+    if (local && this.onToast) this.onToast(mob.sitting ? `${label} is sitting` : `${label} is following you`);
+    return true;
+  }
+
+  // Guest-side mob right-click: filled in with the multiplayer pet wiring.
+  _guestPetInteract(ghost) {
+    return false;
+  }
+
   _shootBow() {
     if (this.inventory.count('arrow') <= 0) return;
     this.inventory.removeItems('arrow', 1);

@@ -39,7 +39,8 @@ export class MobManager {
 
   count(category) {
     let n = 0;
-    for (const m of this.mobs) if (m.def.category === category) n++;
+    // Tamed pets never count against the wild spawn budget.
+    for (const m of this.mobs) if (m.def.category === category && !m.owner) n++;
     return n;
   }
 
@@ -224,6 +225,12 @@ export class MobManager {
         if (d2 < nearSq) { nearSq = d2; near = pl; }
       }
 
+      // Pets: resolve the owner's live position (null while they're offline).
+      let ownerPos = null;
+      if (mob.owner) {
+        for (const pl of players) if (pl.id === mob.owner) { ownerPos = pl.pos; break; }
+      }
+
       // Aggro target: zombies take a villager if one is closer than every
       // player; golems only ever hunt hostiles.
       let victim = null; // a Mob, when the target isn't a player
@@ -258,11 +265,13 @@ export class MobManager {
         world: this.world,
         playerPos: targetPos,
         hasTarget: !!victim,
+        ownerPos,
         threat,
         isNight: ctx.isNight,
         // fromPos (the mob) -> knockback direction for whoever got hit.
         attackPlayer: (dmg, fromPos) => {
           if (victim) { victim.takeDamage(dmg, fromPos || mob.pos); return; }
+          if (mob.owner) return; // pets never hit players
           if (mob.def.category === 'golem') return; // golems never hit players
           ctx.attackPlayer(
             dmg, near.id,
@@ -285,7 +294,9 @@ export class MobManager {
           const c = lo + Math.floor(Math.random() * (hi - lo + 1));
           if (c > 0) this.itemDrops.spawn(d.item, c, Math.floor(mob.pos.x), Math.floor(mob.pos.y), Math.floor(mob.pos.z));
         }
-      } else if (!mob.dead && (nearSq > DESPAWN * DESPAWN || mob.pos.y < -10)) {
+      } else if (!mob.dead && (mob.owner
+        ? mob.pos.y < -30 // pets never distance-despawn; only a void fall with the owner offline ends them
+        : (nearSq > DESPAWN * DESPAWN || mob.pos.y < -10))) {
         // Despawn only when far from *every* player.
         mob.removed = true;
       }
@@ -295,6 +306,7 @@ export class MobManager {
     if (this.mobs.some((m) => m.removed)) {
       for (const m of this.mobs) {
         if (m.removed) {
+          m.clearTag(); // pet tag sprite holds a canvas texture
           this.scene.remove(m.group);
           m.group.traverse((o) => o.geometry && o.geometry.dispose());
         }

@@ -397,6 +397,21 @@ function drawBucket(ctx, fillHex) {
   }
 }
 
+// Speckled spawn egg, tinted with the mob's body colour (creative spawners).
+function drawSpawnEgg(ctx, color) {
+  const dark = shade(color, 0.55), lite = lighten(color, 0.3);
+  // Egg silhouette: narrow at the top, widening toward the base.
+  const rows = [[7, 8], [6, 9], [5, 10], [5, 10], [4, 11], [4, 11], [4, 11], [5, 10], [6, 9]];
+  for (let i = 0; i < rows.length; i++) {
+    const [x0, x1] = rows[i];
+    const y = 3 + i;
+    for (let x = x0; x <= x1; x++) px(ctx, x, y, x <= x0 + 1 ? lite : color);
+  }
+  // Speckles.
+  px(ctx, 7, 4, dark); px(ctx, 9, 6, dark); px(ctx, 5, 7, dark);
+  px(ctx, 8, 8, dark); px(ctx, 10, 9, dark); px(ctx, 6, 10, dark);
+}
+
 // Side-on fish: oval body, forked tail, pale belly, one dark eye pixel.
 function drawFish(ctx, color) {
   const dark = shade(color, 0.7), belly = lighten(color, 0.35);
@@ -450,6 +465,7 @@ function drawItem(def) {
   else if (name.endsWith('_ingot')) drawIngot(ctx, color);
   else if (GEMS.has(name)) drawGem(ctx, color);
   else if (LUMPS.has(name)) drawLump(ctx, color);
+  else if (def?.spawnMob) drawSpawnEgg(ctx, color);
   else if (def?.toolType === 'sword') drawSword(ctx, color);
   else if (def?.toolType === 'axe') drawAxe(ctx, color);
   else if (def?.toolType === 'shovel') drawShovel(ctx, color);

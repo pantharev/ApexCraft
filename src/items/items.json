@@ -708,5 +708,96 @@
     "color": "#c8ccd4",
     "maxStack": 1,
     "disc": "voyage"
+  },
+  {
+    "name": "spawn_pig",
+    "display": "Pig Spawner",
+    "color": "#e8a0a0",
+    "maxStack": 64,
+    "spawnMob": "pig"
+  },
+  {
+    "name": "spawn_cow",
+    "display": "Cow Spawner",
+    "color": "#5a4632",
+    "maxStack": 64,
+    "spawnMob": "cow"
+  },
+  {
+    "name": "spawn_sheep",
+    "display": "Sheep Spawner",
+    "color": "#eeeeee",
+    "maxStack": 64,
+    "spawnMob": "sheep"
+  },
+  {
+    "name": "spawn_chicken",
+    "display": "Chicken Spawner",
+    "color": "#f0f0f0",
+    "maxStack": 64,
+    "spawnMob": "chicken"
+  },
+  {
+    "name": "spawn_wolf",
+    "display": "Wolf Spawner",
+    "color": "#b7b3ab",
+    "maxStack": 64,
+    "spawnMob": "wolf"
+  },
+  {
+    "name": "spawn_cat",
+    "display": "Cat Spawner",
+    "color": "#d9964e",
+    "maxStack": 64,
+    "spawnMob": "cat"
+  },
+  {
+    "name": "spawn_villager",
+    "display": "Villager Spawner",
+    "color": "#8a6d4a",
+    "maxStack": 64,
+    "spawnMob": "villager"
+  },
+  {
+    "name": "spawn_iron_golem",
+    "display": "Iron Golem Spawner",
+    "color": "#c2bdb4",
+    "maxStack": 64,
+    "spawnMob": "iron_golem"
+  },
+  {
+    "name": "spawn_zombie",
+    "display": "Zombie Spawner",
+    "color": "#4a7a3a",
+    "maxStack": 64,
+    "spawnMob": "zombie"
+  },
+  {
+    "name": "spawn_skeleton",
+    "display": "Skeleton Spawner",
+    "color": "#d8d8d8",
+    "maxStack": 64,
+    "spawnMob": "skeleton"
+  },
+  {
+    "name": "spawn_creeper",
+    "display": "Creeper Spawner",
+    "color": "#48a83e",
+    "maxStack": 64,
+    "spawnMob": "creeper"
+  },
+  {
+    "name": "spawn_spider",
+    "display": "Spider Spawner",
+    "color": "#2b2b2b",
+    "maxStack": 64,
+    "spawnMob": "spider"
+  },
+  {
+    "name": "spawn_bat",
+    "display": "Bat Spawner",
+    "color": "#1a1a22",
+    "maxStack": 64,
+    "spawnMob": "bat"
   }
 ]

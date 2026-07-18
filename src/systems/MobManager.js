@@ -225,9 +225,11 @@ export class MobManager {
     // hostiles, villagers panic near monsters.
     const villagers = [];
     const hostiles = [];
+    const cats = []; // creepers keep their distance from cats
     for (const m of this.mobs) {
       if (m.dead) continue;
       if (m.type === 'villager') villagers.push(m);
+      else if (m.type === 'cat') cats.push(m);
       else if (m.def.category === 'hostile') hostiles.push(m);
     }
     const distSq = (a, b) => {
@@ -284,6 +286,23 @@ export class MobManager {
           if (d2 < bestSq) { bestSq = d2; victim = c; }
         }
         if (victim) targetPos = victim.pos;
+      }
+
+      // Cats spook creepers: one within 8 blocks defuses and routs it. The
+      // short fleeTimer refreshes every tick while the cat stays close.
+      if (mob.type === 'creeper') {
+        for (const c of cats) {
+          const d2 = distSq(mob, c.pos);
+          if (d2 >= 64) continue;
+          const d = Math.sqrt(d2) || 1;
+          mob.fleeTimer = 0.3;
+          mob.heading = { x: (mob.pos.x - c.pos.x) / d, z: (mob.pos.z - c.pos.z) / d };
+          if (mob._fuse != null) {
+            mob._fuse = null;
+            mob.group.scale.setScalar(1);
+          }
+          break;
+        }
       }
 
       // Villagers panic when a monster gets close.

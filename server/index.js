@@ -237,6 +237,17 @@ io.on('connection', (socket) => {
     });
   });
 
+  // A guest used a creative spawner item; route to the host who owns the
+  // simulation (the host re-checks the world is actually creative).
+  socket.on('spawnMob', (m) => {
+    const r = room();
+    if (!r || !m) return;
+    io.to(r.host).emit('spawnMob', {
+      t: String(m.t || '').slice(0, 24),
+      x: +m.x || 0, y: +m.y || 0, z: +m.z || 0,
+    });
+  });
+
   socket.on('disconnect', () => {
     const r = room();
     if (!r) return;

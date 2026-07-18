@@ -42,9 +42,10 @@ export class MobManager {
     this.spawnTimer = 2;
     this.caveSpawnTimer = 3; // offset from surface timer to avoid same-frame bursts
     this.villagerTimer = 3;
-    // Ambient spawning + far-despawn. Zombies mode turns this off: its wave
-    // director is the only spawner, and gate mobs must survive being far from
-    // a team huddled at the opposite wall.
+    // Ambient spawning + far-despawn. Off in zombies mode (the wave director
+    // is the only spawner, and gate mobs must survive being far from a team
+    // huddled at the opposite wall) and in creative (mobs exist only when
+    // placed with spawner items, and shouldn't vanish behind you).
     this.autoSpawn = true;
   }
 
@@ -71,6 +72,13 @@ export class MobManager {
     this.scene.add(mob.group);
     this.mobs.push(mob);
     return mob;
+  }
+
+  // Spawn a mob of the given type at a world position (creative spawner
+  // items). Returns the mob, or null for an unknown type.
+  spawnAt(type, x, y, z) {
+    if (!MOBS[type]) return null;
+    return this._spawn(type, x, y, z);
   }
 
   // Recreate a saved tamed pet (world load): spawn it and restore tame state.
@@ -211,8 +219,8 @@ export class MobManager {
         this._trySpawn({ ...ctx, playerPos: anchor.pos });
       }
 
-      // Cave hostile spawning: runs on its own timer and cap, independent of the
-      // surface hostile pool so daytime caving is always dangerous.
+      // Cave hostile spawning: runs on its own timer and cap, independent of
+      // the surface hostile pool so daytime caving is always dangerous.
       this.caveSpawnTimer -= dt;
       if (this.caveSpawnTimer <= 0) {
         this.caveSpawnTimer = 3.5;
@@ -231,11 +239,11 @@ export class MobManager {
     // hostiles, villagers panic near monsters.
     const villagers = [];
     const hostiles = [];
-    const cats = []; // creepers keep their distance from cats
+    const cats = []; // creepers keep their distance from cats (all colours)
     for (const m of this.mobs) {
       if (m.dead) continue;
       if (m.type === 'villager') villagers.push(m);
-      else if (m.type === 'cat') cats.push(m);
+      else if (m.def.scaresCreepers) cats.push(m);
       else if (m.def.category === 'hostile') hostiles.push(m);
     }
     const distSq = (a, b) => {

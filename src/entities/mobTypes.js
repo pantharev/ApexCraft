@@ -77,6 +77,7 @@ export const MOBS = {
   cat: {
     category: 'passive', health: 12, speed: 2.2, hw: 0.3, h: 0.6,
     tamable: true, tameItem: 'raw_fish', petFoods: ['raw_fish', 'raw_chicken'],
+    scaresCreepers: true,
     drops: [],
     parts: [
       { size: [0.32, 0.3, 0.75], pos: [0, 0.38, -0.05], color: '#d9964e' },             // body (ginger)
@@ -87,6 +88,22 @@ export const MOBS = {
       { size: [0.08, 0.08, 0.5], pos: [0, 0.45, -0.55], color: '#c9853d' },             // tail
       leg(-0.1, 0.22, 0.1, 0.25, 0.1, '#c9853d'), leg(0.1, 0.22, 0.1, 0.25, 0.1, '#c9853d'),
       leg(-0.1, -0.25, 0.1, 0.25, 0.1, '#c9853d'), leg(0.1, -0.25, 0.1, 0.25, 0.1, '#c9853d'),
+    ],
+  },
+  black_cat: {
+    category: 'passive', health: 12, speed: 2.2, hw: 0.3, h: 0.6,
+    tamable: true, tameItem: 'raw_fish', petFoods: ['raw_fish', 'raw_chicken'],
+    scaresCreepers: true,
+    drops: [],
+    parts: [
+      { size: [0.32, 0.3, 0.75], pos: [0, 0.38, -0.05], color: '#232228' },             // body (black)
+      { size: [0.3, 0.28, 0.28], pos: [0, 0.5, 0.48], color: '#2a2930', head: true },   // head
+      { size: [0.08, 0.1, 0.06], pos: [-0.09, 0.68, 0.42], color: '#1a191f', head: true }, // ears
+      { size: [0.08, 0.1, 0.06], pos: [0.09, 0.68, 0.42], color: '#1a191f', head: true },
+      { size: [0.12, 0.09, 0.08], pos: [0, 0.44, 0.65], color: '#3d3b44', head: true }, // muzzle
+      { size: [0.08, 0.08, 0.5], pos: [0, 0.45, -0.55], color: '#1a191f' },             // tail
+      leg(-0.1, 0.22, 0.1, 0.25, 0.1, '#1a191f'), leg(0.1, 0.22, 0.1, 0.25, 0.1, '#1a191f'),
+      leg(-0.1, -0.25, 0.1, 0.25, 0.1, '#1a191f'), leg(0.1, -0.25, 0.1, 0.25, 0.1, '#1a191f'),
     ],
   },
 

@@ -9,6 +9,34 @@ updated with every merged PR** (and mirror a short player-facing entry in the
 
 ---
 
+## 2026-07-17 — Pets: tamable wolves & cats
+
+Two new `category: 'passive'` mobs in `src/entities/mobTypes.js` with data
+fields the engine reads: `tamable`, `tameItem` (wolf: `bone`, cat: new
+`raw_fish` item — 20% chance when bucket-scooping a water source), `petFoods`.
+Right-click flow: new `Interaction.onUseMob` hook fires before block targeting
+(pet reach 3.5 < block reach 6); `Game._petInteract` is the authoritative
+handler (tame roll 1/3, feed heals `food×2`, else sit/stay toggle).
+`Mob._petAI` (branch between flee and hostile-chase) does sit / combat-assist /
+follow with hysteresis (start 4, stop 2.5, run >10, teleport >20 via a
+floor-scan ring). **Pid convention: pet `owner` is `'self'` for host/SP,
+guest socket id otherwise** — matches the MobManager players list
+(`{id:'self'}`, Game.js loop). Wolf assist picks mobs (never players/pets)
+that within 8 s hurt the owner (`_hurtPid`, stamped in the manager's
+attackPlayer wrapper) or were hit by them (`lastHitBy`/`lastHitAt`, stamped in
+Game melee, Projectiles arrow hits, and `onMobHit` — the server's `mobHit`
+relay now stamps `from`). Tamed pets skip wild caps/despawn (`MobManager`),
+never flee, never hit players. Persistence: `serialize().pets` (only mobs that
+persist), loaded post-pregen host/SP only; guest pets load orphaned+sitting and
+**rebind by player name** on join (spoofable; accepted). MP: snapshot gains
+`o/s/n` fields for owned/orphaned mobs; `GhostMobs` mirrors owner/sitting/tag
+(`nameTag` now exported from `RemotePlayers.js` with `{y, scale}` opts); guest
+intents go over a new `petAction` relay (`Net.sendPetAction`, host validates
+against real mob state — guest inventory is client-trusted like `mobHit`).
+Gotchas: pets are lost on host migration (mobs don't transfer; origin's
+autosave keeps them); skeleton *arrows* don't set revenge marks (melee only);
+cats scare creepers within 8 blocks (defuse + rout).
+
 ## 2026-07-03 — #44 Prop Hunt arena: The Playroom
 
 `src/world/arenas/maps/playroom.js` — third arena: mouse-scale players in a

@@ -6,6 +6,11 @@ import React from 'react';
 
 const CHANGELOG = [
   {
+    date: 'July 17, 2026',
+    title: 'Pets: tame wolves and cats!',
+    body: 'Wolves and cats now roam the wild. Win a wolf over with skeleton bones and it will follow you anywhere — teleporting to catch up — and leap to your defense against anything that hurts you (or anything you pick a fight with). Cats are tamed with raw fish, sometimes caught while scooping water with a bucket, and creepers are terrified of them. Right-click your pet to have it sit and guard the base, feed it meat or fish to heal it, and it will still be waiting for you when you reload the world — pets work in multiplayer too.',
+  },
+  {
     date: 'July 3, 2026',
     title: 'New Prop Hunt arena: The Playroom',
     body: 'Shrink down to mouse size in a giant child’s bedroom: hide under a colossal table (or climb its leg to the fruit bowl and chess set on top), crawl beneath the bed, walk the bookshelf shelves among giant books, or lurk in the toy castle by the glow-mushroom night lights. A beamed glass skylight roof pours daylight in stripes across the floorboards, and the fireplace crackles with real lava behind its guard rail. Seekers start penned on the rug.',

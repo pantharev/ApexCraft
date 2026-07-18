@@ -8,6 +8,7 @@ import { Landing } from './ui/Landing.jsx';
 import { Hotbar, InventoryPanel, CreativeInventory, CraftingTableScreen, FurnaceScreen, ChestScreen } from './ui/InventoryUI.jsx';
 import { ChessScreen } from './ui/ChessScreen.jsx';
 import { HideSeekHUD, TauntWheel, HideSeekTouch } from './ui/HideSeekUI.jsx';
+import { ZombiesHUD, ZombiesShop, ZombiesTouch } from './ui/ZombiesUI.jsx';
 import { TouchControls } from './ui/TouchControls.jsx';
 
 const IS_TOUCH = typeof window !== 'undefined' &&
@@ -73,6 +74,7 @@ export default function App() {
     game.onMatch = setMatch;
     game.onTauntWheel = setTauntWheel;
     if (game.hideSeek) setMatch(game.hideSeek.state); // seed the initial lobby state
+    if (game.zombiesMode) setMatch(game.zombiesMode.state);
     game.start();
 
     const onLock = () => setLocked(document.pointerLockElement === game.renderer.domElement);
@@ -241,6 +243,19 @@ export default function App() {
             <Hotbar inventory={gameRef.current.inventory}
               onSelect={IS_TOUCH ? (i) => gameRef.current.inventory.setSelected(i) : undefined} />
           )}
+          {/* Gun magazine / reserve counter (Zombies weapons) */}
+          {stats?.gunAmmo && active && (
+            <div style={{ position: 'absolute', bottom: 70, right: 26, pointerEvents: 'none', textAlign: 'right', textShadow: '2px 2px 2px #000', fontFamily: 'monospace' }}>
+              {stats.gunAmmo.reloading
+                ? <span style={{ color: '#ffd27a', fontSize: 16, fontWeight: 700 }}>RELOADING…</span>
+                : (
+                  <span style={{ color: stats.gunAmmo.mag === 0 ? '#ff8b6b' : '#fff', fontSize: 24, fontWeight: 700 }}>
+                    {stats.gunAmmo.mag}
+                    <span style={{ opacity: 0.6, fontSize: 15 }}> / {stats.gunAmmo.reserve}</span>
+                  </span>
+                )}
+            </div>
+          )}
           {stats && active && !stats.creative && !stats.hideseek && (
             <StatusBars health={stats.health} hunger={stats.hunger} air={stats.air} submerged={stats.submerged} />
           )}
@@ -280,6 +295,10 @@ export default function App() {
           {stats?.hideseek && gameRef.current && <HideSeekHUD game={gameRef.current} match={match} />}
           {stats?.hideseek && !IS_TOUCH && <TauntWheel wheel={tauntWheel} />}
           {stats?.hideseek && IS_TOUCH && active && gameRef.current && <HideSeekTouch game={gameRef.current} match={match} />}
+
+          {stats?.zombies && gameRef.current && <ZombiesHUD game={gameRef.current} match={match} />}
+          {stats?.zombies && IS_TOUCH && active && gameRef.current && <ZombiesTouch game={gameRef.current} match={match} />}
+          {gameRef.current && openScreen === 'shop' && <ZombiesShop game={gameRef.current} match={match} />}
 
           {saved && (
             <div style={{ position: 'absolute', bottom: 8, right: 10, color: '#cfe9c0', font: '12px monospace', textShadow: '1px 1px 2px #000', pointerEvents: 'none' }}>Saved</div>

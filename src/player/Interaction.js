@@ -34,6 +34,7 @@ export class Interaction {
     this.onUseMob = null; // returns true if a mob interaction consumed the right-click
     this.target = null; // last raycast result
     this.breaking = false;
+    this.attackHeld = false; // raw primary-button state (full-auto guns)
     this.breakProgress = 0;
     this._breakKey = null; // identity of block currently being broken
     this._mineSfxT = 0;    // throttles the mining "hit" sound
@@ -70,14 +71,18 @@ export class Interaction {
   }
 
   // Primary action (left mouse / mine button): attack a targeted mob, else
-  // start breaking. Shared by mouse and touch input.
+  // start breaking. Shared by mouse and touch input. `attackHeld` mirrors the
+  // raw button state so full-auto guns can keep firing in the game loop even
+  // though onAttack itself is one-shot per press.
   primaryDown() {
+    this.attackHeld = true;
     if (this.onAttack && this.onAttack()) return;
     if (this.locked) return; // no mining in a locked (hide & seek) world
     this.breaking = true;
   }
 
   primaryUp() {
+    this.attackHeld = false;
     this.breaking = false;
     this.breakProgress = 0;
     this._breakKey = null;
@@ -94,8 +99,10 @@ export class Interaction {
     this._rightClick();
   }
 
-  // Touch hold: start mining only (no mob attack — that's the tap).
+  // Touch hold: start mining only (no mob attack — that's the tap). Holding
+  // with a gun equipped means full-auto fire, not mining.
   startMining() {
+    if (this.heldItem && this.heldItem.gun) { this.attackHeld = true; return; }
     if (this.locked) return; // no mining in a locked (hide & seek) world
     this.breaking = true;
   }

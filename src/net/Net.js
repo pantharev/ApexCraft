@@ -52,8 +52,9 @@ export class Net {
     this.onPlayerJoined = null; // ({id, name})
     this.onPlayerLeft = null;   // ({id})
     this.onMobs = null;         // (snapshot)
-    this.onProjectile = null;   // ({x,y,z,dx,dy,dz,speed,dmg,target})
-    this.onBoom = null;         // ({x,y,z,r}) — explosion visuals + self-damage
+    this.onProjectile = null;   // ({x,y,z,dx,dy,dz,speed,dmg,target,kind})
+    this.onBoom = null;         // ({x,y,z,r,by}) — explosion visuals + self-damage
+    this.onZone = null;         // ({x,y,z,r,dps,ttl,owner}) — a lingering damage pool
     this.onChess = null;        // ({from, action, key, ...}) — host only
     this.onChessState = null;   // (view) — authoritative table state
     this.onMatch = null;        // ({from, action, ...}) — hide & seek intent, host only
@@ -100,6 +101,7 @@ export class Net {
     this.socket.on('mobs', (snap) => this.onMobs && this.onMobs(snap));
     this.socket.on('projectile', (p) => this.onProjectile && this.onProjectile(p));
     this.socket.on('boom', (b) => this.onBoom && this.onBoom(b));
+    this.socket.on('zone', (z) => this.onZone && this.onZone(z));
     this.socket.on('chess', (m) => this.onChess && this.onChess(m));
     this.socket.on('chessState', (v) => this.onChessState && this.onChessState(v));
     this.socket.on('match', (m) => this.onMatch && this.onMatch(m));
@@ -165,7 +167,9 @@ export class Net {
 
   sendMobs(snap) { this.socket.volatile.emit('mobs', snap); }
   sendProjectile(p) { this.socket.emit('projectile', p); }
-  sendBoom(x, y, z, r) { this.socket.emit('boom', { x, y, z, r }); }
+  // `by` (optional) attributes the blast's kills (exploding arrows).
+  sendBoom(x, y, z, r, by) { this.socket.emit('boom', { x, y, z, r, by }); }
+  sendZone(z) { this.socket.emit('zone', z); }
   sendChess(msg) { this.socket.emit('chess', msg); }          // guest -> host
   sendChessState(view) { this.socket.emit('chessState', view); } // host -> room
   sendMatch(msg) { this.socket.emit('match', msg); }            // guest -> host

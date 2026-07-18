@@ -11,6 +11,26 @@ const CHANGELOG = [
     body: 'Wolves and cats now roam the wild. Win a wolf over with skeleton bones and it will follow you anywhere — teleporting to catch up — and leap to your defense against anything that hurts you (or anything you pick a fight with). Cats are tamed with raw fish, sometimes caught while scooping water with a bucket, and creepers are terrified of them. Right-click your pet to have it sit and guard the base, feed it meat or fish to heal it, and it will still be waiting for you when you reload the world — pets work in multiplayer too.',
   },
   {
+    date: 'July 15, 2026',
+    title: 'Zombies: Chargers, Tanks & living dead',
+    body: 'Two heavyweights join the horde. The Charger stalks you, rears back with a roar, then rockets across the arena in a dead-straight line — sidestep it and it eats the wall, get caught and you\'ll be sent flying. And every tenth wave the ground shakes: the Tank is a wall of muscle that shrugs off whole magazines, punches through your barricades, and hurls rocks at anyone who thinks distance means safety (250 points if your team can bring it down). The dead also learned to move like the dead: zombies now shamble with arms outstretched and twitching heads, sprinters pump their arms in a full sprint, brutes and tanks lumber with a heavy side-to-side sway, screamers wail with arms overhead, and everything swings its arms in a proper overhead slam when it hits you.',
+  },
+  {
+    date: 'July 12, 2026',
+    title: 'Zombies: special infected & a fiercer fight',
+    body: 'The horde learned new tricks. Four special zombies join the waves: gaunt red-eyed Sprinters that close the distance terrifyingly fast, bloated Spitters that lob arcing acid globs and leave sizzling pools you\'d better not stand in, bone-pale Screamers that hang back and whip every zombie around them into a frenzy until you put them down, and — every fifth wave — a hulking Brute that smashes straight through your barricades one block at a time (only the bedrock shell can stop it). The pacing got a pass too: early waves are small but the zombies come in hot, and every wave hits harder than the last, just like the classics. The Bastion itself was pulled in tighter — the gates are much closer to the keep now, so the pressure never lets up. Kill points scale with the threat: 100 for a Brute, if you can drop it.',
+  },
+  {
+    date: 'July 11, 2026',
+    title: 'Zombies: guns & the Mystery Box',
+    body: 'The armory is open — on the walls, just like the classics. Chalk outlines around the castle mark where each gun is sold for your zombie-kill points: the M14 waits safely inside the keep, the AK-74u across the courtyard, and the Galil out by the east gate where buying it mid-wave takes nerve. Bought guns come with magazine and reserve (R to reload); return to the outline for half-price ammo, even while the horde is pouring in. Feeling lucky? The glowing crate in the keep is the Mystery Box: one spin for a random gun, and it’s the only place the legendary Ray Gun drops — a green-bolt monster whose splash blast shreds crowds without ever harming your barricades. The Bastion itself is a true fortress now: two ruined curtain walls ring the keep — gated chokepoints to barricade, crumbled breaches the dead clamber over, corner watchtowers to snipe from — and the whole arena is sealed under a beamed glass roof, moonlight striping the courtyards through the skylights. The keep grew into a real castle hall too — tall arrow-slit walls, arched doorways to barricade, and its own skylit roof over the archer platforms. Every courtyard is now flagstone underfoot, and covered stone galleries roof the curtain walls — torn open wherever the masonry has crumbled — so the whole fight happens inside the castle.',
+  },
+  {
+    date: 'July 10, 2026',
+    title: 'New game mode: Zombies (co-op wave defense)',
+    body: 'Grab up to three friends and hold The Bastion against endless waves of the undead. Zombies pour in through four gate tunnels — wall them off, snipe from the archer platforms, and watch out: spiders climb, skeletons shoot back, and creepers blow your barricades open. Kills earn points to spend in a between-wave shop, and two new bow ammos (cycle with X) turn the tide: exploding arrows that blast crowds without harming your walls, and venom arrows that leave a poison pool. Fall in battle and you spectate until your team clears the wave — if everyone drops, the run ends at the wave you reached.',
+  },
+  {
     date: 'July 3, 2026',
     title: 'New Prop Hunt arena: The Playroom',
     body: 'Shrink down to mouse size in a giant child’s bedroom: hide under a colossal table (or climb its leg to the fruit bowl and chess set on top), crawl beneath the bed, walk the bookshelf shelves among giant books, or lurk in the toy castle by the glow-mushroom night lights. A beamed glass skylight roof pours daylight in stripes across the floorboards, and the fireplace crackles with real lava behind its guard rail. Seekers start penned on the rug.',

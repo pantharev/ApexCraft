@@ -129,6 +129,26 @@ function crack(ctx, rng, dark, light) {
 }
 
 // --- Per-tile drawing routines (seeded so the atlas is stable) ---
+// Weathered stone plaque base + chalk frame for the wall-buy gun stations.
+function wallbuyBase(c, r) {
+  const vn = valueNoise(r, 4);
+  paint(c, '#6a6458', (x, y) => (vn(x, y) - 0.5) * 16, 5, r);
+  c.strokeStyle = 'rgba(238,236,224,0.85)';
+  c.strokeRect(1.5, 1.5, 13, 13); // chalk frame
+}
+
+// A gun profile drawn in chalk (same geometry family as the item icons).
+function chalkGun(c, { barrel, mag, stock }) {
+  c.fillStyle = 'rgba(240,238,228,0.92)';
+  c.fillRect(4, 7, barrel + 7, 2);           // barrel + top of receiver
+  c.fillRect(3, 7, 2, 3);                    // stock root
+  if (stock) c.fillRect(2, 8, 2, 3);         // shoulder pad
+  c.fillRect(4, 9, 6, 1);                    // receiver underside
+  c.fillRect(6, 10, 2, mag);                 // magazine
+  c.fillRect(4, 10, 1, 3);                   // grip
+  c.fillRect(barrel + 9, 6, 1, 1);           // front sight
+}
+
 const DRAW = {
   grass_top: (c, r) => {
     const vn = valueNoise(r, 4);
@@ -319,6 +339,41 @@ const DRAW = {
     c.strokeRect(0.5, 0.5, 15, 15); c.strokeRect(0, 5.5, 16, 0);
     c.fillStyle = '#9aa0a8'; c.fillRect(7, 4, 2, 3);   // clasp
     c.fillStyle = '#3a2a14'; c.fillRect(7, 6, 2, 1);   // keyhole
+  },
+  // Mystery Box (Zombies): a dark arcane crate with a glowing question mark.
+  mystery_box_top: (c, r) => {
+    const vn = valueNoise(r, 4);
+    paint(c, '#2c2440', (x, y) => (vn(x, y) - 0.5) * 12, 4, r);
+    c.strokeStyle = 'rgba(200,170,80,0.9)'; c.strokeRect(0.5, 0.5, 15, 15);
+    c.strokeRect(3.5, 3.5, 9, 9);
+    c.fillStyle = '#5ae06a'; c.fillRect(7, 7, 2, 2); // glow stud
+  },
+  mystery_box_side: (c, r) => {
+    const vn = valueNoise(r, 4);
+    paint(c, '#241e38', (x, y) => (vn(x, y) - 0.5) * 12, 4, r);
+    c.strokeStyle = 'rgba(200,170,80,0.9)'; c.strokeRect(0.5, 0.5, 15, 15);
+    // Glowing '?' glyph.
+    c.fillStyle = '#5ae06a';
+    c.fillRect(5, 3, 6, 2);   // top bar
+    c.fillRect(9, 5, 2, 2);   // right descender
+    c.fillRect(7, 7, 3, 2);   // curl into the middle
+    c.fillRect(7, 9, 2, 1);   // stem
+    c.fillRect(7, 12, 2, 2);  // dot
+    c.fillStyle = '#b8ffbe'; c.fillRect(6, 3, 2, 1); // hot highlight
+  },
+  // Wall-buy gun stations (Zombies): a chalk-outline gun on weathered stone,
+  // CoD-Zombies style. Right-clicking buys the gun (or its ammo, half price).
+  wallbuy_m14: (c, r) => {
+    wallbuyBase(c, r);
+    chalkGun(c, { barrel: 4, mag: 2, stock: true });
+  },
+  wallbuy_ak74u: (c, r) => {
+    wallbuyBase(c, r);
+    chalkGun(c, { barrel: 1, mag: 4, stock: false });
+  },
+  wallbuy_galil: (c, r) => {
+    wallbuyBase(c, r);
+    chalkGun(c, { barrel: 3, mag: 4, stock: true });
   },
   // Door panels (rendered as thin slabs by the mesher's special pass).
   door_bottom: (c, r) => {
@@ -592,6 +647,10 @@ const FACE_TILES = {
   furnace: { top: 'furnace_side', side: 'furnace_front', bottom: 'furnace_side' },
   torch: t('torch'),
   chest: { top: 'chest_top', side: 'chest_side', bottom: 'chest_top' },
+  mystery_box: { top: 'mystery_box_top', side: 'mystery_box_side', bottom: 'mystery_box_top' },
+  wallbuy_m14: t('wallbuy_m14'),
+  wallbuy_ak74u: t('wallbuy_ak74u'),
+  wallbuy_galil: t('wallbuy_galil'),
   tall_grass: t('tall_grass'), poppy: t('poppy'), dandelion: t('dandelion'),
   // Doors: 'top' face = upper half tile (window), 'side' = lower half tile.
   door: { top: 'door_top', side: 'door_bottom', bottom: 'door_bottom' },

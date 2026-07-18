@@ -19,6 +19,13 @@ const DESPAWN = 70;
 const SPAWN_MIN = 16;
 const SPAWN_MAX = 34;
 
+// Tamed-wolf combat assist: a wolf picks targets within ASSIST_RANGE of
+// itself that recently (REVENGE_WINDOW seconds) hurt its owner or were hit by
+// them, and drops the chase beyond ASSIST_LEASH from the owner.
+const ASSIST_RANGE = 12;
+const ASSIST_LEASH = 20;
+const REVENGE_WINDOW = 8;
+
 // Y below which we treat a position as "underground" for cave spawning.
 // SEA_LEVEL (62) minus a few blocks so overhangs / shallow caves don't count.
 const CAVE_MAX_Y = 58;
@@ -249,6 +256,21 @@ export class MobManager {
           if (d2 < bestSq) { bestSq = d2; victim = h; }
         }
         targetPos = victim ? victim.pos : mob.pos; // no prey -> just wander
+      } else if (mob.type === 'wolf' && mob.owner && !mob.sitting && ownerPos) {
+        // Wolf assist: avenge the owner. Candidates are mobs only (never
+        // players) and never anyone's pet.
+        const now = performance.now() / 1000;
+        let bestSq = ASSIST_RANGE * ASSIST_RANGE;
+        for (const c of this.mobs) {
+          if (c === mob || c.dead || c.owner) continue;
+          const hitByOwner = c.lastHitBy === mob.owner && now - (c.lastHitAt ?? -Infinity) < REVENGE_WINDOW;
+          const hurtOwner = c._hurtPid === mob.owner && now - (c._hurtT ?? -Infinity) < REVENGE_WINDOW;
+          if (!hitByOwner && !hurtOwner) continue;
+          if (distSq(c, ownerPos) > ASSIST_LEASH * ASSIST_LEASH) continue;
+          const d2 = distSq(mob, c.pos);
+          if (d2 < bestSq) { bestSq = d2; victim = c; }
+        }
+        if (victim) targetPos = victim.pos;
       }
 
       // Villagers panic when a monster gets close.
@@ -273,6 +295,9 @@ export class MobManager {
           if (victim) { victim.takeDamage(dmg, fromPos || mob.pos); return; }
           if (mob.owner) return; // pets never hit players
           if (mob.def.category === 'golem') return; // golems never hit players
+          // Revenge mark: this mob hurt a player — their wolves come for it.
+          mob._hurtPid = near.id;
+          mob._hurtT = performance.now() / 1000;
           ctx.attackPlayer(
             dmg, near.id,
             fromPos ? { x: near.pos.x - fromPos.x, z: near.pos.z - fromPos.z } : null

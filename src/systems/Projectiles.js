@@ -61,6 +61,9 @@ export class Projectiles {
           if (m.dead) continue; // corpses don't stop arrows
           const { min, max } = m.aabb();
           if (next.x > min.x && next.x < max.x && next.y > min.y && next.y < max.y && next.z > min.z && next.z < max.z) {
+            // Mob-target arrows only come from the local player's bow.
+            m.lastHitBy = 'self';
+            m.lastHitAt = performance.now() / 1000;
             m.takeDamage(p.damage, next);
             Sound.mobHurt();
             hit = true;

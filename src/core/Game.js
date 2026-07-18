@@ -282,7 +282,14 @@ export class Game {
       };
       net.onMobHit = (m) => { // a guest hit one of our simulated mobs
         const mob = this.mobs.byId(m.i);
-        if (mob) { mob.takeDamage(m.dmg, new THREE.Vector3(m.x, m.y, m.z)); Sound.mobHurt(); }
+        if (mob) {
+          if (m.from) { // pet combat assist: the guest's wolves avenge them
+            mob.lastHitBy = m.from;
+            mob.lastHitAt = performance.now() / 1000;
+          }
+          mob.takeDamage(m.dmg, new THREE.Vector3(m.x, m.y, m.z));
+          Sound.mobHurt();
+        }
       };
       net.onBecomeHost = () => {
         this.ghostMobs.clear(); // our MobManager takes over

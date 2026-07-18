@@ -204,6 +204,7 @@ io.on('connection', (socket) => {
     if (!r || !m) return;
     io.to(r.host).emit('mobHit', {
       i: m.i | 0, dmg: +m.dmg || 0, x: +m.x || 0, y: +m.y || 0, z: +m.z || 0,
+      from: socket.id, // attribution: the guest's tamed wolves avenge them
     });
   });
 

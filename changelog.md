@@ -9,6 +9,27 @@ updated with every merged PR** (and mirror a short player-facing entry in the
 
 ---
 
+## 2026-07-17 — Creative mob spawner items
+
+One `spawn_<type>` item per `MOBS` entry (13, incl. wolf/cat pets) in
+`src/items/items.json` with a `spawnMob` data field; `drawSpawnEgg` in
+`icons.js` (speckled egg tinted with the mob's body colour). They appear at
+the end of the creative palette automatically (non-placeable items section).
+Right-click flow: new `Interaction.onSpawnMob` branch in `_rightClick`
+(between bucket and block placement) passes `target.place` — the same free
+cell block placement fills; `Game` handler is **creative-gated** and either
+spawns via new `MobManager.spawnAt` (host/SP) or sends the new `spawnMob`
+relay (guest → host, host re-checks creative). **Creative now ticks the mob
+simulation**: new `MobManager.autoSpawn` flag (false in creative) gates the
+three ambient spawn timers *and* distance-despawn, so only spawner-item mobs
+exist and they don't vanish behind you (void kill at y<-10 still applies).
+Snapshot streaming in creative only while mobs exist (`_mobsWereLive` sends
+one trailing empty snapshot to clear guests' ghosts). Pets now also
+load/persist in creative worlds, and tame/feed skip item consumption in
+creative (matching bucket/placement conventions). Spawned mobs (other than
+tamed pets) still aren't saved — a creative zoo lasts the session only.
+Creative players are already immune to spawned hostiles via `vitals.godMode`.
+
 ## 2026-07-17 — Pets: tamable wolves & cats
 
 Two new `category: 'passive'` mobs in `src/entities/mobTypes.js` with data

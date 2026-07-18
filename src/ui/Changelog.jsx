@@ -7,6 +7,11 @@ import React from 'react';
 const CHANGELOG = [
   {
     date: 'July 17, 2026',
+    title: 'Creative mode: mob spawners',
+    body: 'The creative palette now carries a spawner item for every mob in the game — pigs to creepers, villagers to iron golems, and the new wolves and cats. Right-click the ground to place a live mob exactly where you want it: build a farm, stage a golem-versus-zombie brawl, or spawn a wolf and tame it on the spot (taming is free in creative). Creative worlds no longer spawn mobs on their own, and your placed menagerie won’t wander-despawn while you build. Works in multiplayer too.',
+  },
+  {
+    date: 'July 17, 2026',
     title: 'Pets: tame wolves and cats!',
     body: 'Wolves and cats now roam the wild. Win a wolf over with skeleton bones and it will follow you anywhere — teleporting to catch up — and leap to your defense against anything that hurts you (or anything you pick a fight with). Cats are tamed with raw fish, sometimes caught while scooping water with a bucket, and creepers are terrified of them. Right-click your pet to have it sit and guard the base, feed it meat or fish to heal it, and it will still be waiting for you when you reload the world — pets work in multiplayer too.',
   },

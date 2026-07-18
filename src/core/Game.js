@@ -34,6 +34,9 @@ import { getItem } from '../items/ItemRegistry.js';
 import { MOBS } from '../entities/mobTypes.js';
 import { SEA_LEVEL } from '../config.js';
 
+// Pet toast label: 'black_cat' -> 'Black Cat'.
+const petLabel = (type) => type.split('_').map((w) => w[0].toUpperCase() + w.slice(1)).join(' ');
+
 // A small starter kit so placement and tools are usable before crafting exists
 // (Phase 4). [item, count] pairs added to the inventory at spawn.
 const STARTER_KIT = [
@@ -288,7 +291,7 @@ export class Game {
       this._pendingTameId = null;
       this.ghostMobs.onPetUpdate = (g, was) => {
         if (was || g.owner !== net.id) return;
-        const label = g.type[0].toUpperCase() + g.type.slice(1);
+        const label = petLabel(g.type);
         if (this._pendingTameId === g.id) {
           this._pendingTameId = null;
           this.particles.burst(g.pos.x, g.pos.y + g.h + 0.3, g.pos.z, '#ff6a9a', 12, 1.8);
@@ -1041,7 +1044,7 @@ export class Game {
     if (!def || !def.tamable || mob.dead) return false;
     const local = pid === 'self';
     const item = local ? (this.inventory.selectedStack()?.item ?? null) : (itemName ?? null);
-    const label = mob.type[0].toUpperCase() + mob.type.slice(1);
+    const label = petLabel(mob.type);
     const hearts = () =>
       this.particles.burst(mob.pos.x, mob.pos.y + mob.h + 0.3, mob.pos.z, '#ff6a9a', 12, 1.8);
 
@@ -1058,7 +1061,7 @@ export class Game {
         hearts();
         if (local && this.onToast) this.onToast(`${label} tamed! It will follow you`);
       } else if (local && this.onToast) {
-        this.onToast(`The ${mob.type} ignores you...`);
+        this.onToast(`The ${label.toLowerCase()} ignores you...`);
       }
       return true;
     }
@@ -1092,7 +1095,7 @@ export class Game {
     const def = g.def;
     if (!def || !def.tamable || g.dead) return false;
     const item = this.inventory.selectedStack()?.item ?? null;
-    const label = g.type[0].toUpperCase() + g.type.slice(1);
+    const label = petLabel(g.type);
     if (!g.owner) {
       if (item !== def.tameItem) return false;
       if (!this.creative) this.inventory.consumeSelected(1);

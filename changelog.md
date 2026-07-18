@@ -11,9 +11,12 @@ updated with every merged PR** (and mirror a short player-facing entry in the
 
 ## 2026-07-17 — Creative mob spawner items
 
-One `spawn_<type>` item per `MOBS` entry (13, incl. wolf/cat pets) in
-`src/items/items.json` with a `spawnMob` data field; `drawSpawnEgg` in
-`icons.js` (speckled egg tinted with the mob's body colour). They appear at
+One `spawn_<type>` item per `MOBS` entry (14, incl. wolf/cat pets and the
+`black_cat` variant — a full tamable mob type, per-user dedication to Claudia
+Claude) in `src/items/items.json` with a `spawnMob` data field; `drawSpawnEgg`
+in `icons.js` (speckled egg tinted with the mob's body colour). Cats' creeper
+aura is now the data flag `scaresCreepers` (both cat types), and pet toast
+labels go through `petLabel()` in Game.js ('black_cat' → 'Black Cat'). They appear at
 the end of the creative palette automatically (non-placeable items section).
 Right-click flow: new `Interaction.onSpawnMob` branch in `_rightClick`
 (between bucket and block placement) passes `target.place` — the same free

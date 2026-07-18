@@ -237,11 +237,11 @@ export class MobManager {
     // hostiles, villagers panic near monsters.
     const villagers = [];
     const hostiles = [];
-    const cats = []; // creepers keep their distance from cats
+    const cats = []; // creepers keep their distance from cats (all colours)
     for (const m of this.mobs) {
       if (m.dead) continue;
       if (m.type === 'villager') villagers.push(m);
-      else if (m.type === 'cat') cats.push(m);
+      else if (m.def.scaresCreepers) cats.push(m);
       else if (m.def.category === 'hostile') hostiles.push(m);
     }
     const distSq = (a, b) => {

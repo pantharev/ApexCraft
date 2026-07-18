@@ -8,7 +8,7 @@ const CHANGELOG = [
   {
     date: 'July 17, 2026',
     title: 'Creative mode: mob spawners',
-    body: 'The creative palette now carries a spawner item for every mob in the game — pigs to creepers, villagers to iron golems, and the new wolves and cats. Right-click the ground to place a live mob exactly where you want it: build a farm, stage a golem-versus-zombie brawl, or spawn a wolf and tame it on the spot (taming is free in creative). Creative worlds no longer spawn mobs on their own, and your placed menagerie won’t wander-despawn while you build. Works in multiplayer too.',
+    body: 'The creative palette now carries a spawner item for every mob in the game — pigs to creepers, villagers to iron golems, and the new wolves and cats, now joined by black cats (for Claudia Claude 🐈‍⬛). Right-click the ground to place a live mob exactly where you want it: build a farm, stage a golem-versus-zombie brawl, or spawn a wolf and tame it on the spot (taming is free in creative). Black cats also prowl the wild and tame with raw fish, and creepers fear them just like their ginger cousins. Creative worlds no longer spawn mobs on their own, and your placed menagerie won’t wander-despawn while you build. Works in multiplayer too.',
   },
   {
     date: 'July 17, 2026',

@@ -752,6 +752,13 @@
     "spawnMob": "cat"
   },
   {
+    "name": "spawn_black_cat",
+    "display": "Black Cat Spawner",
+    "color": "#232228",
+    "maxStack": 64,
+    "spawnMob": "black_cat"
+  },
+  {
     "name": "spawn_villager",
     "display": "Villager Spawner",
     "color": "#8a6d4a",

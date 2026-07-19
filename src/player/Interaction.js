@@ -34,6 +34,10 @@ export class Interaction {
     this.onUseMob = null; // returns true if a mob interaction consumed the right-click
     this.onSpawnMob = null; // (type, cell) — creative spawner item used on a block face
     this.target = null; // last raycast result
+    // Tycoon: the world is read-only (no mining/placing/pouring) but right-
+    // click USE — doors, purchase pads — must still work, so this is a
+    // narrower gate than `locked` (which kills the whole right-click).
+    this.noEdit = false;
     this.breaking = false;
     this.attackHeld = false; // raw primary-button state (full-auto guns)
     this.breakProgress = 0;
@@ -78,7 +82,7 @@ export class Interaction {
   primaryDown() {
     this.attackHeld = true;
     if (this.onAttack && this.onAttack()) return;
-    if (this.locked) return; // no mining in a locked (hide & seek) world
+    if (this.locked || this.noEdit) return; // no mining in a locked/read-only world
     this.breaking = true;
   }
 
@@ -104,7 +108,7 @@ export class Interaction {
   // with a gun equipped means full-auto fire, not mining.
   startMining() {
     if (this.heldItem && this.heldItem.gun) { this.attackHeld = true; return; }
-    if (this.locked) return; // no mining in a locked (hide & seek) world
+    if (this.locked || this.noEdit) return; // no mining in a locked/read-only world
     this.breaking = true;
   }
 
@@ -127,6 +131,7 @@ export class Interaction {
         return;
       }
     }
+    if (this.noEdit) return; // read-only world: use is fine, editing is not
     if (this.heldItem && this.heldItem.bucket) {
       this._useBucket(this.heldItem);
     } else if (this.heldItem && this.heldItem.spawnMob) {

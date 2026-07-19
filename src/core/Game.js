@@ -30,6 +30,7 @@ import { setActiveMap, activeMap, MAPS } from '../world/arenas/index.js';
 import { HideSeek, TAG_RANGE } from '../systems/HideSeek.js';
 import { HideSeekBots } from '../systems/HideSeekBots.js';
 import { ZombiesMode } from '../systems/ZombiesMode.js';
+import { TycoonMode } from '../systems/TycoonMode.js';
 import { TAUNTS, tauntById } from '../systems/taunts.js';
 import { getBlockId, isSolid, liquidKind } from '../blocks/BlockRegistry.js';
 import { getItem } from '../items/ItemRegistry.js';
@@ -116,15 +117,18 @@ export class Game {
     // blocks, no mobs, no damage; hideseek = Prop Hunt minigame on a fixed
     // arena; zombies = co-op wave defense on a fixed arena). A per-world
     // setting, fixed at creation.
-    this.mode = ['creative', 'hideseek', 'zombies'].includes(save?.mode) ? save.mode : 'survival';
+    this.mode = ['creative', 'hideseek', 'zombies', 'tycoon'].includes(save?.mode) ? save.mode : 'survival';
     this.creative = this.mode === 'creative';
     this.hideseek = this.mode === 'hideseek';
     this.zombies = this.mode === 'zombies';
+    this.tycoon = this.mode === 'tycoon';
     // Arena worlds play on a named arena map, fixed at creation like the
     // seed. Select it before any chunk generates (unknown/legacy ids fall back
     // to the default map inside setActiveMap).
-    const arena = this.hideseek || this.zombies;
-    this.map = arena ? (MAPS[save?.map] ? save.map : (this.zombies ? 'bastion' : 'town')) : null;
+    const arena = this.hideseek || this.zombies || this.tycoon;
+    this.map = arena
+      ? (MAPS[save?.map] ? save.map : (this.zombies ? 'bastion' : this.tycoon ? 'millside' : 'town'))
+      : null;
     if (arena) setActiveMap(this.map);
     // Tell the chunk generator which world to build before any chunk generates
     // (flat arena for hide & seek / zombies, procedural terrain otherwise).
@@ -168,8 +172,9 @@ export class Game {
     // Inventory: mined drops flow in here; leftover (full) stays in the world.
     this.inventory = new Inventory();
     if (this._save?.inventory) this.inventory.load(this._save.inventory);
-    // Hide & seek players carry nothing — the arena is fixed and there's no building.
-    else if (!this.hideseek) {
+    // Hide & seek and tycoon players carry nothing — those arenas are fixed
+    // and there's no building.
+    else if (!this.hideseek && !this.tycoon) {
       const kit = this.creative ? CREATIVE_KIT : this.zombies ? ZOMBIES_KIT : STARTER_KIT;
       for (const [name, count] of kit) this.inventory.addItem(name, count);
     }
@@ -181,14 +186,18 @@ export class Game {
     // Hide & seek: the arena is fixed — no breaking or placing for anyone.
     // (Seekers still "attack" to tag hiders; that goes through onAttack below.)
     this.interaction.locked = this.hideseek;
+    // Tycoon: the world is read-only but right-click USE (doors, purchase
+    // pads) still works — a narrower gate than `locked`.
+    this.interaction.noEdit = this.tycoon;
     this.interaction.onPlaced = () => { if (!this.creative) this.inventory.consumeSelected(1); };
 
     // Survival stats + the damage/eat/death hooks. Creative = invulnerable,
     // no hunger, and start in flight for building.
     this.vitals = new Vitals(this.player, this.world);
-    // Creative + hide & seek players take no environmental damage — in hide &
-    // seek, elimination is a match concept handled by the round, not HP/hunger.
-    this.vitals.godMode = this.creative || this.hideseek;
+    // Creative + hide & seek + tycoon players take no environmental damage —
+    // in hide & seek, elimination is a match concept handled by the round, and
+    // tycoon is a peaceful management mode with nothing to die to.
+    this.vitals.godMode = this.creative || this.hideseek || this.tycoon;
     if (this.creative) this.player.flying = true;
     this.onDead = null; // React setter for the death overlay
     this.player.onLand = (fall) => this.vitals.applyFall(fall);
@@ -234,12 +243,14 @@ export class Game {
     // Zombies arenas are locked to night on every client (a mode constant, not
     // synced state): zombies have burns:true and would cook in daylight.
     if (this.zombies) { this.dayNight.t = 0.78; this.dayNight.frozen = true; this.dayNight.update(0); }
+    // Tycoon is locked to a pleasant working morning (the inverse constant).
+    if (this.tycoon) { this.dayNight.t = 0.30; this.dayNight.frozen = true; this.dayNight.update(0); }
     this.mobs = new MobManager(this.world, this.scene, this.itemDrops);
     // No ambient spawning or distance despawn in zombies mode (the wave
     // director is the only spawner, and gate mobs must not despawn just
     // because the team is across the arena) or creative (only spawner-item
     // mobs exist).
-    this.mobs.autoSpawn = !this.creative && !this.zombies;
+    this.mobs.autoSpawn = !this.creative && !this.zombies && !this.tycoon;
     this.torchLights = new TorchLights(this.scene, this.world);
     this.projectiles = new Projectiles(this.world, this.scene);
     this.particles = new Particles(this.scene);
@@ -303,6 +314,8 @@ export class Game {
         this.remotePlayers.add(p.id, p.name);
         // Zombies: roster a late joiner into the running match (host only).
         if (this.zombiesMode && net.isHost) this.zombiesMode.playerJoined(p.id);
+        // Tycoon: hand a returning player their reserved plot, by name.
+        if (this.tycoonMode && net.isHost) this.tycoonMode.playerJoined(p.id, p.name);
         // Host: rebind orphaned pets to a returning owner, matched by name.
         if (net.isHost) {
           for (const m of this.mobs.mobs) {
@@ -412,8 +425,8 @@ export class Game {
         // Take over the match simulation from our last-synced state.
         this._matchMode()?.becomeAuthority();
       };
-      // Zombies arenas ignore the clock sync — the night lock is absolute.
-      net.onTime = (t) => { if (!this.zombies) this.dayNight.t = t; };
+      // Zombies/tycoon arenas ignore the clock sync — their locks are absolute.
+      net.onTime = (t) => { if (!this.zombies && !this.tycoon) this.dayNight.t = t; };
       this._netT = 0;     // player-state send accumulator (~15 Hz)
       this._mobNetT = 0;  // mob snapshot accumulator (~10 Hz)
       this._mobsWereLive = false; // creative: was the last sent snapshot non-empty?
@@ -544,6 +557,9 @@ export class Game {
       } else if (name.startsWith('wallbuy_')) {
         const err = this.zombiesMode?.buyWall(name.slice(8));
         if (err && this.onToast) this.onToast(err);
+      } else if (name.startsWith('tycoon_pad_')) {
+        const err = this.tycoonMode?.usePad(name, pos);
+        if (err && this.onToast) this.onToast(err);
       }
     };
     this.onSleep = null; // React fade-to-black overlay
@@ -604,6 +620,21 @@ export class Game {
       if (this._save?.match) this.zombiesMode.applyState(this._save.match);
     }
 
+    // Tycoon: the plot/economy manager. Same authoritative shape and channel;
+    // unlike the match modes its state persists (Game.serialize's `tycoon`).
+    this.tycoonMode = null;
+    if (this.tycoon) {
+      this.tycoonMode = new TycoonMode(this);
+      this.tycoonMode.onChanged = (state, received) => {
+        if (this.onMatch) this.onMatch(state);
+        if (this.net && this.net.isHost && !received) this.net.sendMatchState(state);
+      };
+      // Late joiner: adopt the live plots from the server. Otherwise (solo /
+      // hosting) restore the saved tycoon; buildings replay from the edits.
+      if (this._save?.match) this.tycoonMode.applyState(this._save.match);
+      else if (this._save?.tycoon && this.tycoonMode.authoritative) this.tycoonMode.load(this._save.tycoon);
+    }
+
     // First-person held view-model, parented to the camera so it tracks the
     // view. The camera must be in the scene graph to be lit/rendered.
     this.scene.add(this.camera);
@@ -623,6 +654,7 @@ export class Game {
     this._bindScreens();
     if (this.hideseek) { this._bindHideSeek(); this._bindTauntWheel(); }
     if (this.zombies) this._bindZombies();
+    if (this.tycoon) this._bindTycoon();
 
     // Pre-generate spawn area so the player doesn't fall through ungenerated
     // chunks, then place the player. For a loaded game, generate around the
@@ -630,7 +662,7 @@ export class Game {
     if (this._save?.player) {
       this._restorePlayer(this._save.player);
       this.world.update(this.player.pos.x, this.player.pos.z, 80);
-    } else if (this.hideseek || this.zombies) {
+    } else if (this.hideseek || this.zombies || this.tycoon) {
       // Arena maps define their lobby spawn explicitly — spawnAtSurface scans
       // top-down and would drop the player onto a roof (or a future ceiling).
       this.world.update(0, 0, 80);
@@ -645,7 +677,7 @@ export class Game {
     // Restore tamed pets — after pregen so their chunks exist, host/SP only
     // (guests mirror the host's mobs). A guest's pet loads orphaned + sitting
     // and rebinds when that player rejoins.
-    if (this._save?.pets && !this.hideseek && !this.zombies && (!net || net.isHost)) {
+    if (this._save?.pets && !this.hideseek && !this.zombies && !this.tycoon && (!net || net.isHost)) {
       for (const r of this._save.pets) {
         this.mobs.spawnPet({
           t: r.t, x: r.x, y: r.y, z: r.z, hp: r.hp, name: r.name,
@@ -814,10 +846,10 @@ export class Game {
     });
   }
 
-  // The active match-mode manager (hide & seek or zombies), if any. Both share
-  // the match/matchState net channel and the onMatch React channel.
+  // The active match-mode manager (hide & seek, zombies, or tycoon), if any.
+  // All share the match/matchState net channel and the onMatch React channel.
   _matchMode() {
-    return this.hideSeek || this.zombiesMode || null;
+    return this.hideSeek || this.zombiesMode || this.tycoonMode || null;
   }
 
   // Zombies: dead defenders spectate and must not draw mob aggro.
@@ -844,6 +876,15 @@ export class Game {
         const held = this.interaction.heldItem;
         if (held && held.gun) this._startReload(held);
       }
+    });
+  }
+
+  // Tycoon keys: dev-only (localhost) money tap for testing the pads and
+  // upgrade stamps without grinding deliveries.
+  _bindTycoon() {
+    this._on(window, 'keydown', (e) => {
+      if (!this.tycoonMode || this.openScreen) return;
+      if (e.code === 'KeyP' && this.dev) this.tycoonMode.devGrant();
     });
   }
 
@@ -1055,6 +1096,9 @@ export class Game {
           own: m.owner === 'self' ? 1 : 0, name: m.ownerName || null,
         })),
       chess: this.chessGames.serialize(),
+      // Tycoon plots persist by owner NAME (pids are session-scoped) — money
+      // and tiers survive reload; buildings replay from `edits`.
+      ...(this.tycoonMode ? { tycoon: this.tycoonMode.serialize() } : {}),
       time: this.dayNight.t,
     };
   }
@@ -1503,6 +1547,7 @@ export class Game {
     this.torchLights.update(this.player.pos);
     if (this.hideSeek) this.hideSeek.update(dt);
     if (this.zombiesMode) this.zombiesMode.update(dt);
+    if (this.tycoonMode) this.tycoonMode.update(dt);
     const isGuest = this.net && !this.net.isHost;
     if (isGuest) {
       // Guests mirror the host's mob simulation instead of running their own.
@@ -1658,6 +1703,7 @@ export class Game {
         creative: this.creative,
         hideseek: this.hideseek,
         zombies: this.zombies,
+        tycoon: this.tycoon,
         gunAmmo: item && item.gun && this.guns[item.name]
           ? { mag: this.guns[item.name].mag, reserve: this.guns[item.name].reserve, reloading: this._reloading > 0 }
           : null,

@@ -65,8 +65,8 @@ io.on('connection', (socket) => {
     rooms.set(c, {
       seed: data?.seed ?? 0,
       time: data?.time ?? 0.3,
-      mode: ['creative', 'hideseek', 'zombies'].includes(data?.mode) ? data.mode : 'survival',
-      map: typeof data?.map === 'string' ? data.map.slice(0, 24) : null, // arena map id (Prop Hunt / Zombies)
+      mode: ['creative', 'hideseek', 'zombies', 'tycoon'].includes(data?.mode) ? data.mode : 'survival',
+      map: typeof data?.map === 'string' ? data.map.slice(0, 24) : null, // arena map id (Prop Hunt / Zombies / Tycoon)
 
       edits: data?.edits && typeof data.edits === 'object' ? data.edits : {},
       host: socket.id,

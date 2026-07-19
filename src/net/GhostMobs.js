@@ -58,6 +58,21 @@ export class GhostMobs {
           g.group.add(g.tag);
         }
       }
+
+      // Worker carry mirror: show/hide the hauled-log mesh (same box as the
+      // host's Mob._setCarry).
+      if (!!s.c !== !!g.carryMesh) {
+        if (s.c) {
+          g.carryMesh = new THREE.Mesh(
+            new THREE.BoxGeometry(0.56, 0.26, 0.26),
+            new THREE.MeshLambertMaterial({ color: '#6b4a2a' })
+          );
+          g.carryMesh.position.set(0, 1.18, 0.3);
+          g.group.add(g.carryMesh);
+        } else {
+          this._disposeCarry(g);
+        }
+      }
     }
     // Remove ghosts the host no longer reports (dead/despawned).
     for (const g of this.mobs) if (!seen.has(g.id)) g.removed = true;
@@ -66,6 +81,7 @@ export class GhostMobs {
         if (g.removed) {
           this._byId.delete(g.id);
           this._disposeTag(g);
+          this._disposeCarry(g);
           this.scene.remove(g.group);
           g.group.traverse((o) => o.geometry && o.geometry.dispose());
         }
@@ -82,6 +98,15 @@ export class GhostMobs {
     g.tag.material.map.dispose();
     g.tag.material.dispose();
     g.tag = null;
+  }
+
+  // The worker carry mesh owns its material (unlike the shared model parts).
+  _disposeCarry(g) {
+    if (!g.carryMesh) return;
+    g.group.remove(g.carryMesh);
+    g.carryMesh.geometry.dispose();
+    g.carryMesh.material.dispose();
+    g.carryMesh = null;
   }
 
   _create(s) {
@@ -114,6 +139,7 @@ export class GhostMobs {
       sitting: false,
       tag: null,
       _tagText: null,
+      carryMesh: null,  // worker mirror state (see apply)
       deathT: 0,
       _deathSpin: (s.i & 1) === 0 ? 1 : -1,
       aabb() {
@@ -215,7 +241,7 @@ export class GhostMobs {
     let best = null;
     let bestT = reach;
     for (const g of this.mobs) {
-      if (g.dead) continue;
+      if (g.dead || g.def.noHit) continue; // workers pass clicks through
       const { min, max } = g.aabb();
       const t = rayAABB(origin, dir, min, max);
       if (t !== null && t >= 0 && t <= bestT) { bestT = t; best = g; }
@@ -226,6 +252,7 @@ export class GhostMobs {
   clear() {
     for (const g of this.mobs) {
       this._disposeTag(g);
+      this._disposeCarry(g);
       this.scene.remove(g.group);
       g.group.traverse((o) => o.geometry && o.geometry.dispose());
     }

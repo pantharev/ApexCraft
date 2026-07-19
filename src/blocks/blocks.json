@@ -998,6 +998,41 @@
     "drops": []
   },
   {
+    "id": 69,
+    "name": "tycoon_pad_worker",
+    "solid": true,
+    "color": "#7a6a4a",
+    "hardness": -1,
+    "interactive": true,
+    "drops": []
+  },
+  {
+    "id": 70,
+    "name": "tycoon_pad_mill",
+    "solid": true,
+    "color": "#7a6a4a",
+    "hardness": -1,
+    "interactive": true,
+    "drops": []
+  },
+  {
+    "id": 71,
+    "name": "tycoon_pad_house",
+    "solid": true,
+    "color": "#7a6a4a",
+    "hardness": -1,
+    "interactive": true,
+    "drops": []
+  },
+  {
+    "id": 72,
+    "name": "tycoon_claim",
+    "solid": true,
+    "color": "#c8a232",
+    "hardness": -1,
+    "drops": []
+  },
+  {
     "id": 61,
     "name": "lava_flow_3",
     "solid": false,

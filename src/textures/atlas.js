@@ -137,6 +137,18 @@ function wallbuyBase(c, r) {
   c.strokeRect(1.5, 1.5, 13, 13); // chalk frame
 }
 
+// Warm plank plaque + chalk frame + gold $ stud for the tycoon purchase pads.
+function tycoonPadBase(c, r) {
+  const vn = valueNoise(r, 4);
+  paint(c, '#7a6a4a', (x, y) => (vn(x, y) - 0.5) * 16 + Math.sin(y * 1.6) * 4, 5, r);
+  c.strokeStyle = 'rgba(238,236,224,0.85)';
+  c.strokeRect(1.5, 1.5, 13, 13); // chalk frame
+  c.fillStyle = '#e8c84a';
+  c.fillRect(13, 2, 1, 3);        // $ stud in the corner
+  c.fillRect(12, 2, 2, 1);
+  c.fillRect(12, 4, 2, 1);
+}
+
 // A gun profile drawn in chalk (same geometry family as the item icons).
 function chalkGun(c, { barrel, mag, stock }) {
   c.fillStyle = 'rgba(240,238,228,0.92)';
@@ -374,6 +386,54 @@ const DRAW = {
   wallbuy_galil: (c, r) => {
     wallbuyBase(c, r);
     chalkGun(c, { barrel: 3, mag: 4, stock: true });
+  },
+  // Tycoon purchase pads: chalk pictograms on a warm plank plaque, with a
+  // gold $ stud so the pads read as "spend money here" from across the plot.
+  tycoon_pad_worker: (c, r) => {
+    tycoonPadBase(c, r);
+    c.fillStyle = 'rgba(240,238,228,0.92)';
+    c.fillRect(6, 3, 2, 2);   // head
+    c.fillRect(6, 5, 2, 4);   // body
+    c.fillRect(5, 9, 1, 3);   // legs
+    c.fillRect(8, 9, 1, 3);
+    c.fillRect(8, 6, 3, 1);   // arm out to the axe
+    c.fillStyle = '#c8a232';
+    c.fillRect(11, 4, 1, 3);  // axe handle
+    c.fillRect(10, 3, 3, 1);  // axe head
+  },
+  tycoon_pad_mill: (c, r) => {
+    tycoonPadBase(c, r);
+    // Chalk circular saw blade: ring of teeth around a hub.
+    c.fillStyle = 'rgba(240,238,228,0.92)';
+    c.fillRect(5, 4, 6, 8);   // blade disc
+    c.fillRect(4, 6, 8, 4);
+    c.fillStyle = '#6a5638';
+    c.fillRect(7, 7, 2, 2);   // arbor hole
+    c.fillStyle = 'rgba(240,238,228,0.92)';
+    for (const [tx, ty] of [[7, 2], [3, 5], [12, 5], [3, 10], [12, 10], [7, 13]]) c.fillRect(tx, ty, 2, 1); // teeth
+  },
+  tycoon_pad_house: (c, r) => {
+    tycoonPadBase(c, r);
+    c.fillStyle = 'rgba(240,238,228,0.92)';
+    c.fillRect(4, 8, 8, 5);   // walls
+    for (let i = 0; i < 4; i++) c.fillRect(5 + i, 7 - i, 6 - 2 * i, 1); // gable roof
+    c.fillStyle = '#6a5638';
+    c.fillRect(7, 10, 2, 3);  // doorway
+  },
+  // Claim tile: gold-bordered green pad with a star — walk on it to claim.
+  tycoon_claim: (c, r) => {
+    const vn = valueNoise(r, 4);
+    paint(c, '#3f7e35', (x, y) => (vn(x, y) - 0.5) * 14, 5, r);
+    c.strokeStyle = 'rgba(226,186,74,0.95)';
+    c.strokeRect(0.5, 0.5, 15, 15);
+    c.strokeRect(1.5, 1.5, 13, 13);
+    c.fillStyle = '#e8c84a';
+    c.fillRect(7, 4, 2, 8);   // star: vertical bar
+    c.fillRect(4, 7, 8, 2);   // horizontal bar
+    c.fillRect(5, 5, 2, 2);   // diagonals
+    c.fillRect(9, 5, 2, 2);
+    c.fillRect(5, 9, 2, 2);
+    c.fillRect(9, 9, 2, 2);
   },
   // Door panels (rendered as thin slabs by the mesher's special pass).
   door_bottom: (c, r) => {
@@ -651,6 +711,10 @@ const FACE_TILES = {
   wallbuy_m14: t('wallbuy_m14'),
   wallbuy_ak74u: t('wallbuy_ak74u'),
   wallbuy_galil: t('wallbuy_galil'),
+  tycoon_pad_worker: t('tycoon_pad_worker'),
+  tycoon_pad_mill: t('tycoon_pad_mill'),
+  tycoon_pad_house: t('tycoon_pad_house'),
+  tycoon_claim: { top: 'tycoon_claim', side: 'planks', bottom: 'planks' },
   tall_grass: t('tall_grass'), poppy: t('poppy'), dandelion: t('dandelion'),
   // Doors: 'top' face = upper half tile (window), 'side' = lower half tile.
   door: { top: 'door_top', side: 'door_bottom', bottom: 'door_bottom' },

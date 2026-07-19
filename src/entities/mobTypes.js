@@ -122,6 +122,26 @@ export const MOBS = {
     ],
   },
 
+  // Tycoon lumber worker: a villager cousin in overalls and a hard hat. Own
+  // category keeps it out of every spawn pool — TycoonMode is its only
+  // spawner. noHit: player clicks pass straight through (raycast skips it),
+  // so a busy mill yard can't be griefed or misclicked.
+  worker: {
+    category: 'worker', health: 20, speed: 1.55, hw: 0.35, h: 1.8, noHit: true,
+    gait: 'run',
+    drops: [],
+    parts: [
+      leg(-0.11, 0, 0.2, 0.4, 0.2, '#2e4a6b'), leg(0.11, 0, 0.2, 0.4, 0.2, '#2e4a6b'),
+      { size: [0.52, 0.5, 0.34], pos: [0, 0.64, 0], color: '#2e4a6b' },                // overalls
+      { size: [0.54, 0.42, 0.36], pos: [0, 1.08, 0], color: '#c8b48a' },               // work shirt
+      { size: [0.16, 0.6, 0.2], pos: [-0.36, 1.1, 0], color: '#c8b48a', arm: true },   // arms
+      { size: [0.16, 0.6, 0.2], pos: [0.36, 1.1, 0], color: '#c8b48a', arm: true },
+      { size: [0.46, 0.46, 0.44], pos: [0, 1.52, 0], color: '#c8a17a', head: true },   // head
+      { size: [0.5, 0.14, 0.48], pos: [0, 1.78, 0], color: '#e8c83a', head: true },    // hard hat
+      { size: [0.12, 0.22, 0.12], pos: [0, 1.44, 0.28], color: '#b58e67', head: true }, // the nose
+    ],
+  },
+
   // Village defender: ignores players, hunts hostiles, hits like a truck.
   iron_golem: {
     category: 'golem', health: 60, speed: 1.1, attack: 8, detect: 16, hw: 0.55, h: 2.4,

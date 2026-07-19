@@ -6,6 +6,11 @@ import React from 'react';
 
 const CHANGELOG = [
   {
+    date: 'July 19, 2026',
+    title: 'New game mode: Tycoon',
+    body: 'Build a lumber empire in Millside, a sunny valley with four plots waiting for owners. Walk onto a golden pad to claim yours — a hard-hatted worker immediately starts trudging between your grove and your sawmill, hauling logs and earning you cash with every delivery. Spend it at your plot\'s chalkboard pads: hire up to six workers, upgrade the mill through four tiers (each pays more, works faster, and physically grows from a humble sawhorse into a two-story timber mill), and build your house up from a hut to a manor to show off. Everything is saved — money, upgrades, buildings, and your crew are all waiting when you return. Race your friends plot-against-plot in multiplayer: claim, earn, and flex, and if you drop out your plot pauses safely until you come back.',
+  },
+  {
     date: 'July 17, 2026',
     title: 'Creative mode: mob spawners',
     body: 'The creative palette now carries a spawner item for every mob in the game — pigs to creepers, villagers to iron golems, and the new wolves and cats, now joined by black cats (for Claudia Claude 🐈‍⬛). Right-click the ground to place a live mob exactly where you want it: build a farm, stage a golem-versus-zombie brawl, or spawn a wolf and tame it on the spot (taming is free in creative). Black cats also prowl the wild and tame with raw fish, and creepers fear them just like their ginger cousins. Creative worlds no longer spawn mobs on their own, and your placed menagerie won’t wander-despawn while you build. Works in multiplayer too.',

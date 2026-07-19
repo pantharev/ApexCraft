@@ -9,6 +9,54 @@ updated with every merged PR** (and mirror a short player-facing entry in the
 
 ---
 
+## 2026-07-19 — Tycoon mode (Millside)
+
+Fifth game mode: a Roblox-style lumber tycoon on a fixed arena map. New
+`src/world/arenas/maps/millside.js` (half=46 — **hard constraint**: every
+chunk must stay within `LOAD_RADIUS` (8) of a player anywhere in the map,
+because host-simulated workers in unloaded chunks would fall; a bedrock-core
+leaf hedge seals the rim). Four quadrant plots by sign-mirroring one master
+layout; each has a 2×2 step-on claim pad (`tycoon_claim`, block id 72), a
+shop wall with three interactive purchase pads (`tycoon_pad_worker/mill/
+house`, ids 69-71, wallbuy pattern: `hardness:-1, interactive`, dispatched
+by name prefix in `Game.onUseBlock` → `TycoonMode.usePad`), a grove, a
+starter mill, and a straight flat work route (steering is straight-line
+only — keep routes clear). `arenaTest.js` covers all of it per plot.
+
+`src/systems/TycoonMode.js` is a ZombiesMode-shaped authoritative manager on
+the shared match/matchState channel (`_matchMode()` gained it — that alone
+wires intents/state/left/migration). State = 4 plot records `{owner,
+ownerName, money, mill, house, workers}`; **claiming is step-on** (authority
+sweeps player positions against pad footprints — no net event, no races).
+Key decisions: (1) **upgrades are prefab stamps applied as ordinary world
+edits** (`millStamp`/`houseStamp` exported by the map; applied in a
+`beginEditBatch` — synced to guests and persisted via `World.edits` with
+zero extra code; every tier air-clears its volume first so cumulative
+replay leaves the newest tier); (2) **persistence keys plots by player
+NAME** (`serialize().tycoon`; pids are session-scoped; rejoin/reload rebind
+by name — pets precedent; solo load falls back to first claimed plot);
+(3) **workers are never saved as mobs** — the per-plot count is the truth
+and an authority census respawns deficits (waits for the mill chunk via
+`isSolid`), which self-heals load, host migration, and void falls;
+(4) owner offline ⇒ plot paused (workers idle, no accrual, plot reserved).
+
+Worker mob: `category:'worker'` (no spawn pool), `noHit:true` (**both**
+raycasts — MobManager + GhostMobs — skip it, clicks pass through), FSM in
+`Mob._workerAI` (toSource → chopping 2s → toMill → delivering 1.5s →
+`workData.onDeliver()` credits the plot; 30s stuck-teleport failsafe), carry
+log = group-child mesh mirrored to guests via new snapshot field `c` (mesh
+owns its material — dispose paths in MobManager removal + GhostMobs).
+
+Mode wiring gotcha: hide & seek's `Interaction.locked` kills the whole
+right-click, so tycoon uses a new narrower `Interaction.noEdit` (blocks
+mining + the place/bucket/spawn/eat tail; door/interactive USE still works).
+God mode, empty kit, day-locked (`t=0.30, frozen`, `net.onTime` ignored),
+`autoSpawn` off. Server change: one line ('tycoon' in the mode whitelist).
+Economy constants at the top of TycoonMode.js (worker cycle ~21s; costs
+$25→$1200 workers, $50/$300/$1500 mill, $100/$600/$2500 house). Dev: KeyP
+grants $500 on localhost. HUD `src/ui/TycoonUI.jsx` is display-only (money
+card + floater, tier line, next-cost hints) — all purchases are in-world.
+
 ## 2026-07-17 — Creative mob spawner items
 
 One `spawn_<type>` item per `MOBS` entry (14, incl. wolf/cat pets and the

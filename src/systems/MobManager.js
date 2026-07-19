@@ -385,6 +385,7 @@ export class MobManager {
       for (const m of this.mobs) {
         if (m.removed) {
           m.clearTag(); // pet tag sprite holds a canvas texture
+          if (m.carryMesh) m._setCarry(false); // worker log owns its material
           this.scene.remove(m.group);
           m.group.traverse((o) => o.geometry && o.geometry.dispose());
         }
@@ -402,6 +403,7 @@ export class MobManager {
       x: +m.pos.x.toFixed(2), y: +m.pos.y.toFixed(2), z: +m.pos.z.toFixed(2),
       yaw: +m.yaw.toFixed(2), h: m.health,
       ...(m.owner || m.ownerName ? { o: m.owner, s: m.sitting ? 1 : 0, n: m.ownerName || '' } : {}),
+      ...(m.carrying ? { c: 1 } : {}), // worker hauling a log (guests mirror the mesh)
     }));
   }
 
@@ -416,7 +418,7 @@ export class MobManager {
     let best = null;
     let bestT = reach;
     for (const mob of this.mobs) {
-      if (mob.dead) continue; // corpses don't soak hits
+      if (mob.dead || mob.def.noHit) continue; // corpses/workers don't soak hits
       const { min, max } = mob.aabb();
       const t = rayAABB(origin, dir, min, max);
       if (t !== null && t >= 0 && t <= bestT) { bestT = t; best = mob; }

@@ -71,6 +71,14 @@ export class Mob {
     this.tag = null;        // floating owner-tag sprite (pets)
     this._following = false; // follow hysteresis state
 
+    // Tycoon workers: TycoonMode sets workData at spawn ({plot, source, mill,
+    // speedMul, paused, onDeliver}); the FSM in _workerAI drives workState.
+    this.workData = null;
+    this.workState = null;  // 'toSource' | 'chopping' | 'toMill' | 'delivering'
+    this._workT = 0;        // seconds in the current work state
+    this.carrying = false;  // hauling a log (shows the carry mesh)
+    this.carryMesh = null;
+
     this.group = buildMobModel(type);
     this.legs = this.group.userData.legs || [];
     this.arms = this.group.userData.arms || [];
@@ -220,6 +228,82 @@ export class Mob {
     return speed;
   }
 
+  // Tycoon worker AI: shuttle source <-> mill in a straight line (Millside's
+  // routes are authored flat and clear), chop at the grove, deliver at the
+  // mill. Two-point steering with the melee branch's arrive test — there is
+  // no pathfinding. Returns the movement speed to use.
+  _workerAI(dt, speed) {
+    const wd = this.workData;
+    if (!wd) { this.heading = null; return speed; } // ghost-restored: idle
+    speed *= wd.speedMul || 1;
+    if (wd.paused) { this.heading = null; return speed; } // owner offline
+    if (!this.workState) { this.workState = 'toSource'; this._workT = 0; }
+    this._workT += dt;
+
+    const walking = this.workState === 'toSource' || this.workState === 'toMill';
+    const target = this.workState === 'toMill' || this.workState === 'delivering' ? wd.mill : wd.source;
+    const dx = target.x - this.pos.x, dz = target.z - this.pos.z;
+    const d = Math.hypot(dx, dz);
+
+    if (walking) {
+      if (d < 1.2) {
+        this.workState = this.workState === 'toSource' ? 'chopping' : 'delivering';
+        this._workT = 0;
+        this.heading = null;
+      } else {
+        this.heading = { x: dx / d, z: dz / d };
+        // Stuck failsafe: a route leg takes seconds — half a minute (or a
+        // fall out of the world) means wedged, so pop to the target.
+        if (this._workT > 30 || this.pos.y < 0) {
+          this._teleportTo({ x: target.x, y: target.y ?? this.pos.y, z: target.z });
+          this._workT = 0;
+        }
+      }
+    } else if (this.workState === 'chopping') {
+      this.heading = null;
+      this.targetYaw = Math.atan2(dx, dz); // square up to the tree
+      // Chop flourish: pulse the attack lunge like a swing of the axe.
+      if (this.attackCooldown === 0) {
+        this.attackCooldown = 0.7;
+        this.attackTimer = 0.22;
+        this._lungeDir = { x: dx / (d || 1), z: dz / (d || 1) };
+      }
+      if (this._workT >= 2.0) {
+        this._setCarry(true);
+        this.workState = 'toMill';
+        this._workT = 0;
+      }
+    } else { // delivering
+      this.heading = null;
+      if (this._workT >= 1.5) {
+        this._setCarry(false);
+        if (wd.onDeliver) wd.onDeliver(this);
+        this.workState = 'toSource';
+        this._workT = 0;
+      }
+    }
+    return speed;
+  }
+
+  // Show/hide the hauled log: a bark-brown box hugged at chest height. A
+  // plain group child (the setTag pattern) — it rides the gait bob for free.
+  _setCarry(on) {
+    this.carrying = on;
+    if (on && !this.carryMesh) {
+      this.carryMesh = new THREE.Mesh(
+        new THREE.BoxGeometry(0.56, 0.26, 0.26),
+        new THREE.MeshLambertMaterial({ color: '#6b4a2a' })
+      );
+      this.carryMesh.position.set(0, 1.18, 0.3);
+      this.group.add(this.carryMesh);
+    } else if (!on && this.carryMesh) {
+      this.group.remove(this.carryMesh);
+      this.carryMesh.geometry.dispose();
+      this.carryMesh.material.dispose();
+      this.carryMesh = null;
+    }
+  }
+
   // Pop to the owner's side: a nearby cell with a solid floor and two air
   // blocks of headroom, else the owner's exact position.
   _teleportTo(owner) {
@@ -285,6 +369,9 @@ export class Mob {
     } else if (this.owner) {
       // Tamed pets: sit / avenge the owner / follow — never wander off.
       speed = this._petAI(dt, ctx, speed);
+    } else if (def.category === 'worker') {
+      // Tycoon workers: shuttle their plot's work route.
+      speed = this._workerAI(dt, speed);
     } else if (
       (def.category === 'hostile' || (def.category === 'golem' && ctx.hasTarget)) &&
       // detectOverride: per-mob aggro range (Zombies wave mobs hunt across the

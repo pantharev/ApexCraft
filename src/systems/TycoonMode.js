@@ -185,8 +185,8 @@ export class TycoonMode {
     if (!mob) return;
     mob.workData = {
       plot: i,
-      source: { x: plot.source.x, z: plot.source.z },
-      mill: { x: plot.mill.x, z: plot.mill.z },
+      source: { x: plot.source.x, y: FY + 1, z: plot.source.z },
+      mill: { x: plot.mill.x, y: FY + 1, z: plot.mill.z },
       speedMul: MILL_SPEED[this.state.plots[i].mill] || 1,
       paused: !this.state.plots[i].owner,
       onDeliver: () => this._credit(i),

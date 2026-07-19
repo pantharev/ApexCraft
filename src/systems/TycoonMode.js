@@ -24,7 +24,7 @@ export const MAX_WORKERS = 6;
 
 // Mill: tier -> upgrade cost / $ per delivery / worker speed multiplier.
 export const MILL_COSTS = { 2: 50, 3: 300, 4: 1500 };
-export const MILL_PAY = { 1: 3, 2: 8, 3: 20, 4: 50 };
+export const MILL_PAY = { 1: 4, 2: 9, 3: 22, 4: 55 };
 export const MILL_SPEED = { 1: 1.0, 2: 1.15, 3: 1.3, 4: 1.5 };
 export const MAX_MILL = 4;
 

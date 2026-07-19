@@ -14,6 +14,7 @@ import { reseed } from '../noise.js';
 import { getBlockId, isSolid } from '../../blocks/BlockRegistry.js';
 import { FLOOR_Y } from './lib.js';
 import * as bastion from './maps/bastion.js';
+import * as millside from './maps/millside.js';
 
 const BEDROCK = getBlockId('bedrock');
 const STONE = getBlockId('stone');
@@ -175,6 +176,96 @@ for (const seed of [12345, 987654321]) {
   ok(rubble >= 8, `${tag}: mid wall has hop-able breaches (${rubble} rubble cells)`);
   ok(holed === rubble, `${tag}: mid gallery roof torn open over every breach`);
   ok(get(0, FY + 7, MID) === getBlockId('stone_slab'), `${tag}: mid gallery covers its gate`);
+}
+
+// ---- Millside (Tycoon) ----
+
+for (const seed of [12345, 987654321]) {
+  reseed(seed);
+  const get = buildWorld(millside);
+  const tag = `millside seed ${seed}`;
+  const H = millside.half;
+
+  // Perimeter: the bedrock hedge core is closed on all four sides and tall
+  // enough that nobody hops it (3 high over a bedrock footing).
+  let ring = true;
+  for (let off = -H + 2; off <= H - 2; off += 7) {
+    for (const [x, z] of [[off, H - 1], [off, -(H - 1)], [H - 1, off], [-(H - 1), off]]) {
+      for (let y = FY + 1; y <= FY + 3; y++) if (get(x, y, z) !== BEDROCK) ring = false;
+    }
+  }
+  ok(ring, `${tag}: perimeter hedge core closed on all sides`);
+  ok(get(H - 1, FY + 4, H - 1) === 0, `${tag}: open sky above the hedge`);
+
+  // Spawns: hub plaza spawns and the lobby are standable.
+  for (const [i, s] of millside.playerSpawns(4).entries()) {
+    ok(standable(get, s), `${tag}: player spawn ${i} standable`);
+  }
+  ok(standable(get, millside.lobbySpawn()), `${tag}: lobby spawn standable`);
+
+  // Per-plot structure — proves the quadrant mirroring stamped everything.
+  for (const [i, p] of millside.PLOTS.entries()) {
+    // Claim pad: golden tiles at floor level, standable on top.
+    let pad = true;
+    for (let x = p.claim.x0; x <= p.claim.x1; x++) {
+      for (let z = p.claim.z0; z <= p.claim.z1; z++) {
+        if (get(x, FY, z) !== getBlockId('tycoon_claim')) pad = false;
+        if (isSolid(get(x, FY + 1, z)) || isSolid(get(x, FY + 2, z))) pad = false;
+      }
+    }
+    ok(pad, `${tag}: plot ${i} claim pad tiled and standable`);
+
+    // Purchase pads: present, with air in front (the +sx approach side).
+    for (const [pos, id, label] of [
+      [p.padWorker, 'tycoon_pad_worker', 'worker'],
+      [p.padMill, 'tycoon_pad_mill', 'mill'],
+      [p.padHouse, 'tycoon_pad_house', 'house'],
+    ]) {
+      ok(get(pos.x, pos.y, pos.z) === getBlockId(id), `${tag}: plot ${i} ${label} pad present`);
+      ok(get(pos.x + p.sx, pos.y, pos.z) === 0, `${tag}: plot ${i} ${label} pad reachable`);
+    }
+
+    // The work route: gravel underfoot and 2-high clearance the whole way
+    // between the two worker stations (straight-line steering needs it).
+    const x0 = Math.min(Math.floor(p.mill.x), Math.floor(p.source.x));
+    const x1 = Math.max(Math.floor(p.mill.x), Math.floor(p.source.x));
+    const rz = Math.floor(p.mill.z);
+    let route = true;
+    for (let x = x0; x <= x1; x++) {
+      if (get(x, FY, rz) !== GRAVEL) route = false;
+      if (isSolid(get(x, FY + 1, rz)) || isSolid(get(x, FY + 2, rz))) route = false;
+    }
+    ok(route, `${tag}: plot ${i} work route flat and clear`);
+
+    // Starter mill + grove present.
+    const LOG = getBlockId('oak_log');
+    ok(get(p.sx * 14, FY + 1, p.sz * 27) === LOG, `${tag}: plot ${i} starter mill sawhorse`);
+    ok(get(p.sx * 31, FY + 1, p.sz * 25) === LOG, `${tag}: plot ${i} grove trees`);
+
+    // Upgrade stamps: every tier's cells stay inside this plot's quadrant,
+    // under the hedge, above the floor — and never re-block the route mouth
+    // or the shop-wall aisle.
+    for (const [stamp, tiers, label] of [
+      [millside.millStamp, [2, 3, 4], 'mill'],
+      [millside.houseStamp, [1, 2, 3], 'house'],
+    ]) {
+      for (const tier of tiers) {
+        const cells = stamp(i, tier);
+        let inBounds = cells.length > 0;
+        const solidAt = new Map();
+        for (const c of cells) {
+          if (Math.max(Math.abs(c.x), Math.abs(c.z)) >= H - 2) inBounds = false;
+          if (c.y <= FY || c.y > FY + 10) inBounds = false;
+          if (c.x * p.sx < 3 || c.z * p.sz < 3) inBounds = false; // own quadrant only
+          solidAt.set(`${c.x},${c.y},${c.z}`, c.id !== 0);
+        }
+        ok(inBounds, `${tag}: plot ${i} ${label} T${tier} stamp stays in bounds`);
+        const doorX = Math.floor(p.mill.x) - 1; // the mill's route-mouth wall line
+        const mouthBlocked = solidAt.get(`${doorX},${FY + 1},${rz}`) === true;
+        if (label === 'mill') ok(!mouthBlocked, `${tag}: plot ${i} mill T${tier} keeps the route mouth open`);
+      }
+    }
+  }
 }
 
 console.log(fails === 0 ? 'ARENA TESTS PASSED' : `ARENA TESTS FAILED (${fails})`);

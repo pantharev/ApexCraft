@@ -3,6 +3,7 @@ import * as town from './maps/town.js';
 import * as castle from './maps/castle.js';
 import * as playroom from './maps/playroom.js';
 import * as bastion from './maps/bastion.js';
+import * as millside from './maps/millside.js';
 
 // Prop Hunt arena map registry. A map is a module exporting { id, name, desc,
 // half, baseSurface, propBlocks, botSpots, generate(chunk), seekerSpawn(i),
@@ -14,9 +15,10 @@ export { FLOOR_Y } from './lib.js';
 
 const DEFAULT_MAP = 'town';
 
-export const MAPS = { [town.id]: town, [castle.id]: castle, [playroom.id]: playroom, [bastion.id]: bastion };
+export const MAPS = { [town.id]: town, [castle.id]: castle, [playroom.id]: playroom, [bastion.id]: bastion, [millside.id]: millside };
 export const MAP_LIST = [town, castle, playroom]; // Prop Hunt menu order
 export const ZOMBIE_MAP_LIST = [bastion];         // Zombies menu order
+export const TYCOON_MAP_LIST = [millside];        // Tycoon menu order
 
 let active = MAPS[DEFAULT_MAP];
 

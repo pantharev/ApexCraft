@@ -9,6 +9,36 @@ updated with every merged PR** (and mirror a short player-facing entry in the
 
 ---
 
+## 2026-11-18 — #63 Player skins and a three-way camera
+
+Six characters to choose from — man, woman, Santa, Ms. Santa, nurse,
+engineer — and a camera that cycles first person → behind → front.
+**Skins** live in `src/entities/playerSkins.js`: each is a box-part figure
+plus a painter on the mob skin system (hats, beard, bun and long hair are
+extra parts; dresses are painted down the legs), with a `hand` entry for the
+first-person arm. `PlayerAvatar(name, skinId)` builds from one; the old
+name-derived palette is gone, and a peer with no skin (Prop Hunt bots, older
+builds) gets one hashed from its name. The picker is a "Your character"
+section at the top of the world list (`Menus.jsx`), with the name field
+moved up beside it; its portraits are cut from the same painted sheet
+(`skinSheet` in `MobModels.js` → `skinPortrait`), so they cannot drift from
+the model. The choice is `localStorage 'apex_skin'`, read by `Game` when a
+world starts. **Multiplayer**: the skin's 1-based number rides in bits 4+ of
+the `a` field of the player-state message (the relay already passes `a`
+through as an integer), so nothing on the relay changed and no redeploy is
+needed — `RemotePlayers.setState` swaps a peer's avatar when the number
+differs, before the peer is first shown. The catch: the number is the
+position in `SKINS`, so **append only**. Name tags and taunts now sit above
+`avatar.height` (Santa's hat is taller than the old fixed 2.25).
+**Camera**: `Game.cycleView` / `setView('first'|'behind'|'front')` replace
+`setThirdPerson`; `Player.camFront` mirrors the third-person offset to put
+the camera ahead of the player, looking back, with the same wall clamp. `C`
+on desktop, a **Cam** button on touch; Prop Hunt still owns the camera. The
+crosshair is hidden in the front view (`stats.view`). Checked in the pane:
+all six skins from front, side and back; host + guest on a local relay each
+seeing the other's chosen skin (not the name fallback); the Cam button with
+real touch events.
+
 ## 2026-11-18 — #62 Fix: looking around on touch devices
 
 #56 added a `look` vector to `Player` (the direction aiming uses) — but

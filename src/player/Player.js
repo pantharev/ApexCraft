@@ -57,6 +57,7 @@ export class Player {
     this.thirdPerson = false; // orbit camera (hide & seek: hiders see their block)
     this.camDist = 4;        // third-person camera pull-back distance
     this.camHeight = 0.6;    // ...and the height above the feet it orbits
+    this.camFront = false;   // third person from the front: the camera ahead, looking back
     // Where the player looks FROM and ALONG, whatever the camera is doing.
     // Aiming (mining, attacks, shots) uses these, so it works in third person.
     // (`lookDir`, not `look`: look(dx, dy) below is the touch-drag method, and a
@@ -315,18 +316,21 @@ export class Player {
       // disguise block). Pull back along the look direction, clamped above the
       // floor and short of any solid block — inside a building the camera must
       // stay in the room, or a hiding player could watch seekers through the wall.
+      // `camFront` puts the camera the same way out AHEAD of the player, looking
+      // back at their face.
+      const side = this.camFront ? 1 : -1;
       const target = new THREE.Vector3(this.pos.x, this.pos.y + this.camHeight, this.pos.z);
       let dist = this.camDist;
       for (let d = 0.4; d <= this.camDist; d += 0.2) {
-        const px = target.x - dirVec.x * d;
-        const py = target.y - dirVec.y * d;
-        const pz = target.z - dirVec.z * d;
+        const px = target.x + dirVec.x * d * side;
+        const py = target.y + dirVec.y * d * side;
+        const pz = target.z + dirVec.z * d * side;
         if (isSolid(this.world.getBlock(Math.floor(px), Math.floor(py), Math.floor(pz)))) {
           dist = Math.max(0.4, d - 0.3);
           break;
         }
       }
-      this.camera.position.copy(target).addScaledVector(dirVec, -dist);
+      this.camera.position.copy(target).addScaledVector(dirVec, side * dist);
       this.camera.position.y = Math.max(this.camera.position.y, this.pos.y + 0.4);
       this.camera.lookAt(target);
     } else {

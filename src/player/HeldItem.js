@@ -11,8 +11,8 @@ import { getBlock, getBlockId } from '../blocks/BlockRegistry.js';
 //
 // Note: the Game disposes geometry when the held item changes, so everything
 // here builds fresh geometry (materials are shared and survive disposal).
-// `look` is the player's appearance (PlayerAvatar.appearanceFor), so the bare
-// hand matches the body other players see.
+// `look` is the player's appearance (PlayerAvatar.appearance — the `hand` of
+// their skin, playerSkins.js), so the bare hand matches the body others see.
 export function buildHeldModel(item, look = null) {
   const group = new THREE.Group();
 

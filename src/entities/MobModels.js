@@ -198,6 +198,14 @@ function skinFor(def, key, paint) {
   return s;
 }
 
+// The painted sheet itself, for drawing a model flat (the menu's character
+// portraits): the canvas, and where each part's faces sit on it —
+// rects[partIndex][faceName] = { x, y, w, h } in pixels.
+export function skinSheet(def, key, paint) {
+  const s = skinFor(def, key, paint);
+  return { canvas: s.map.image, rects: s.rects };
+}
+
 // Geometry for a set of parts, positioned relative to `pivot`, with UVs into
 // the type's skin sheet.
 function partsGeometry(def, skin, indices, pivot) {

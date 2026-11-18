@@ -127,6 +127,41 @@ optionally, a `fuels` entry:
 
 ---
 
+## Add a player skin
+
+One file: **`src/entities/playerSkins.js`**. A skin is a box-part figure and
+a painter, exactly like a mob (see above) — `body({ legs, torso, arms, head })`
+gives the standard figure in four base colours, and hats, beards and long
+hair are extra parts (`head: true` ones tilt with the head; keep them half a
+pixel proud of what they sit on, so the faces never share a plane).
+
+```js
+const pirate = (() => {
+  const tone = '#e0ac7e', coat = '#3a2a4a';
+  return {
+    name: 'Pirate',                                   // shown in the menu
+    parts: [
+      ...body({ legs: '#2f3338', torso: coat, arms: coat, head: tone }),
+      { id: 'hat', size: [0.5625, 0.125, 0.5625], pos: [0, 2.03125, 0], color: '#1c1c1e', head: true },
+    ],
+    hand: { skin: tone, shirt: coat, sleeves: 1 },    // the bare first-person arm
+    paint(p) {
+      hair(p, { hair: '#2b1d14', fringe: 0 });
+      face(p, { tone, eyes: '#3a2a1a' });
+      hands(p, 2, tone);
+      shoes(p, 3, '#2a2420');
+    },
+  };
+})();
+```
+
+Then add it **at the end** of `SKINS`. The order is the skin's number on the
+network: inserting one in the middle would put every player on an older
+build in the wrong clothes. The menu picker, its portrait, the saved choice
+and multiplayer all follow from the list — nothing else to edit.
+
+---
+
 ## Bigger systems
 
 - **Terrain/biomes:** `src/world/generators/TerrainGen.js`,

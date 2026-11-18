@@ -60,10 +60,10 @@ try {
 
   // --- player state relay ---
   const stateP = once(host, 'playerState');
-  guest.emit('state', { x: 1.5, y: 70, z: -3, yaw: 0.5, pitch: 0.1, h: 'iron_pickaxe', a: 1 });
+  guest.emit('state', { x: 1.5, y: 70, z: -3, yaw: 0.5, pitch: 0.1, h: 'iron_pickaxe', a: 1 | (3 << 4) });
   const st = await stateP;
   ok(st.x === 1.5 && st.yaw === 0.5 && st.id === guest.id, 'player state relays with sender id');
-  ok(st.h === 'iron_pickaxe' && st.a === 1, 'player state carries the held item and action bits');
+  ok(st.h === 'iron_pickaxe' && st.a === (1 | (3 << 4)), 'player state carries the held item, action bits and skin number');
 
   // --- edits relay + accumulate for late joiners ---
   const editP = once(host, 'edit');

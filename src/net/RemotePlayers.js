@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { buildBlockCube } from '../items/ItemModels.js';
 import { getBlock } from '../blocks/BlockRegistry.js';
 import { PlayerAvatar } from '../entities/PlayerAvatar.js';
+import { skinFromNumber } from '../entities/playerSkins.js';
 
 // Renders the other players in a multiplayer room: a painted, animated avatar
 // per peer (see PlayerAvatar) with a floating name tag, interpolated between
@@ -10,6 +11,7 @@ import { PlayerAvatar } from '../entities/PlayerAvatar.js';
 // they blend into the arena's real props.
 
 const LERP = 12; // snap speed toward the latest snapshot (higher = tighter)
+const TAG_GAP = 0.45; // name tag height above the top of the avatar (hat included)
 
 // Exported: pets reuse this for their owner tag (smaller, lower over the mob).
 export function nameTag(name, { y = 2.25, scale = 1 } = {}) {
@@ -63,15 +65,18 @@ export class RemotePlayers {
 
   add(id, name) {
     if (this.map.has(id)) return;
-    // Appearance comes from the name, so a player looks the same to everyone.
-    const avatar = new PlayerAvatar(name || 'Player');
+    name = name || 'Player';
+    // Dressed from the name to begin with (which is all a Prop Hunt bot ever
+    // has); a real player's first state says which skin they chose — see
+    // setState — and it arrives before the peer is shown.
+    const avatar = new PlayerAvatar(name);
     const group = new THREE.Group();
-    const tag = nameTag(name || 'Player');
+    const tag = nameTag(name, { y: avatar.height + TAG_GAP });
     group.add(avatar.group, tag);
     group.visible = false; // until the first state arrives
     this.scene.add(group);
     this.map.set(id, {
-      id, group, avatar, tag,
+      id, name, group, avatar, tag,
       body: [avatar.group, tag], // hidden when disguised
       disguiseMesh: null,
       disguiseId: 0,
@@ -108,7 +113,7 @@ export class RemotePlayers {
       p.group.add(p.disguiseMesh);
     }
     for (const b of p.body) b.visible = !blockId || (showTag && b === p.tag);
-    p.tag.position.y = blockId ? 1.5 : 2.25; // hover just over the block
+    p.tag.position.y = blockId ? 1.5 : p.avatar.height + TAG_GAP; // hover just over the block
   }
 
   // Prop Hunt: float a taunt emoji above a peer's head for `ttl` seconds. Kept
@@ -118,9 +123,11 @@ export class RemotePlayers {
     if (!p) return;
     disposeTaunt(p.taunt, p.group);
     const sprite = emojiSprite(emoji);
-    sprite.position.y = 2.9;
+    // Above the name tag, wherever this peer's hat puts that.
+    const y = p.avatar.height + TAG_GAP + 0.65;
+    sprite.position.y = y;
     p.group.add(sprite);
-    p.taunt = { sprite, ttl, age: 0 };
+    p.taunt = { sprite, ttl, age: 0, y };
   }
 
   // Ray vs. each peer (sphere test) for seeker tagging: nearest hit id or null.
@@ -154,12 +161,29 @@ export class RemotePlayers {
     this.map.delete(id);
   }
 
+  // Change what a peer wears: a new avatar in the old one's place.
+  _setSkin(p, skin) {
+    const old = p.avatar;
+    const avatar = new PlayerAvatar(p.name, skin);
+    avatar.group.visible = old.group.visible; // hidden while disguised
+    avatar.group.rotation.y = old.group.rotation.y;
+    p.group.remove(old.group);
+    old.dispose();
+    p.group.add(avatar.group);
+    p.avatar = avatar;
+    p.body[0] = avatar.group;
+    if (!p.disguiseId) p.tag.position.y = avatar.height + TAG_GAP;
+  }
+
   // Latest network state for a peer: position, look yaw (the player
   // convention — yaw 0 looks down -z), and optionally pitch, held item `h`,
-  // and action bits `a`.
+  // and action bits `a` (bit 0 swinging; bits 4 up, the skin's number — 0
+  // from a bot or an older client, who keep the skin their name gave them).
   setState(s) {
     const p = this.map.get(s.id);
     if (!p) return;
+    const skin = skinFromNumber((s.a >> 4) & 0xff);
+    if (skin && skin !== p.avatar.skin) this._setSkin(p, skin);
     if (!p.target) { // first snapshot: snap straight there
       p.cur.x = s.x; p.cur.y = s.y; p.cur.z = s.z; p.cur.yaw = s.yaw;
       p.group.visible = true;
@@ -201,7 +225,7 @@ export class RemotePlayers {
       if (p.taunt) {
         p.taunt.age += dt;
         const f = p.taunt.age / p.taunt.ttl;
-        p.taunt.sprite.position.y = 2.9 + f * 0.6;
+        p.taunt.sprite.position.y = p.taunt.y + f * 0.6;
         p.taunt.sprite.material.opacity = Math.max(0, 1 - f);
         if (f >= 1) { disposeTaunt(p.taunt, p.group); p.taunt = null; }
       }

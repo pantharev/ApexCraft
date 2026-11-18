@@ -7,6 +7,11 @@ import React from 'react';
 const CHANGELOG = [
   {
     date: 'November 18, 2026',
+    title: 'Choose your character',
+    body: 'You can now pick who you play as. The world list has six characters to choose from — Man, Woman, Santa, Ms. Santa, Nurse and Engineer — and the one you pick is who you are in every world, and who your friends see when you play together. To admire the result, press C (or the new Cam button on phones): once puts the camera behind you, again turns it round to face you, and a third time takes you back to first person.',
+  },
+  {
+    date: 'November 18, 2026',
     title: 'Fixed: looking around on phones',
     body: 'On phones and tablets, dragging the screen to look around had stopped working after the player-character update. It works again. Sorry about that one.',
   },

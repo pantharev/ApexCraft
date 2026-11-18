@@ -98,6 +98,9 @@ io.on('connection', (socket) => {
     if (!code || !s) return;
     socket.volatile.to(code).emit('playerState', {
       id: socket.id, x: +s.x, y: +s.y, z: +s.z, yaw: +s.yaw, pitch: +s.pitch,
+      // Avatar cosmetics: the held item's name and action bits (bit 0 = swinging).
+      h: typeof s.h === 'string' ? s.h.slice(0, 48) : undefined,
+      a: s.a | 0,
     });
   });
 

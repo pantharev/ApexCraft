@@ -380,6 +380,8 @@ export class HideSeek {
       if (this._localMesh) this.game.scene.remove(this._localMesh);
       // Full block size so it matches the arena's real placed blocks.
       this._localMesh = buildBlockCube(getBlock(blockId).name, 1.0, true);
+      this._localMesh.castShadow = true;    // like the real blocks it imitates
+      this._localMesh.receiveShadow = true;
       this.game.scene.add(this._localMesh);
       this._localDisguiseId = blockId;
       this._dScale = 0.86;

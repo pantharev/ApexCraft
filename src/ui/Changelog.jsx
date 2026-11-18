@@ -7,6 +7,11 @@ import React from 'react';
 const CHANGELOG = [
   {
     date: 'November 18, 2026',
+    title: 'Meet yourself',
+    body: 'Players finally have real bodies. Everyone gets a painted character — skin tone, hair, shirt and trousers all come from your name, so your friends always see the same you — and it moves like a person: arms swing as you walk, the head looks where you look, and whatever you are holding is right there in your hand, swinging when you mine or fight. You will notice it even playing alone: look down and you now cast your own shadow, pickaxe and all. Press C to step back into a third-person camera and see your character from behind (C again to return). Aiming works the same in both views.',
+  },
+  {
+    date: 'November 18, 2026',
     title: 'Creatures with character',
     body: 'Every mob has been repainted and rebuilt. Animals have faces now: pigs with snouts and floppy ears, cows with patched hides, horns and a swishing tail, woolly sheep, chickens with a comb, wattle and wings that flap when they fall, tabby cats with striped coats. Wolves wag their tails when you tame them. The monsters got scarier: zombies wear torn shirts over rotting skin, skeletons show their ribs and hold their arms out to draw a bow, creepers finally have that face on four stubby legs, and spiders scuttle on eight splayed legs. And watch the dark — zombie, spider and golem eyes now glow at night, so you will see them looking at you before you see them.',
   },

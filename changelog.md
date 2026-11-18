@@ -9,6 +9,49 @@ updated with every merged PR** (and mirror a short player-facing entry in the
 
 ---
 
+## 2026-11-18 — Player character pass (painted avatars, own shadow, third person)
+
+Fourth graphics pass, stacked on the mob branch.
+
+- **`src/entities/PlayerAvatar.js` (new)**: the player's body, built with the
+  mob skin system (`MobModels.buildModel(def, key, painter)` — the generalised
+  form of `buildMobModel`; skins are cached per key). `appearanceFor(name)`
+  hashes the player's NAME into skin tone, hair colour/style, shirt (+ sleeve
+  length, optional stripe), trousers, and eye colour, so a player looks the
+  same to everyone with no new netcode. The model is a 2.0-block figure
+  scaled 0.9 to the 1.8-block player. `update(dt, {speed, pitch, swinging})`
+  swings legs and arms, pitches the head, lifts the right arm for a held
+  item, and chops it while mining/attacking. `setHeld(itemName)` puts the
+  item in the right hand (shared plate/cube geometry — never disposed here).
+- **`RemotePlayers`** now wraps a `PlayerAvatar` per peer (and per Prop Hunt
+  bot). `setState` takes the player look-yaw convention (0 faces −z); the
+  model faces +z, so the avatar is turned `yaw + PI` — `HideSeekBots` (which
+  uses `atan2(dx, dz)`) now adds PI when it reports. The disguise cube stays
+  on the outer, unrotated group. `remove()` calls `avatar.dispose()` (own
+  geometry + material only; skin textures are a shared cache).
+- **Local player** (`Game.selfAvatar`, `_updateSelfAvatar`): in first person
+  the body sits on `SHADOW_CASTER_LAYER`, so it is drawn only into the
+  shadow map — you cast a shadow (arms, held item and all) without seeing
+  your own body. `C` toggles third person (`Game.setThirdPerson`; reuses
+  `Player.thirdPerson`, now with `camHeight` so it orbits the shoulders),
+  which moves the body to layer 0 and hides the first-person view-model.
+  Prop Hunt owns the camera, so the toggle is off there; the body is hidden
+  while dead or while a hider wears a disguise.
+- **Aiming no longer uses the camera**: `Player.eye` / `Player.look` are
+  updated every frame, and `Interaction` (targeting, buckets) and `Game`
+  (melee, pet use, tagging, bow, guns) read those. Identical in first
+  person; correct in third. GOTCHA for new code: `camera.position` is NOT
+  the player's eye any more when `thirdPerson` is on.
+- **Net**: player `state` gained `h` (held item name) and `a` (action bits,
+  bit 0 = swinging); `server/index.js` relays both (it whitelists fields) and
+  `server/test.js` covers it. **The deployed relay must be redeployed** for
+  guests to see held items and swings — against an old server avatars still
+  work, just empty-handed. Pitch was already on the wire and is now used.
+- The first-person bare hand takes the player's skin tone (and sleeve).
+- Not done: no appearance picker (the look is whatever the name hashes to);
+  no hurt flash or death pose on remote players (no state for it); no
+  third-person toggle on touch devices; sitting/swimming/flying poses.
+
 ## 2026-11-18 — Mob pass (painted skins, glowing eyes, tails/wings/spider legs)
 
 Third graphics pass, stacked on the texture branch. No AI, stat, loot, or

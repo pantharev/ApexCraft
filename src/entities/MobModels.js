@@ -102,10 +102,9 @@ class Face {
 // A no-op stand-in, so painters can address parts a mob doesn't have.
 const NO_FACE = new Proxy({}, { get: (_, k) => (k === 'w' || k === 'h' ? 0 : () => NO_FACE) });
 
-const skins = new Map(); // type -> { map, glow, rects, width, height }
+const skins = new Map(); // skin key -> { map, glow, rects, height }
 
-function buildSkin(type) {
-  const def = MOBS[type];
+function buildSkin(def, key, paint) {
   // Lay every part's six faces out on shelves.
   const rects = [];
   let x = 1, y = 1, shelf = 0;
@@ -126,9 +125,9 @@ function buildSkin(type) {
   const canvas = document.createElement('canvas');
   canvas.width = SHEET_W; canvas.height = height;
   const ctx = canvas.getContext('2d');
-  // Seeded per type, so a mob looks the same every session.
+  // Seeded by the skin key, so a mob looks the same every session.
   let seed = 0x51ed;
-  for (let i = 0; i < type.length; i++) seed = (seed * 31 + type.charCodeAt(i)) | 0;
+  for (let i = 0; i < key.length; i++) seed = (seed * 31 + key.charCodeAt(i)) | 0;
   const sheet = { ctx, rng: mulberry32(seed), glow: new Uint8Array(SHEET_W * height) };
 
   // Base coat: the part's colour with a soft mottle (warm when lighter, cool
@@ -164,7 +163,7 @@ function buildSkin(type) {
     // …or on all four of its upright faces.
     around: (id, fn) => { for (const s of ['front', 'back', 'left', 'right']) fn(painter.face(id, s), s); },
   };
-  if (SKINS[type]) SKINS[type](painter);
+  if (paint) paint(painter);
 
   // Glow map: a faint copy of the skin everywhere, full strength where the
   // painter asked for glow.
@@ -193,9 +192,9 @@ function buildSkin(type) {
   return { map: tex(canvas), glow: tex(glowCanvas), rects, height };
 }
 
-function skinFor(type) {
-  let s = skins.get(type);
-  if (!s) { s = buildSkin(type); skins.set(type, s); }
+function skinFor(def, key, paint) {
+  let s = skins.get(key);
+  if (!s) { s = buildSkin(def, key, paint); skins.set(key, s); }
   return s;
 }
 
@@ -256,8 +255,14 @@ function defaultPivot(part) {
 // Every mesh shares one material, so a hurt flash or death fade set through
 // any of them covers the whole mob.
 export function buildMobModel(type) {
-  const def = MOBS[type];
-  const skin = skinFor(type);
+  return buildModel(MOBS[type], type, SKINS[type]);
+}
+
+// The general form: any `{ parts }` definition, a `key` naming its skin (one
+// sheet is generated and cached per key), and an optional painter. Player
+// avatars use this with a key per appearance.
+export function buildModel(def, key, paint) {
+  const skin = skinFor(def, key, paint);
   const group = new THREE.Group();
   const material = new THREE.MeshLambertMaterial({
     map: skin.map, emissive: 0xffffff, emissiveMap: skin.glow, emissiveIntensity: 1,

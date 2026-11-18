@@ -205,7 +205,7 @@ export function PauseMenu({ worldName, onResume, onSave, onQuit, justSaved, grap
         </div>
         <div style={{ marginTop: 16, fontSize: 12, opacity: 0.55, lineHeight: 1.7 }}>
           <div><b>WASD</b> move · <b>Mouse</b> look · <b>Space</b> jump/swim</div>
-          <div><b>Left</b> mine/attack · <b>Right</b> place/use/eat · <b>E</b> inventory · <b>F</b> fly · <b>M</b> mute</div>
+          <div><b>Left</b> mine/attack · <b>Right</b> place/use/eat · <b>E</b> inventory · <b>F</b> fly · <b>C</b> camera · <b>M</b> mute</div>
         </div>
       </div>
     </div>

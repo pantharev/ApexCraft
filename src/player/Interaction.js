@@ -142,9 +142,8 @@ export class Interaction {
   // Buckets scoop liquid sources and pour them back out. They need their own
   // raycast: the normal targeting ray passes straight through liquids.
   _useBucket(item) {
-    const origin = this.camera.position;
-    const dir = new THREE.Vector3();
-    this.camera.getWorldDirection(dir);
+    const origin = this.player.eye;
+    const dir = this.player.look;
     const hit = raycastVoxel(this.world, origin, dir, REACH, true);
     if (!hit) return;
     const b = hit.block;
@@ -296,10 +295,10 @@ export class Interaction {
   }
 
   update(dt) {
-    // Cast from the camera along its view direction.
-    const origin = this.camera.position;
-    const dir = new THREE.Vector3();
-    this.camera.getWorldDirection(dir);
+    // Cast from the player's eye along their look direction (the same as the
+    // camera in first person; in third person the camera is somewhere else).
+    const origin = this.player.eye;
+    const dir = this.player.look;
     this.target = raycastVoxel(this.world, origin, dir, REACH);
 
     if (!this.target) {

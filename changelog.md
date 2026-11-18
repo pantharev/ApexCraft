@@ -9,6 +9,44 @@ updated with every merged PR** (and mirror a short player-facing entry in the
 
 ---
 
+## 2026-11-18 — Texture pass (redrawn tiles, no more tiling quilt)
+
+Second graphics pass, stacked on the lighting branch. All in
+`src/textures/atlas.js` plus one line in `World.js`. Still 16×16 tiles, still
+zero asset files.
+
+- **Hue-shifted shading** (`HUE_SHIFT` in `paint` and `voronoi`): a brightness
+  step now also leans warm when lighter and cool when darker, so every tile
+  built on those helpers gained colour depth at once.
+- **Redrawn tiles**: grass top (blades: dark root + lit tip), grass side
+  (ragged turf overhang + its shadow on the soil), dirt (damp clumps, lit
+  pebbles), stone, sand (grains), snow (blue hollows), andesite, log bark
+  (lit ridges), leaves (leaf clumps; only the interior *between* clumps is
+  punched out), water (glints), wool, sandstone (bedded strata), mossy
+  cobblestone (moss in the joints, not a green blanket), and the ores
+  (`ORE_SHAPES` nuggets with a socket shadow and a facet).
+- **`TERRAIN_MATERIALS`** (what chunk meshes draw with; same indices as
+  `BLOCK_MATERIALS`): patched clones of the natural tiles. Their fragment
+  shader finds the block a fragment belongs to from its *world position*
+  (`floor(pos - normal*0.5)`), hashes it, and (a) for `ROTATE` tiles turns/
+  flips the tile one of eight ways, (b) for all `DRIFT` tiles adds a
+  per-block brightness nudge plus a soft large-scale drift. World-keyed, so a
+  block keeps its look across re-meshes (keying on the greedy quad's UV cell
+  would reshuffle neighbours whenever you mine).
+  - `textureGrad` with the *continuous* UV's derivatives is required: the
+    turned UV jumps at each block edge and plain `texture2D` drags a seam of
+    the lowest mip along every one.
+  - **Anything drawn off the block grid must keep `BLOCK_MATERIALS`** (item
+    drops, held block, Prop Hunt disguise cubes — all via `ItemModels`):
+    with the patched materials the hash would swim as the cube moves.
+  - GOTCHA: because blocks are turned at random, hard directional lines in a
+    `ROTATE` tile point every which way and read as scratches — the first
+    stone redraw had to be softened for exactly this. Keep such tiles
+    isotropic, or put them in `DRIFT` only.
+- New-block how-to in `docs/MODDING.md` mentions `ROTATE`/`DRIFT`.
+- Not done: tiles are still 16px (a 32px redraw would mean re-authoring every
+  hand-placed detail and the 16px item icons); water is still a flat sheet.
+
 ## 2026-11-18 — Renderer & lighting pass (shadows, sky, tone mapping)
 
 First of the planned graphics passes (next: performance, then character/mob

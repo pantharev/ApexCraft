@@ -36,6 +36,7 @@ export class ItemDrops {
     const item = getItem(itemName);
     if (!item) return;
     const mesh = this._model(item);
+    mesh.traverse((o) => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; } });
     mesh.position.set(x + 0.5, y + 0.4, z + 0.5);
     this.scene.add(mesh);
     this.drops.push({

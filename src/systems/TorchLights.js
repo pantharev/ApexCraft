@@ -16,7 +16,7 @@ const GLOW_INT    = 1.8; // intensity for glow mushroom lights (dimmer — ambie
 const stickGeo = new THREE.BoxGeometry(0.12, 0.55, 0.12);
 const flameGeo = new THREE.BoxGeometry(0.18, 0.18, 0.18);
 const stickMat = new THREE.MeshLambertMaterial({ color: '#6b4f2a' });
-const flameMat = new THREE.MeshBasicMaterial({ color: '#ffcf66' }); // glows regardless of light
+const flameMat = new THREE.MeshBasicMaterial({ color: '#ffcf66', toneMapped: false }); // glows regardless of light
 
 function buildTorchMesh() {
   const g = new THREE.Group();
@@ -130,11 +130,18 @@ export class TorchLights {
     }
     nearTorches.sort((a, b) => a[0] - b[0]);
 
+    // Firelight flicker: two out-of-step sines per torch, keyed to the torch's
+    // position (not its pool slot) so a flame keeps its own rhythm as slots
+    // are reshuffled by distance.
+    const now = performance.now() / 1000;
     for (let i = 0; i < TORCH_POOL; i++) {
       const light = this.torchLights[i];
       if (i < nearTorches.length) {
-        light.position.set(nearTorches[i][1], nearTorches[i][2], nearTorches[i][3]);
-        light.intensity = TORCH_INT;
+        const [, tx, ty, tz] = nearTorches[i];
+        const phase = tx * 12.9898 + tz * 78.233 + ty * 37.719;
+        const flicker = 1 + 0.07 * Math.sin(now * 9.1 + phase) + 0.04 * Math.sin(now * 23.7 + phase * 1.7);
+        light.position.set(tx, ty, tz);
+        light.intensity = TORCH_INT * flicker;
         light.visible = true;
       } else {
         light.visible = false;

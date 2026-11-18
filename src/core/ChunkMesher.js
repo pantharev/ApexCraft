@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { CHUNK_SIZE, WORLD_HEIGHT } from '../config.js';
 import { getBlock, isOpaque, isSolid, getBlockId, liquidKind } from '../blocks/BlockRegistry.js';
-import { faceMaterialIndex, WATER_MATERIAL_INDEX } from '../textures/atlas.js';
+import { faceMaterialIndex, CUTOUT_MATERIAL_INDICES, LEAVES_MATERIAL_INDEX } from '../textures/atlas.js';
 import { Noise } from '../world/noise.js';
 
 const SHADE = { top: 1.0, bottom: 0.5, side: 0.8 };
@@ -174,11 +174,21 @@ function pushQuad(buf, q) {
 
 // Assemble one BufferGeometry from a set of per-material buffers, adding a draw
 // group per material so a single mesh can use the shared material array.
+//
+// Groups are ordered solid tiles first, then leaves, then the other cut-outs,
+// and the split points are recorded in userData.shadow. That lets World draw
+// the shadow casters straight out of this geometry's own buffers with a draw
+// range: one call for everything solid, one for the leaves (see buildMesh).
+const shadowRank = (matIndex) =>
+  !CUTOUT_MATERIAL_INDICES.has(matIndex) ? 0 : matIndex === LEAVES_MATERIAL_INDEX ? 1 : 2;
+
 function assembleGrouped(byMat) {
   const positions = [], normals = [], uvs = [], colors = [], indices = [];
   const groups = [];
+  const shadow = { solidCount: 0, leafStart: 0, leafCount: 0 };
   let vBase = 0;
-  for (const [matIndex, b] of byMat) {
+  const ordered = [...byMat].sort((a, b) => shadowRank(a[0]) - shadowRank(b[0]));
+  for (const [matIndex, b] of ordered) {
     if (b.positions.length === 0) continue;
     const start = indices.length;
     positions.push(...b.positions);
@@ -188,6 +198,9 @@ function assembleGrouped(byMat) {
     for (const idx of b.indices) indices.push(idx + vBase);
     vBase += b.positions.length / 3;
     groups.push({ start, count: b.indices.length, materialIndex: matIndex });
+    const rank = shadowRank(matIndex);
+    if (rank === 0) shadow.solidCount = indices.length;
+    else if (rank === 1) { shadow.leafStart = start; shadow.leafCount = b.indices.length; }
   }
   if (positions.length === 0) return null;
   const g = new THREE.BufferGeometry();
@@ -198,6 +211,7 @@ function assembleGrouped(byMat) {
   g.setIndex(indices);
   for (const gr of groups) g.addGroup(gr.start, gr.count, gr.materialIndex);
   g.computeBoundingSphere();
+  g.userData.shadow = shadow;
   return g;
 }
 

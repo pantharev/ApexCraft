@@ -37,7 +37,14 @@ function partMesh(part) {
   mat.emissive = new THREE.Color(part.color);
   mat.emissiveIntensity = 0.32;
   mat.userData.baseEmissive = mat.emissive.getHex();
-  return new THREE.Mesh(geo, mat);
+  return shadowed(new THREE.Mesh(geo, mat));
+}
+
+// Every mob part both throws and catches sun/moon shadows.
+function shadowed(mesh) {
+  mesh.castShadow = true;
+  mesh.receiveShadow = true;
+  return mesh;
 }
 
 // Builds a placeholder box model for a mob type. Returns a Group with:
@@ -72,7 +79,7 @@ export function buildMobModel(type) {
       mat.emissive = new THREE.Color(part.color);
       mat.emissiveIntensity = 0.32;
       mat.userData.baseEmissive = mat.emissive.getHex();
-      const mesh = new THREE.Mesh(geo, mat);
+      const mesh = shadowed(new THREE.Mesh(geo, mat));
       mesh.position.set(part.pos[0], part.pos[1] + h / 2, part.pos[2]);
       group.add(mesh);
       (part.leg ? legs : arms).push(mesh);

@@ -7,6 +7,11 @@ import React from 'react';
 const CHANGELOG = [
   {
     date: 'November 18, 2026',
+    title: 'Water that moves',
+    body: 'Lakes, rivers and seas are no longer a flat blue sheet. The surface swells and drifts, mirrors the sky as you look toward the horizon, and glitters under the sun and the moon. It runs pale and clear in the shallows, deep and dark offshore, with a line of foam where it meets the land — and it now sits a little below the bank instead of flush with it. Look into it and the bottom fades into blue with light rippling across the sand; dive, and the surface overhead becomes a bright, wavering window. Waterfalls fall in streaks instead of hanging like glass.',
+  },
+  {
+    date: 'November 18, 2026',
     title: 'A living title screen',
     body: 'The title screen and the world list now sit in front of a real world: the camera drifts slowly over freshly generated hills, forests, rivers and coasts while the sun crosses the sky, sets, and gives way to a short starry night. It is the game itself running behind the menu, not a recording — a different place every visit, and a look at what you are about to walk into. The menus were redrawn to match, with a new wordmark and glassy panels, and they are easier to use on a phone.',
   },

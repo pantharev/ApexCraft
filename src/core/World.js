@@ -7,9 +7,10 @@ import { activeMap } from '../world/arenas/index.js';
 import { getSeed } from '../world/noise.js';
 import { buildVolume, meshVolume, setTileTables } from './ChunkMesher.js';
 import {
-  BLOCK_MATERIALS, TERRAIN_SOLID, TERRAIN_CUTOUT, WATER_MATERIAL_INDEX, LEAVES_MATERIAL_INDEX,
+  BLOCK_MATERIALS, TERRAIN_SOLID, TERRAIN_CUTOUT, LEAVES_MATERIAL_INDEX,
   faceMaterialIndex, TILE_KIND, TILE_VARIATION, TILE_GLOW,
 } from '../textures/atlas.js';
+import { WATER_SURFACE } from '../textures/water.js';
 import { getBlockId, isSolid } from '../blocks/BlockRegistry.js';
 
 // Chunk-map key. A number, not a string: getBlock runs for every voxel the
@@ -77,6 +78,7 @@ function toGeometry(d) {
   g.setAttribute('uv', new THREE.BufferAttribute(d.uv, 2));
   g.setAttribute('color', new THREE.BufferAttribute(d.color, 3));
   if (d.tile) g.setAttribute('tile', new THREE.BufferAttribute(d.tile, 3));
+  if (d.depth) g.setAttribute('depth', new THREE.BufferAttribute(d.depth, 1));
   g.setIndex(new THREE.BufferAttribute(d.index, 1));
   g.boundingSphere = new THREE.Sphere(new THREE.Vector3(d.sphere[0], d.sphere[1], d.sphere[2]), d.sphere[3]);
   return g;
@@ -137,8 +139,8 @@ export class World {
     this._last = null;        // the chunk the previous lookup hit (see getChunk)
 
     // Terrain draws with the two array-texture materials (atlas.js); water
-    // keeps its own translucent one.
-    this.waterMaterial = BLOCK_MATERIALS[WATER_MATERIAL_INDEX];
+    // has its own animated surface (textures/water.js).
+    this.waterMaterial = WATER_SURFACE;
 
     this.pool = null;
     this._jobs = new Map();    // worker job id -> { kind: 'gen', cx, cz, k } | { kind: 'mesh', chunk, rev }

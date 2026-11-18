@@ -1,4 +1,4 @@
-import { CHUNK_SIZE, WORLD_HEIGHT } from '../config.js';
+import { CHUNK_SIZE, WORLD_HEIGHT, WATER_DROP } from '../config.js';
 import { getBlock, isOpaque, isSolid, getBlockId, liquidKind } from '../blocks/BlockRegistry.js';
 import { Noise } from '../world/noise.js';
 
@@ -106,7 +106,9 @@ for (let id = 0; id < 256; id++) {
 const OPAQUE = new Uint8Array(256);   // solid and not transparent
 const NON_CUBE = new Uint8Array(256); // drawn by the special pass (or not at all)
 const SELF_CULL = new Uint8Array(256); // hides faces against its own kind
+const WATERY = new Uint8Array(256);   // water, still or flowing
 for (let id = 0; id < 256; id++) {
+  WATERY[id] = liquidKind(id) === 'water' ? 1 : 0;
   OPAQUE[id] = isOpaque(id) ? 1 : 0;
   NON_CUBE[id] = (id === TORCH || SPECIAL.has(id) || FLOW.has(id)) ? 1 : 0;
   SELF_CULL[id] = (getBlock(id).transparent || id === LAVA) ? 1 : 0;
@@ -200,17 +202,45 @@ const ORIGIN = PLANE + PAD + 1;
 // A geometry under construction. Terrain buffers also collect the per-vertex
 // `tile` attribute — (texture-array layer, variation, glow) — that the terrain
 // shader reads; `tile` is the tile the next faces pushed belong to (-1 for
-// the water buffer, which has its own plain material).
+// the water buffer, which has its own material and collects a per-vertex
+// `depth` instead: 0 at the shore, 1 in deep water).
 function emptyBuf() {
-  return { positions: [], normals: [], uvs: [], colors: [], tiles: [], indices: [], tile: -1 };
+  return { positions: [], normals: [], uvs: [], colors: [], tiles: [], depths: [], indices: [], tile: -1 };
 }
 
+// Added to a tile's variation when its face is under water (the terrain
+// shader darkens such ground with depth and plays light across it).
+const WET = 4;
+
 // Stamp the four vertices just pushed with the buffer's current tile.
-function stampTile(buf) {
+function stampTile(buf, wet = 0) {
   const t = buf.tile;
   if (t < 0) return;
-  const v = TILE_VARIATION[t], g = TILE_GLOW[t];
+  const v = TILE_VARIATION[t] + (wet ? WET : 0), g = TILE_GLOW[t];
   buf.tiles.push(t, v, g, t, v, g, t, v, g, t, v, g);
+}
+
+// The `depth` given to flowing water: a stream is a thin sheet, so it reads
+// as shallow — lighter and clearer than a lake — but not as shore foam.
+const FLOW_DEPTH = 0.45;
+
+// How deep the water is at one cell of a column, looking down: 0 if the cell
+// is not water, else 1..3 blocks (capped).
+function columnDepth(vol, idx) {
+  if (!WATERY[vol[idx]]) return 0;
+  if (!WATERY[vol[idx - PLANE]]) return 1;
+  return WATERY[vol[idx - 2 * PLANE]] ? 3 : 2;
+}
+
+// The depth of the water around one corner of a water cell's top face, 0..3:
+// 0 where the corner touches anything that is not water — the shore — and
+// otherwise the average depth of the four columns that meet there. Corners
+// are shared, so neighbouring cells (and chunks) agree and the result blends
+// smoothly across the surface.
+function shoreDepth(vol, idx, ou, ov) {
+  const b = columnDepth(vol, idx + ou), c = columnDepth(vol, idx + ov), d = columnDepth(vol, idx + ou + ov);
+  if (b === 0 || c === 0 || d === 0) return 0;
+  return Math.min(3, Math.round((columnDepth(vol, idx) + b + c + d) / 4));
 }
 
 const clamp01 = (v) => Math.max(0, Math.min(1, v));
@@ -247,23 +277,34 @@ function climateTint(wx, wz) {
 // Corner k of a quad sits at (i + QU[k]·w, j + QV[k]·h) on its face plane.
 const QU = [0, 1, 1, 0], QV = [0, 0, 1, 1];
 const corner = [0, 0, 0];
+//
+// Water quads differ in three ways (see the mask notes in meshVolume): the
+// surface is lowered by WATER_DROP — a top face entirely, a side face of the
+// body's top layer (q.flag) along its upper edge; q.ao holds corner depths,
+// not occlusion, and goes out as the `depth` attribute; and nothing darkens.
 function pushQuad(buf, q) {
   const shade = SHADE[q.faceType];
   const sl = (q.skylight !== undefined) ? q.skylight : 1.0; // skylight factor
   const tinted = (q.id === GRASS && q.faceType === 'top') || q.id === LEAVES;
+  const water = q.id === WATER;
+  const surface = water && q.faceType === 'top';
+  const lip = water && q.flag === 1 && q.faceType === 'side';
   const vi = buf.positions.length / 3;
   corner[q.axis] = q.faceCoord;
   for (let k = 0; k < 4; k++) {
     const du = QU[k] * q.w, dv = QV[k] * q.h;
     corner[q.u] = q.i + du; corner[q.v] = q.j + dv;
     const x = q.baseX + corner[0], z = q.baseZ + corner[2];
-    buf.positions.push(x, corner[1], z);
+    let y = corner[1];
+    if (surface || (lip && (q.u === 1 ? QU[k] : QV[k]) === 1)) y -= WATER_DROP;
+    buf.positions.push(x, y, z);
     buf.normals.push(q.normal[0], q.normal[1], q.normal[2]);
     buf.uvs.push(du, dv);
+    if (water) buf.depths.push(surface ? q.ao[k] / 3 : 1);
     // Corners tucked against neighbouring blocks darken (soft contact shadow).
     // Skylight (sl) multiplied in so underground faces are genuinely dark while
     // surface faces (sl=1.0) are unchanged from the previous behaviour.
-    const aoF = 0.6 + 0.4 * (q.ao[k] / 3);
+    const aoF = water ? 1 : 0.6 + 0.4 * (q.ao[k] / 3);
     const bright = shade * aoF * sl;
     if (tinted) {
       const t = climateTint(x, z);
@@ -272,7 +313,7 @@ function pushQuad(buf, q) {
       buf.colors.push(bright, bright, bright);
     }
   }
-  stampTile(buf);
+  stampTile(buf, q.flag);
   // Split the quad across the brighter diagonal so AO interpolates smoothly
   // (the classic anisotropy fix), honouring the face winding direction.
   const flip = q.ao[0] + q.ao[2] > q.ao[1] + q.ao[3];
@@ -290,11 +331,12 @@ function pushQuad(buf, q) {
 // copies — no per-element pushes or argument spreading, whatever the chunk's
 // size. Returns null when there is nothing to draw.
 function assemble(...bufs) {
-  let verts = 0, idx = 0, tiled = false;
+  let verts = 0, idx = 0, tiled = false, deep = false;
   for (const b of bufs) {
     verts += b.positions.length / 3;
     idx += b.indices.length;
     if (b.tiles.length) tiled = true;
+    if (b.depths.length) deep = true;
   }
   if (verts === 0) return null;
   const position = new Float32Array(verts * 3);
@@ -302,6 +344,7 @@ function assemble(...bufs) {
   const uv = new Float32Array(verts * 2);
   const color = new Float32Array(verts * 3);
   const tile = tiled ? new Float32Array(verts * 3) : null;
+  const depth = deep ? new Float32Array(verts) : null;
   const index = verts > 65535 ? new Uint32Array(idx) : new Uint16Array(idx);
   let v = 0, i = 0;
   for (const b of bufs) {
@@ -310,6 +353,7 @@ function assemble(...bufs) {
     uv.set(b.uvs, v * 2);
     color.set(b.colors, v * 3);
     if (tile) tile.set(b.tiles, v * 3);
+    if (depth) depth.set(b.depths, v);
     const src = b.indices;
     for (let k = 0; k < src.length; k++) index[i + k] = src[k] + v;
     v += b.positions.length / 3;
@@ -332,7 +376,7 @@ function assemble(...bufs) {
     const d = dx * dx + dy * dy + dz * dz;
     if (d > r2) r2 = d;
   }
-  return { position, normal, uv, color, tile, index, sphere: [sx, sy, sz, Math.sqrt(r2)], leafCount: 0 };
+  return { position, normal, uv, color, tile, depth, index, sphere: [sx, sy, sz, Math.sqrt(r2)], leafCount: 0 };
 }
 
 // The ArrayBuffers of a meshVolume result, for postMessage's transfer list.
@@ -342,6 +386,7 @@ export function meshTransferables(mesh) {
     if (!g) continue;
     out.push(g.position.buffer, g.normal.buffer, g.uv.buffer, g.color.buffer, g.index.buffer);
     if (g.tile) out.push(g.tile.buffer);
+    if (g.depth) out.push(g.depth.buffer);
   }
   return out;
 }
@@ -358,6 +403,11 @@ const decodeAO = (bits) => bits === AO_UNIFORM
 // bucket simple and not shatter every face into tiny quads.
 const SL_BITS = 2;
 const SL_SHIFT = ID_BITS + 8; // sits above the AO byte
+// One more bit above the skylight bucket, so faces that differ in it never
+// merge. For terrain it marks a face that looks into water (the ground under
+// a lake). For water it marks the top layer of the body, whose surface is
+// lowered — and a water top face reuses the AO byte for its corner depths.
+const FLAG_SHIFT = SL_SHIFT + 2;
 const SL_MASK = (1 << SL_BITS) - 1; // 0b11
 const SL_BUCKETS = 4; // 0..3
 
@@ -438,15 +488,27 @@ export function meshVolume(vol, cx, cz) {
 
             // 4-corner AO for this face (liquids skip it to merge maximally):
             // each corner looks at the two cells beside it in the face's
-            // plane and the one diagonal.
-            let aoBits = AO_UNIFORM;
-            if (id !== WATER && id !== LAVA) {
-              aoBits = 0;
-              for (let ci = 0; ci < 4; ci++) {
-                const ou = AO_CORNERS[ci][0] * su, ov = AO_CORNERS[ci][1] * sv;
-                const s1 = OPAQUE[vol[nIdx + ou]], s2 = OPAQUE[vol[nIdx + ov]];
-                const ao = s1 && s2 ? 0 : 3 - (s1 + s2 + OPAQUE[vol[nIdx + ou + ov]]);
-                aoBits |= ao << (ci * 2);
+            // plane and the one diagonal. A water top face puts the depth of
+            // the water around each corner there instead (see FLAG_SHIFT).
+            let aoBits = AO_UNIFORM, flag;
+            if (id === WATER) {
+              flag = WATERY[vol[idx + PLANE]] ^ 1; // nothing but air (or land) above: the surface layer
+              if (faceType === 'top') {
+                aoBits = 0;
+                for (let ci = 0; ci < 4; ci++) {
+                  aoBits |= shoreDepth(vol, idx, AO_CORNERS[ci][0] * su, AO_CORNERS[ci][1] * sv) << (ci * 2);
+                }
+              }
+            } else {
+              flag = WATERY[neighbor]; // the face is under water
+              if (id !== LAVA) {
+                aoBits = 0;
+                for (let ci = 0; ci < 4; ci++) {
+                  const ou = AO_CORNERS[ci][0] * su, ov = AO_CORNERS[ci][1] * sv;
+                  const s1 = OPAQUE[vol[nIdx + ou]], s2 = OPAQUE[vol[nIdx + ov]];
+                  const ao = s1 && s2 ? 0 : 3 - (s1 + s2 + OPAQUE[vol[nIdx + ou + ov]]);
+                  aoBits |= ao << (ci * 2);
+                }
               }
             }
 
@@ -458,7 +520,7 @@ export function meshVolume(vol, cx, cz) {
             const y = axis === 1 ? layer : (u === 1 ? i : j);
             const sl = skylightAt(y, roof[nIdx % PLANE]);
 
-            mask[j * du + i] = id | (aoBits << ID_BITS) | (slBucket(sl) << SL_SHIFT);
+            mask[j * du + i] = id | (aoBits << ID_BITS) | (slBucket(sl) << SL_SHIFT) | (flag << FLAG_SHIFT);
             faces++;
           }
         }
@@ -481,7 +543,8 @@ export function meshVolume(vol, cx, cz) {
             const id = key & ID_MASK;
             const ao = decodeAO((key >>> ID_BITS) & 0xff);
             const skylight = SL_VALUES[(key >>> SL_SHIFT) & SL_MASK];
-            const q = { axis, u, v, faceCoord, i, j, w, h, dir, normal, faceType, baseX, baseZ, id, ao, skylight };
+            const flag = (key >>> FLAG_SHIFT) & 1;
+            const q = { axis, u, v, faceCoord, i, j, w, h, dir, normal, faceType, baseX, baseZ, id, ao, skylight, flag };
             if (id === WATER) {
               pushQuad(water, q);
             } else {
@@ -666,6 +729,7 @@ function pushLiquidBox(buf, x, y, z, h, faces, sl = 1.0) {
       buf.normals.push(n[0], n[1], n[2]);
       buf.uvs.push(uvs[k][0], uvs[k][1]);
       buf.colors.push(bright, bright, bright);
+      if (buf.tile < 0) buf.depths.push(FLOW_DEPTH); // the water buffer
     }
     stampTile(buf);
     buf.indices.push(vi, vi + 1, vi + 2, vi, vi + 2, vi + 3);

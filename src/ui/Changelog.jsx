@@ -9,6 +9,9 @@ const CHANGELOG = [
     date: 'November 18, 2026',
     title: 'Fixed: looking around on phones',
     body: 'On phones and tablets, dragging the screen to look around had stopped working after the player-character update. It works again. Sorry about that one.',
+  },
+  {
+    date: 'November 18, 2026',
     title: 'New worlds, new land',
     body: 'Worlds you create from now on have a new kind of landscape. Mountain ranges rise in jagged, snow-capped crests with bare rock faces, ledges and the odd overhang. Highlands step up in flat benches with cliffs between them. Rivers run in proper valleys and squeeze through gorges in the hills, coasts have real beaches, swamps sit at the waterline and deserts ripple into dunes. No two worlds start alike any more, and you always begin on dry, level ground. Your existing worlds are untouched — every block of them is exactly where you left it.',
   },

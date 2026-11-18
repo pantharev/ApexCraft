@@ -7,6 +7,11 @@ import React from 'react';
 const CHANGELOG = [
   {
     date: 'November 18, 2026',
+    title: 'Fixed: looking around on phones',
+    body: 'On phones and tablets, dragging the screen to look around had stopped working after the player-character update. It works again. Sorry about that one.',
+  },
+  {
+    date: 'November 18, 2026',
     title: 'Water that moves',
     body: 'Lakes, rivers and seas are no longer a flat blue sheet. The surface swells and drifts, mirrors the sky as you look toward the horizon, and glitters under the sun and the moon. It runs pale and clear in the shallows, deep and dark offshore, with a line of foam where it meets the land — and it now sits a little below the bank instead of flush with it. Look into it and the bottom fades into blue with light rippling across the sand; dive, and the surface overhead becomes a bright, wavering window. Waterfalls fall in streaks instead of hanging like glass.',
   },

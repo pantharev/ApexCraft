@@ -9,6 +9,18 @@ updated with every merged PR** (and mirror a short player-facing entry in the
 
 ---
 
+## 2026-11-18 — #62 Fix: looking around on touch devices
+
+#56 added a `look` vector to `Player` (the direction aiming uses) — but
+`Player` already had a `look(dx, dy)` method, which the touch controls call
+on every drag. The instance property shadowed the method, so on a phone or
+tablet dragging to look threw a TypeError and the view never turned; desktop
+was unaffected (mouse look does not go through it). The vector is now
+`Player.lookDir` (`Game.js`, `Interaction.js` updated; `CLAUDE.md` says
+"aim from `player.eye` / `player.lookDir`"). Checked with touch emulation:
+real touch events on the look layer turn the view again. Nothing automated
+covers the touch layer, so a rename like that needs a look on a touch device.
+
 ## 2026-11-18 — #60 Water: an animated surface, depth, foam, caustics
 
 Water was one flat scrolling tile. `src/textures/water.js` now holds its own

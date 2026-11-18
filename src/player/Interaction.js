@@ -143,7 +143,7 @@ export class Interaction {
   // raycast: the normal targeting ray passes straight through liquids.
   _useBucket(item) {
     const origin = this.player.eye;
-    const dir = this.player.look;
+    const dir = this.player.lookDir;
     const hit = raycastVoxel(this.world, origin, dir, REACH, true);
     if (!hit) return;
     const b = hit.block;
@@ -298,7 +298,7 @@ export class Interaction {
     // Cast from the player's eye along their look direction (the same as the
     // camera in first person; in third person the camera is somewhere else).
     const origin = this.player.eye;
-    const dir = this.player.look;
+    const dir = this.player.lookDir;
     this.target = raycastVoxel(this.world, origin, dir, REACH);
 
     if (!this.target) {

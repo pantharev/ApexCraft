@@ -515,7 +515,7 @@ export class Game {
         const st = this.hideSeek.state;
         if (st.roles[this.hideSeek.selfId] !== 'seeker' || st.phase !== 'seeking') return false;
         const d = new THREE.Vector3();
-        d.copy(this.player.look);
+        d.copy(this.player.lookDir);
         let hit = this.remotePlayers ? this.remotePlayers.raycast(this.player.eye, d, TAG_RANGE) : null;
         // The avatar raycast is a pure sphere test — also require voxel line of
         // sight, so a hider tucked behind a wall can't be tagged through it.
@@ -534,7 +534,7 @@ export class Game {
       if (heldDef && heldDef.gun) { this._shootGun(heldDef); return true; }
 
       const dir = new THREE.Vector3();
-      dir.copy(this.player.look);
+      dir.copy(this.player.lookDir);
       const mob = this._mobApi().raycast(this.player.eye, dir, 4);
       Sound.swing();
       this._swingT = 0.3; // the avatar's arm swing, seen in shadow / third person / by peers
@@ -553,7 +553,7 @@ export class Game {
     this.interaction.onUseMob = () => {
       if (this.hideseek || this.vitals.dead) return false;
       const dir = new THREE.Vector3();
-      dir.copy(this.player.look);
+      dir.copy(this.player.lookDir);
       const mob = this._mobApi().raycast(this.player.eye, dir, 3.5);
       if (!mob) return false;
       if (this.net && !this.net.isHost) return this._guestPetInteract(mob);
@@ -1336,7 +1336,7 @@ export class Game {
     this.inventory.notify();
     const spec = AMMO[ammo];
     const dir = new THREE.Vector3();
-    dir.copy(this.player.look);
+    dir.copy(this.player.lookDir);
     const o = this.player.eye;
     const kind = ammo === 'arrow' ? undefined : ammo;
     this.projectiles.spawn(o.x, o.y, o.z, dir, 30, spec.dmg, 'mob', {
@@ -1414,7 +1414,7 @@ export class Game {
     g.mag--;
     this._gunCd = 60 / spec.rpm;
     const dir = new THREE.Vector3();
-    dir.copy(this.player.look);
+    dir.copy(this.player.lookDir);
     if (spec.spread) {
       dir.x += (Math.random() * 2 - 1) * spec.spread;
       dir.y += (Math.random() * 2 - 1) * spec.spread;
@@ -1542,7 +1542,7 @@ export class Game {
   }
 
   // Toggle the third-person orbit camera (C). Aiming is unaffected: mining,
-  // attacks, and shots all come from the player's eye (Player.eye / .look).
+  // attacks, and shots all come from the player's eye (Player.eye / .lookDir).
   setThirdPerson(on) {
     this.player.thirdPerson = on;
     this.player.camHeight = 1.45; // orbit the shoulders rather than the feet

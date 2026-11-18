@@ -59,8 +59,10 @@ export class Player {
     this.camHeight = 0.6;    // ...and the height above the feet it orbits
     // Where the player looks FROM and ALONG, whatever the camera is doing.
     // Aiming (mining, attacks, shots) uses these, so it works in third person.
+    // (`lookDir`, not `look`: look(dx, dy) below is the touch-drag method, and a
+    // property of that name would shadow it.)
     this.eye = new THREE.Vector3(0, 80 + EYE, 0);
-    this.look = new THREE.Vector3(0, 0, -1);
+    this.lookDir = new THREE.Vector3(0, 0, -1);
     this.lookFrozen = false; // suspend mouse-look (e.g. while the taunt wheel is open)
 
     this._bindEvents();
@@ -307,7 +309,7 @@ export class Player {
       -Math.cos(this.yaw) * Math.cos(this.pitch)
     );
     this.eye.set(this.pos.x, this.pos.y + EYE, this.pos.z);
-    this.look.copy(dirVec);
+    this.lookDir.copy(dirVec);
     if (this.thirdPerson) {
       // Orbit behind/above the feet so the player can see their own body (or
       // disguise block). Pull back along the look direction, clamped above the

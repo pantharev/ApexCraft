@@ -110,6 +110,7 @@ See [LICENSE](LICENSE) and [CLA.md](CLA.md) for full details.
   distance falloff), player hurt/death, jump/land. Press **M** to mute.
 
 ### Graphics
+- **A living title screen**: the menus sit in front of the game itself — a slow flight over freshly generated terrain, with the sun crossing the sky and a short starry night. A different place every visit, and no video file behind it.
 - **Real-time sun and moon shadows**: terrain, trees (dappled through the leaves), mobs, players, and dropped items all cast and catch them. A **Graphics: High / Low** switch in the pause menu turns shadows off on slower machines (Low is the default on touch devices).
 - **Filmic lighting and atmosphere**: tone-mapped rendering, a gradient sky with drifting voxel clouds, warm low-sun light and cool moonlight, distance haze that dissolves the world's edge into the horizon, dense blue murk under water, and eyes that adjust to the dark underground.
 - **Procedural pixel-art textures** drawn on canvas at load (zero asset files): bladed grass with ragged turf edges, pebbly dirt, voronoi cobblestone/gravel, growth-ring logs, nugget ores with bright facets, wind-rippled sand, grainy planks — shaded with warm highlights and cool shadows.

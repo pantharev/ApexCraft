@@ -1,15 +1,20 @@
 import blockData from './blocks.json';
-import * as THREE from 'three';
 
 // Central lookup for block definitions, indexed by numeric id for fast access
 // during meshing. Also exposes name->id and per-face color arrays.
+//
+// This module is loaded by the chunk workers as well as the page, so it must
+// stay free of three.js and the DOM (see core/chunkWorker.js).
 
 const byId = [];
 const byName = {};
 
+// '#rrggbb' -> linear-light [r, g, b] in 0..1 (what THREE.Color would hold).
+const toLinear = (c) => (c <= 0.04045 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4);
 function hexToRgb(hex) {
-  const c = new THREE.Color(hex);
-  return [c.r, c.g, c.b];
+  if (!hex) return [1, 1, 1]; // blocks without a colour (they are textured) default to white
+  const n = parseInt(hex.slice(1), 16);
+  return [toLinear(((n >> 16) & 255) / 255), toLinear(((n >> 8) & 255) / 255), toLinear((n & 255) / 255)];
 }
 
 for (const def of blockData) {

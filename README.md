@@ -123,7 +123,7 @@ See [LICENSE](LICENSE) and [CLA.md](CLA.md) for full details.
 ### Performance
 - **Greedy meshing** merges coplanar block faces into large quads (AO patterns are part of the merge key, so shading stays exact).
 - **One texture array for the whole world**: every block tile is a layer of a single array texture, so each chunk's solid terrain draws in one call (cut-outs in a second) instead of one per block type.
-- **Chunk streaming** around the player with an LRU cache that preserves edits on revisit.
+- **Chunk streaming in web workers**: terrain is generated and meshed on other cores while the game keeps running, so exploring does not stutter; an LRU cache preserves edits on revisit.
 - **Frustum culling** of off-screen chunks.
 
 ---
@@ -179,7 +179,7 @@ deploy can host both the game and its multiplayer.
 
 ```
 src/
-├── core/           # Game loop, World/chunk manager, greedy mesher, Chunk
+├── core/           # Game loop, World/chunk manager, chunk workers, greedy mesher, Chunk
 ├── world/
 │   ├── noise.js          # seeded simplex fields (terrain, climate, caves, rivers…)
 │   ├── biomes/           # temperature+humidity -> biome
@@ -224,7 +224,7 @@ MIT for the open-source core — see **[Licensing & Commercial Use](#-licensing-
 ## Roadmap
 
 - More structures and biome variety; biome blending
-- Web-worker chunk generation, LOD
+- Level-of-detail terrain for longer view distances
 - Ranged combat (skeleton arrows), more mobs
 - Multiplayer polish: synced chests/furnaces/item drops, in-game chat,
   client-side prediction

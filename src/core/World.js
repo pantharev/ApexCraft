@@ -1,9 +1,15 @@
 import * as THREE from 'three';
 import { CHUNK_SIZE, WORLD_HEIGHT, SEA_LEVEL, LOAD_RADIUS, UNLOAD_RADIUS, CHUNK_CACHE_MAX } from '../config.js';
 import { Chunk } from './Chunk.js';
-import { generateChunk } from '../world/generators/TerrainGen.js';
-import { buildChunkGeometry } from './ChunkMesher.js';
-import { BLOCK_MATERIALS, TERRAIN_SOLID, TERRAIN_CUTOUT, WATER_MATERIAL_INDEX, LEAVES_MATERIAL_INDEX } from '../textures/atlas.js';
+import { ChunkPool } from './ChunkPool.js';
+import { generateChunk, getGenMode } from '../world/generators/TerrainGen.js';
+import { activeMap } from '../world/arenas/index.js';
+import { getSeed } from '../world/noise.js';
+import { buildVolume, meshVolume, setTileTables } from './ChunkMesher.js';
+import {
+  BLOCK_MATERIALS, TERRAIN_SOLID, TERRAIN_CUTOUT, WATER_MATERIAL_INDEX, LEAVES_MATERIAL_INDEX,
+  faceMaterialIndex, TILE_KIND, TILE_VARIATION, TILE_GLOW,
+} from '../textures/atlas.js';
 import { getBlockId, isSolid } from '../blocks/BlockRegistry.js';
 
 // Chunk-map key. A number, not a string: getBlock runs for every voxel the
@@ -23,6 +29,58 @@ for (let dx = -LOAD_RADIUS; dx <= LOAD_RADIUS; dx++) {
   }
 }
 VISIT.sort((a, b) => a[0] - b[0]);
+// A chunk's mesh reads one block into all eight chunks around it: the four
+// beside it decide which border faces are hidden, and the diagonal ones are
+// seen by the ambient occlusion of its corner columns. All eight have to be
+// generated before it is meshed — then a mesh depends only on the world, never
+// on the order chunks happened to arrive in.
+const NEIGHBOURS = [[1, 0], [-1, 0], [0, 1], [0, -1], [1, 1], [1, -1], [-1, 1], [-1, -1]];
+
+// --- How chunks get built ------------------------------------------------------
+// Generating a chunk and meshing it are the two heavy jobs in the engine, and
+// both normally run in a pool of workers (ChunkPool.js): update() walks the
+// load disc nearest-first and hands out jobs while the pool has room, and the
+// results are drawn as they come back. The main thread only does the work
+// itself when it cannot wait:
+//   • the chunks under and around the player must exist before physics runs,
+//     so a missing one there (a teleport, a spawn) is generated on the spot;
+//   • an edit next to the player is remeshed in the same frame — a block has
+//     to vanish the instant it breaks, and when an edit touches a chunk
+//     border both chunks must change together or a hole flashes between them.
+// Edits further away go through the workers like everything else.
+const URGENT_RADIUS = 2;    // chunks (Chebyshev) around the player whose edits remesh here
+const URGENT_PER_FRAME = 4; // ...at most this many a frame; the rest wait a frame
+const MESHES_PER_FRAME = 8; // worker meshes drawn per frame (each is a GPU upload)
+const SYNC_BUDGET = 3;      // chunks built per frame with no workers at all
+const PRELOAD_NEAR = 25;    // chunks preload() builds itself when workers will do the rest (a 2.8-chunk disc)
+const PRELOAD_ALONE = 80;   // ...and when there are none (a 5-chunk disc)
+const SPARE_VOLUMES = 16;   // snapshot buffers kept for reuse (about 42 KB each)
+
+// Per-block tile lookups for the mesher (see ChunkMesher.setTileTables). Built
+// here because the atlas needs a canvas; each worker gets a copy.
+const TILE_TABLES = (() => {
+  const top = new Uint16Array(256), side = new Uint16Array(256), bottom = new Uint16Array(256);
+  for (let id = 0; id < 256; id++) {
+    top[id] = faceMaterialIndex(id, 'top');
+    side[id] = faceMaterialIndex(id, 'side');
+    bottom[id] = faceMaterialIndex(id, 'bottom');
+  }
+  return { top, side, bottom, kind: TILE_KIND, variation: TILE_VARIATION, glow: TILE_GLOW };
+})();
+setTileTables(TILE_TABLES);
+
+// Wrap one geometry's typed arrays (from meshVolume) for three.js.
+function toGeometry(d) {
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.BufferAttribute(d.position, 3));
+  g.setAttribute('normal', new THREE.BufferAttribute(d.normal, 3));
+  g.setAttribute('uv', new THREE.BufferAttribute(d.uv, 2));
+  g.setAttribute('color', new THREE.BufferAttribute(d.color, 3));
+  if (d.tile) g.setAttribute('tile', new THREE.BufferAttribute(d.tile, 3));
+  g.setIndex(new THREE.BufferAttribute(d.index, 1));
+  g.boundingSphere = new THREE.Sphere(new THREE.Vector3(d.sphere[0], d.sphere[1], d.sphere[2]), d.sphere[3]);
+  return g;
+}
 
 export const SHADOW_CASTER_LAYER = 1;
 
@@ -60,7 +118,11 @@ const TORCH = getBlockId('torch');
 const GLOW = getBlockId('glow_mushroom');
 
 export class World {
-  constructor(scene) {
+  // The seed (noise.reseed), generation mode (setGenMode) and arena map
+  // (setActiveMap) must be set before this is constructed: the chunk workers
+  // are told them once, here. `workers: false` builds everything on the main
+  // thread (also what happens by itself if workers cannot start).
+  constructor(scene, { workers = true } = {}) {
     this.scene = scene;
     this.chunks = new Map();
     this.cache = new Map(); // LRU of unloaded chunks (insertion order = age)
@@ -68,12 +130,27 @@ export class World {
     this.torches = new Set(); // "x,y,z" of placed torches (for dynamic lights)
     this.torchVersion = 0;    // bumped when the torch set changes
     this.onEdit = null;       // (wx, wy, wz, id, prevId) — fired on every setBlock (sync + particles)
-    this.castShadows = false; // terrain casts shadows (Game.setGraphics)
+    this.castShadows = false; // terrain casts shadows (setCastShadows)
     this._last = null;        // the chunk the previous lookup hit (see getChunk)
 
     // Terrain draws with the two array-texture materials (atlas.js); water
     // keeps its own translucent one.
     this.waterMaterial = BLOCK_MATERIALS[WATER_MATERIAL_INDEX];
+
+    this.pool = null;
+    this._jobs = new Map();    // worker job id -> { kind: 'gen', cx, cz, k } | { kind: 'mesh', chunk, rev }
+    this._genJobs = new Map(); // chunk key -> id of its generation job in flight
+    this._urgent = new Set();  // edited chunks to consider for a same-frame remesh
+    this._vols = [];           // spare snapshot buffers (see _snapshot)
+    if (workers && typeof Worker !== 'undefined') {
+      try {
+        this.pool = new ChunkPool({
+          seed: getSeed(), genMode: getGenMode(), map: activeMap().id, tables: TILE_TABLES,
+        });
+      } catch (err) {
+        console.warn('[chunks] no workers, building on the main thread:', err);
+      }
+    }
   }
 
   // Lookups come in runs inside one chunk (a collision box, a mesher row), so
@@ -86,22 +163,33 @@ export class World {
     return chunk;
   }
 
+  // Bring a chunk back from the LRU cache (keeps its blocks and edits, skips
+  // regeneration). Returns it, or undefined if it is not cached.
+  _restore(k) {
+    const chunk = this.cache.get(k);
+    if (!chunk) return undefined;
+    this.cache.delete(k);
+    chunk.dirty = true;
+    chunk.mesh = null;
+    this.chunks.set(k, chunk);
+    return chunk;
+  }
+
+  // Make sure a chunk's blocks exist, generating them on this thread, now.
+  // For callers that need the answer in the same call (setBlock,
+  // surfaceHeight, the ground under the player); streaming goes through
+  // update() and the workers instead.
   ensureChunk(cx, cz) {
     const k = key(cx, cz);
-    let chunk = this.chunks.get(k);
+    let chunk = this.chunks.get(k) || this._restore(k);
     if (!chunk) {
-      // Restore from the LRU cache (keeps edits, skips regeneration) if present.
-      chunk = this.cache.get(k);
-      if (chunk) {
-        this.cache.delete(k);
-        chunk.dirty = true;
-        chunk.mesh = null;
-      } else {
-        chunk = new Chunk(cx, cz);
-      }
+      chunk = new Chunk(cx, cz);
       this.chunks.set(k, chunk);
     }
     if (!chunk.generated) {
+      // A worker may be generating this very chunk; its result is now unwanted.
+      const job = this._genJobs.get(k);
+      if (job !== undefined) { this._genJobs.delete(k); this._jobs.delete(job); }
       generateChunk(chunk);
       this._applyEdits(editKey(cx, cz), chunk); // replay saved player edits onto fresh terrain
     }
@@ -154,7 +242,7 @@ export class World {
     const lz = wz - cz * CHUNK_SIZE;
     const prevId = chunk.get(lx, wy, lz);
     chunk.set(lx, wy, lz, id);
-    chunk.dirty = true;
+    this._urgent.add(chunk);
 
     // Record the edit so it survives chunk unload/regeneration and can be saved.
     const k = editKey(cx, cz);
@@ -180,18 +268,22 @@ export class World {
       else if (id !== GLOW && li >= 0) chunk.lights.splice(li, 1);
     }
 
-    // Neighbouring chunk may need remesh if we touched a boundary block.
-    if (lx === 0) this.markDirty(cx - 1, cz);
-    if (lx === CHUNK_SIZE - 1) this.markDirty(cx + 1, cz);
-    if (lz === 0) this.markDirty(cx, cz - 1);
-    if (lz === CHUNK_SIZE - 1) this.markDirty(cx, cz + 1);
+    // Neighbouring chunks need a remesh if we touched a boundary block — and
+    // a corner block is also seen by the chunk diagonally across (the ambient
+    // occlusion of its corner column).
+    const bx = lx === 0 ? -1 : lx === CHUNK_SIZE - 1 ? 1 : 0;
+    const bz = lz === 0 ? -1 : lz === CHUNK_SIZE - 1 ? 1 : 0;
+    if (bx) this.markDirty(cx + bx, cz);
+    if (bz) this.markDirty(cx, cz + bz);
+    if (bx && bz) this.markDirty(cx + bx, cz + bz);
 
     if (this.onEdit) this.onEdit(wx, wy, wz, id, prevId);
   }
 
+  // An edit changed what this chunk's mesh should look like.
   markDirty(cx, cz) {
     const c = this.getChunk(cx, cz);
-    if (c) c.dirty = true;
+    if (c) { c.dirty = true; this._urgent.add(c); }
   }
 
   // Edits as a plain object for saving: { "cx,cz": { index: blockId } }.
@@ -229,64 +321,246 @@ export class World {
     this.torchVersion++;
   }
 
-  buildMesh(chunk) {
-    const get = (wx, wy, wz) => this.getBlock(wx, wy, wz);
-    const { solid, cutout, water } = buildChunkGeometry(chunk, get);
+  // --- Meshes ------------------------------------------------------------------
 
-    if (chunk.mesh) {
-      this.scene.remove(chunk.mesh);
-      chunk.mesh.traverse((o) => o.geometry && o.geometry.dispose());
-    }
+  // A copy of the chunk's voxels plus the one-block ring around it — all a
+  // mesh needs, and safe to hand to a worker. The buffers are recycled
+  // (_recycle): a mesh job's snapshot comes back with its result, so steady
+  // streaming allocates none.
+  _snapshot(chunk) {
+    const { cx, cz } = chunk;
+    return buildVolume((dx, dz) => {
+      if (dx === 0 && dz === 0) return chunk.blocks;
+      const c = this.chunks.get(key(cx + dx, cz + dz));
+      return c && c.generated ? c.blocks : null;
+    }, this._vols.pop());
+  }
 
+  _recycle(vol) {
+    if (vol && this._vols.length < SPARE_VOLUMES) this._vols.push(vol);
+  }
+
+  _dropMesh(chunk) {
+    if (!chunk.mesh) return;
+    this.scene.remove(chunk.mesh);
+    chunk.mesh.traverse((o) => o.geometry && o.geometry.dispose());
+    chunk.mesh = null;
+  }
+
+  // Show a mesh built from the chunk at revision `rev` (see Chunk.rev).
+  _setMesh(chunk, data, rev) {
+    this._dropMesh(chunk);
     const group = new THREE.Group();
-    if (solid) {
-      const m = new THREE.Mesh(solid, TERRAIN_SOLID);
+    const parts = group.userData; // what setCastShadows needs to find again
+    if (data.solid) {
+      const m = new THREE.Mesh(toGeometry(data.solid), TERRAIN_SOLID);
       m.receiveShadow = true;
       m.castShadow = this.castShadows;
       group.add(m);
+      parts.solid = m;
     }
-    if (cutout) {
-      const m = new THREE.Mesh(cutout, TERRAIN_CUTOUT);
+    if (data.cutout) {
+      const m = new THREE.Mesh(toGeometry(data.cutout), TERRAIN_CUTOUT);
       m.receiveShadow = true;
       group.add(m);
-      const leaves = cutout.userData.leafCount;
-      if (this.castShadows && leaves > 0) group.add(casterMesh(cutout, 0, leaves, LEAF_CASTER));
+      parts.cutout = m;
+      parts.leafCount = data.cutout.leafCount;
+      if (this.castShadows) this._addLeafCaster(group);
     }
-    if (water) {
-      const m = new THREE.Mesh(water, this.waterMaterial);
+    if (data.water) {
+      const m = new THREE.Mesh(toGeometry(data.water), this.waterMaterial);
       m.frustumCulled = true;
       m.renderOrder = 1;
       m.receiveShadow = true;
       group.add(m);
     }
     chunk.mesh = group;
-    chunk.dirty = false;
+    chunk.meshRev = rev;
     this.scene.add(group);
   }
 
-  // Generate + mesh chunks within LOAD_RADIUS, unload beyond UNLOAD_RADIUS.
-  // Called each frame with the player's world position. Generates a limited
-  // number of chunks per call to avoid frame hitches.
-  update(playerX, playerZ, budget = 2) {
-    const pcx = Math.floor(playerX / CHUNK_SIZE);
-    const pcz = Math.floor(playerZ / CHUNK_SIZE);
-    let work = 0;
+  _addLeafCaster(group) {
+    const parts = group.userData;
+    if (parts.caster || !parts.cutout || !(parts.leafCount > 0)) return;
+    parts.caster = casterMesh(parts.cutout.geometry, 0, parts.leafCount, LEAF_CASTER);
+    group.add(parts.caster);
+  }
 
-    // Load/generate nearest-first.
+  // Mesh a chunk on this thread, now.
+  buildMesh(chunk) {
+    const rev = chunk.rev;
+    const vol = this._snapshot(chunk);
+    const data = meshVolume(vol, chunk.cx, chunk.cz);
+    this._recycle(vol);
+    chunk.meshJob = 0; // a worker mesh still in flight for it is now out of date
+    this._setMesh(chunk, data, rev);
+  }
+
+  // Terrain shadows on or off (Game.setGraphics). The meshes are updated in
+  // place — nothing is remeshed.
+  setCastShadows(on) {
+    this.castShadows = on;
+    for (const chunk of this.chunks.values()) {
+      if (!chunk.mesh) continue;
+      const parts = chunk.mesh.userData;
+      if (parts.solid) parts.solid.castShadow = on;
+      if (on) this._addLeafCaster(chunk.mesh);
+      if (parts.caster) parts.caster.visible = on;
+    }
+  }
+
+  // --- Streaming ---------------------------------------------------------------
+
+  // Start generating a chunk that is not loaded. Returns the chunk if it could
+  // be had at once (it was in the LRU cache); otherwise a worker is asked, if
+  // one is free, and the chunk appears in a later update.
+  _requestGen(cx, cz) {
+    const k = key(cx, cz);
+    const cached = this._restore(k);
+    if (cached) return cached;
+    if (!this._genJobs.has(k) && this.pool.free > 0) {
+      const id = this.pool.gen(cx, cz);
+      this._genJobs.set(k, id);
+      this._jobs.set(id, { kind: 'gen', cx, cz, k });
+    }
+    return undefined;
+  }
+
+  _requestMesh(chunk) {
+    const id = this.pool.mesh(chunk.cx, chunk.cz, this._snapshot(chunk));
+    chunk.meshJob = id;
+    this._jobs.set(id, { kind: 'mesh', chunk, rev: chunk.rev });
+  }
+
+  // Take in what the workers finished since the last frame.
+  _drain() {
+    const { gens, meshes } = this.pool;
+    for (let i = 0; i < gens.length; i++) {
+      const msg = gens[i];
+      const job = this._jobs.get(msg.id);
+      if (!job) continue; // generated on the main thread in the meantime
+      this._jobs.delete(msg.id);
+      this._genJobs.delete(job.k);
+      if (this.chunks.has(job.k)) continue;
+      const chunk = new Chunk(job.cx, job.cz, msg.blocks);
+      if (msg.lights) chunk.lights = msg.lights;
+      chunk.generated = true;
+      this._applyEdits(editKey(job.cx, job.cz), chunk); // replay saved player edits onto fresh terrain
+      this.chunks.set(job.k, chunk);
+    }
+    gens.length = 0;
+
+    let n = 0, drawn = 0;
+    for (; n < meshes.length && drawn < MESHES_PER_FRAME; n++) {
+      const msg = meshes[n];
+      this._recycle(msg.vol);
+      const job = this._jobs.get(msg.id);
+      if (!job) continue;
+      this._jobs.delete(msg.id);
+      const chunk = job.chunk;
+      if (chunk.meshJob !== msg.id) continue; // unloaded, or remeshed on the main thread
+      chunk.meshJob = 0;
+      if (job.rev <= chunk.meshRev) continue;
+      // If the chunk changed while the worker had it, this mesh is already a
+      // little old: draw it anyway (it is newer than what is showing) and the
+      // chunk stays dirty, so the next pass sends it round again.
+      this._setMesh(chunk, msg.mesh, job.rev);
+      drawn++;
+    }
+    meshes.splice(0, n);
+  }
+
+  // The workers are gone: forget everything that was in flight. Chunks they
+  // owed a mesh are still dirty, so the main-thread path picks them up.
+  _abandonPool() {
+    this.pool.dispose();
+    this.pool = null;
+    this._jobs.clear();
+    this._genJobs.clear();
+    for (const chunk of this.chunks.values()) chunk.meshJob = 0;
+  }
+
+  // Generate + mesh the chunks nearest (x, z) on this thread, before
+  // returning. For spawning and teleporting, where there has to be ground to
+  // stand on and something to look at on the very next frame. This is the one
+  // place the page still stalls on terrain, so with workers it builds only
+  // the immediate surroundings and lets update() stream in the rest.
+  preload(x, z) {
+    const count = this.pool ? PRELOAD_NEAR : PRELOAD_ALONE;
+    this._buildNearest(Math.floor(x / CHUNK_SIZE), Math.floor(z / CHUNK_SIZE), count);
+  }
+
+  _buildNearest(pcx, pcz, budget) {
+    let work = 0;
     for (let i = 0; i < VISIT.length; i++) {
       const cx = pcx + VISIT[i][1], cz = pcz + VISIT[i][2];
       const chunk = this.getChunk(cx, cz);
       if (!chunk || !chunk.generated || chunk.dirty) {
-        this.ensureChunk(cx, cz);
-        // Ensure neighbours exist (so boundary culling is correct) then mesh.
-        this.ensureChunk(cx + 1, cz);
-        this.ensureChunk(cx - 1, cz);
-        this.ensureChunk(cx, cz + 1);
-        this.ensureChunk(cx, cz - 1);
-        this.buildMesh(this.getChunk(cx, cz));
+        // Ensure its neighbours exist (see NEIGHBOURS), then mesh.
+        const c = this.ensureChunk(cx, cz);
+        for (let n = 0; n < NEIGHBOURS.length; n++) this.ensureChunk(cx + NEIGHBOURS[n][0], cz + NEIGHBOURS[n][1]);
+        this.buildMesh(c);
         if (++work >= budget) break;
       }
     }
+  }
+
+  // Edits beside the player: remesh on this thread, this frame.
+  _remeshEdits(pcx, pcz) {
+    let built = 0;
+    for (const chunk of this._urgent) {
+      const near = Math.max(Math.abs(chunk.cx - pcx), Math.abs(chunk.cz - pcz)) <= URGENT_RADIUS;
+      // Not showing a mesh, far away or unloaded: ordinary streaming (or
+      // nothing at all) deals with it.
+      if (!chunk.dirty || !chunk.mesh || !near || this.chunks.get(key(chunk.cx, chunk.cz)) !== chunk) {
+        this._urgent.delete(chunk);
+        continue;
+      }
+      if (built >= URGENT_PER_FRAME) break; // the rest keep their place for next frame
+      this.buildMesh(chunk);
+      this._urgent.delete(chunk);
+      built++;
+    }
+  }
+
+  // Hand the workers what the load disc still needs, nearest-first.
+  _stream(pcx, pcz) {
+    for (let i = 0; i < VISIT.length && this.pool.free > 0; i++) {
+      const cx = pcx + VISIT[i][1], cz = pcz + VISIT[i][2];
+      const chunk = this.getChunk(cx, cz) || this._requestGen(cx, cz);
+      if (!chunk || !chunk.dirty || chunk.meshJob || this._urgent.has(chunk)) continue;
+      // A mesh needs its neighbours' edge blocks (see NEIGHBOURS): get all
+      // of those generating first.
+      let ready = true;
+      for (let n = 0; n < NEIGHBOURS.length; n++) {
+        const nx = cx + NEIGHBOURS[n][0], nz = cz + NEIGHBOURS[n][1];
+        if (!this.getChunk(nx, nz) && !this._requestGen(nx, nz)) ready = false;
+      }
+      if (ready && this.pool.free > 0) this._requestMesh(chunk);
+    }
+  }
+
+  // Keep the chunks within LOAD_RADIUS of the player generated and meshed, and
+  // unload those beyond UNLOAD_RADIUS. Called each frame with the player's
+  // world position.
+  update(playerX, playerZ) {
+    const pcx = Math.floor(playerX / CHUNK_SIZE);
+    const pcz = Math.floor(playerZ / CHUNK_SIZE);
+    if (this.pool && this.pool.failed) this._abandonPool();
+
+    if (this.pool) {
+      this._drain();
+      // The ground under and around the player has to exist before physics
+      // runs. Normally the workers got there long ago and this does nothing.
+      for (let dx = -1; dx <= 1; dx++) {
+        for (let dz = -1; dz <= 1; dz++) {
+          if (!this.getChunk(pcx + dx, pcz + dz)) this.ensureChunk(pcx + dx, pcz + dz);
+        }
+      }
+    }
+    this._remeshEdits(pcx, pcz);
+    if (this.pool) this._stream(pcx, pcz);
+    else this._buildNearest(pcx, pcz, SYNC_BUDGET);
 
     // Unload far chunks: drop their meshes (free GPU memory) and move the block
     // data into the LRU cache so a revisit skips regeneration and keeps edits.
@@ -294,11 +568,9 @@ export class World {
       const dx = chunk.cx - pcx;
       const dz = chunk.cz - pcz;
       if (dx * dx + dz * dz > UNLOAD_RADIUS * UNLOAD_RADIUS) {
-        if (chunk.mesh) {
-          this.scene.remove(chunk.mesh);
-          chunk.mesh.traverse((o) => o.geometry && o.geometry.dispose());
-          chunk.mesh = null;
-        }
+        this._dropMesh(chunk);
+        chunk.meshJob = 0; // a mesh still on its way back is no longer wanted
+        this._urgent.delete(chunk);
         this.chunks.delete(k);
         if (this._last === chunk) this._last = null;
         this.cache.delete(k); // refresh recency
@@ -311,6 +583,16 @@ export class World {
       const oldest = this.cache.keys().next().value;
       this.cache.delete(oldest);
     }
+  }
+
+  // Stop the workers and free the chunk meshes (Game.dispose).
+  dispose() {
+    if (this.pool) this.pool.dispose();
+    this.pool = null;
+    this._jobs.clear();
+    this._genJobs.clear();
+    this._urgent.clear();
+    for (const chunk of this.chunks.values()) this._dropMesh(chunk);
   }
 
   // Height of the highest solid block at a column (for spawn placement).

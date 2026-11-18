@@ -1,11 +1,73 @@
-import * as THREE from 'three';
 import { CHUNK_SIZE, WORLD_HEIGHT } from '../config.js';
 import { getBlock, isOpaque, isSolid, getBlockId, liquidKind } from '../blocks/BlockRegistry.js';
-import { faceMaterialIndex, TILE_KIND, TILE_VARIATION, TILE_GLOW } from '../textures/atlas.js';
 import { Noise } from '../world/noise.js';
 
+// The chunk mesher. It runs in the chunk workers (core/chunkWorker.js) and,
+// for edits next to the player, on the page — so it must not import three.js
+// or touch the DOM. It reads a chunk from a padded snapshot of its voxels and
+// returns plain typed arrays; World turns those into BufferGeometry.
+
+// --- The snapshot ------------------------------------------------------------
+// A chunk's mesh depends on a one-block ring of its neighbours (face culling,
+// ambient occlusion, the sky-light of border columns), so a mesh job is given
+// the chunk plus that ring in one array, padded by one cell on every side —
+// PAD x (WORLD_HEIGHT + 2) x PAD — where local (lx, y, lz), with lx/lz in
+// -1..CHUNK_SIZE and y in -1..WORLD_HEIGHT, sits at volIndex(lx, y, lz). The
+// layers below and above the world stay air, so the mesher can read any
+// neighbour of any cell without a bounds check. The snapshot is a copy, so it
+// can be handed to a worker and the live chunk can keep changing.
+export const PAD = CHUNK_SIZE + 2;
+const PLANE = PAD * PAD; // cells per horizontal layer; also the index step for +y
+export const VOL_SIZE = PLANE * (WORLD_HEIGHT + 2);
+export const volIndex = (lx, y, lz) => (y + 1) * PLANE + (lz + 1) * PAD + lx + 1;
+
+// Build the snapshot for one chunk. `blocksAt(dx, dz)` returns the block array
+// of the chunk at that offset from it (0,0 = the chunk itself), or null if it
+// is not generated — its cells then read as air. Pass a previous snapshot as
+// `vol` to reuse its memory: every cell inside the world is written again,
+// and the padding layers above and below are never written at all.
+export function buildVolume(blocksAt, vol = new Uint8Array(VOL_SIZE)) {
+  const S = CHUNK_SIZE, H = WORLD_HEIGHT, E = PAD - 1;
+  const c = blocksAt(0, 0);
+  const w = blocksAt(-1, 0), e = blocksAt(1, 0), n = blocksAt(0, -1), s = blocksAt(0, 1);
+  const nw = blocksAt(-1, -1), ne = blocksAt(1, -1), sw = blocksAt(-1, 1), se = blocksAt(1, 1);
+  for (let y = 0; y < H; y++) {
+    const row = (y + 1) * PAD; // volume row index of (y, lz = -1)
+    for (let z = 0; z < S; z++) {
+      const src = (y * S + z) * S;
+      const dst = (row + z + 1) * PAD;
+      for (let x = 0; x < S; x++) vol[dst + x + 1] = c[src + x];
+      vol[dst] = w ? w[src + S - 1] : 0;
+      vol[dst + E] = e ? e[src] : 0;
+    }
+    const north = row * PAD, south = (row + E) * PAD;
+    const nSrc = (y * S + S - 1) * S, sSrc = y * S * S;
+    for (let x = 0; x < S; x++) {
+      vol[north + x + 1] = n ? n[nSrc + x] : 0;
+      vol[south + x + 1] = s ? s[sSrc + x] : 0;
+    }
+    vol[north] = nw ? nw[nSrc + S - 1] : 0;
+    vol[north + E] = ne ? ne[nSrc] : 0;
+    vol[south] = sw ? sw[sSrc + S - 1] : 0;
+    vol[south + E] = se ? se[sSrc] : 0;
+  }
+  return vol;
+}
+
+// --- Tile tables -------------------------------------------------------------
+// Which texture-array layer each block face uses, and each layer's buffer,
+// variation and glow. They are derived from the texture atlas, which needs a
+// canvas, so the page builds them (World.js) and hands them over — to this
+// module directly, and to each worker in its init message.
+let FACE_TOP = new Uint16Array(256), FACE_SIDE = FACE_TOP, FACE_BOTTOM = FACE_TOP;
+let TILE_KIND = [0], TILE_VARIATION = [0], TILE_GLOW = [0];
+export function setTileTables(t) {
+  FACE_TOP = t.top; FACE_SIDE = t.side; FACE_BOTTOM = t.bottom;
+  TILE_KIND = t.kind; TILE_VARIATION = t.variation; TILE_GLOW = t.glow;
+}
+const faceMaterialIndex = (id, face) => (face === 'top' ? FACE_TOP[id] : face === 'bottom' ? FACE_BOTTOM[id] : FACE_SIDE[id]);
+
 const SHADE = { top: 1.0, bottom: 0.5, side: 0.8 };
-const DIMS = [CHUNK_SIZE, WORLD_HEIGHT, CHUNK_SIZE];
 const WATER = getBlockId('water');
 const LAVA = getBlockId('lava'); // opaque glowing liquid; culls its own internal faces like water
 const TORCH = getBlockId('torch'); // rendered as a separate stick mesh, not in the chunk
@@ -39,6 +101,17 @@ for (let id = 0; id < 256; id++) {
   if (d && d.id === id && d.flowLevel) FLOW.set(id, { kind: d.liquidType, height: d.liquidHeight });
 }
 
+// Per-block-id lookups for the greedy pass, which visits every cell of the
+// chunk six times: flat tables instead of registry calls and Set lookups.
+const OPAQUE = new Uint8Array(256);   // solid and not transparent
+const NON_CUBE = new Uint8Array(256); // drawn by the special pass (or not at all)
+const SELF_CULL = new Uint8Array(256); // hides faces against its own kind
+for (let id = 0; id < 256; id++) {
+  OPAQUE[id] = isOpaque(id) ? 1 : 0;
+  NON_CUBE[id] = (id === TORCH || SPECIAL.has(id) || FLOW.has(id)) ? 1 : 0;
+  SELF_CULL[id] = (getBlock(id).transparent || id === LAVA) ? 1 : 0;
+}
+
 // ---------------------------------------------------------------------------
 // Skylight system — gives caves genuine darkness while leaving the surface
 // unchanged.  A cell is "fully sky-lit" (skylight = 1.0) when no opaque block
@@ -50,29 +123,42 @@ for (let id = 0; id < 256; id++) {
 // lights; near 0.5 would make caves feel merely "dim."  0.15 is the sweet spot:
 // visibly dark, torch-readable, tunable.
 //
-// The precompute is O(CHUNK_SIZE² × WORLD_HEIGHT) per chunk mesh and runs once
-// per buildChunkGeometry call — well within the existing chunk-budget structure.
+// The precompute is O(PAD² × WORLD_HEIGHT) per chunk mesh and runs once per
+// meshVolume call.
 // ---------------------------------------------------------------------------
 const DARK_FLOOR   = 0.15;  // minimum vertex brightness deep underground
 const FADE_BLOCKS  = 6;     // blocks below the roof over which light transitions
 
-// Per-column sky-roof heights for the chunk: skyHeight[lz*CHUNK_SIZE+lx] = y of
+// Per-column sky-roof heights for the snapshot: roof[volIndex % PLANE] = y of
 // the first opaque block scanned top-down (the roof that blocks the sky). The
 // WORLD_HEIGHT sentinel means the column is fully open to the sky; skylightAt
 // treats roofY >= WORLD_HEIGHT as fully lit. WORLD_HEIGHT (128) fits a Uint8Array.
-function buildSkyHeightMap(chunk) {
-  const skyHeight = new Uint8Array(CHUNK_SIZE * CHUNK_SIZE).fill(WORLD_HEIGHT);
-  for (let lx = 0; lx < CHUNK_SIZE; lx++) {
-    for (let lz = 0; lz < CHUNK_SIZE; lz++) {
+//
+// It covers the one-block ring outside the chunk too: border side faces are
+// lit by the *neighbour's* column, and clamping back into the chunk (whose
+// roof is the terrain above the face) painted dark seams on daylight cliff
+// walls at every chunk boundary.
+//
+// Also returns the height of the chunk's highest non-air block, so the passes
+// below can stop there instead of sweeping the empty sky.
+function scanColumns(vol) {
+  const roof = new Uint8Array(PAD * PAD).fill(WORLD_HEIGHT);
+  let top = -1;
+  for (let lz = -1; lz <= CHUNK_SIZE; lz++) {
+    for (let lx = -1; lx <= CHUNK_SIZE; lx++) {
+      const inside = lx >= 0 && lx < CHUNK_SIZE && lz >= 0 && lz < CHUNK_SIZE;
+      const col = (lz + 1) * PAD + lx + 1;
+      let first = -1;
       for (let y = WORLD_HEIGHT - 1; y >= 0; y--) {
-        if (isOpaque(chunk.get(lx, y, lz))) {
-          skyHeight[lz * CHUNK_SIZE + lx] = y;
-          break;
-        }
+        const id = vol[(y + 1) * PLANE + col];
+        if (id === 0) continue;
+        if (first < 0) first = y;
+        if (OPAQUE[id]) { roof[col] = y; break; }
       }
+      if (inside && first > top) top = first;
     }
   }
-  return skyHeight;
+  return { roof, top };
 }
 
 // Skylight value for a single voxel cell given its column's sky roof.
@@ -107,6 +193,9 @@ const ID_BITS = 9, ID_MASK = (1 << ID_BITS) - 1;
 const AO_UNIFORM = 255;
 // Corner sample offsets in (u, v): a00, a10, a11, a01 — matches vertex order.
 const AO_CORNERS = [[-1, -1], [1, -1], [1, 1], [-1, 1]];
+// Snapshot index steps per axis (x, y, z), and the index of local (0, 0, 0).
+const STRIDE = [1, PLANE, PAD];
+const ORIGIN = PLANE + PAD + 1;
 
 // A geometry under construction. Terrain buffers also collect the per-vertex
 // `tile` attribute — (texture-array layer, variation, glow) — that the terrain
@@ -128,9 +217,23 @@ const clamp01 = (v) => Math.max(0, Math.min(1, v));
 
 // Climate tint for living surfaces: lush (wet) areas read deep green, hot dry
 // areas turn yellow-brown, blended per-vertex so the gradient is seamless.
+// It is four noise lookups, and the grass and leaf quads of a chunk share
+// most of their corners, so each corner column is worked out once per mesh.
+const TINT_SPAN = CHUNK_SIZE + 1; // vertex columns across a chunk
+const tintCache = new Array(TINT_SPAN * TINT_SPAN);
+let tintBaseX = 0, tintBaseZ = 0;
+function resetTints(baseX, baseZ) {
+  tintCache.fill(null);
+  tintBaseX = baseX; tintBaseZ = baseZ;
+}
 function climateTint(wx, wz) {
-  const dry = clamp01(0.5 + (Noise.temperature(wx, wz) - Noise.humidity(wx, wz)) * 0.55);
-  return [0.88 + 0.24 * dry, 1.04 - 0.07 * dry, 0.95 - 0.17 * dry];
+  const k = (wz - tintBaseZ) * TINT_SPAN + (wx - tintBaseX);
+  let t = tintCache[k];
+  if (!t) {
+    const dry = clamp01(0.5 + (Noise.temperature(wx, wz) - Noise.humidity(wx, wz)) * 0.55);
+    t = tintCache[k] = [0.88 + 0.24 * dry, 1.04 - 0.07 * dry, 0.95 - 0.17 * dry];
+  }
+  return t;
 }
 
 // Push one quad (4 verts) into a buffer. uvLocal tiles 0..w / 0..h so the tile
@@ -138,37 +241,32 @@ function climateTint(wx, wz) {
 //
 // q.skylight: per-quad skylight factor (0..1).  For greedy-merged quads spanning
 // a uniform AO + uniform skylight bucket the factor is the same for all four
-// corners; this keeps the merge-key valid (see buildChunkGeometry).  The slight
+// corners; this keeps the merge-key valid (see meshVolume).  The slight
 // loss of per-vertex gradient within a merged quad is imperceptible at the coarse
 // bucket granularity we use (4-bucket: 0.0/0.33/0.67/1.0).
+// Corner k of a quad sits at (i + QU[k]·w, j + QV[k]·h) on its face plane.
+const QU = [0, 1, 1, 0], QV = [0, 0, 1, 1];
+const corner = [0, 0, 0];
 function pushQuad(buf, q) {
   const shade = SHADE[q.faceType];
   const sl = (q.skylight !== undefined) ? q.skylight : 1.0; // skylight factor
-  const corner = (uu, vv) => {
-    const a = [0, 0, 0];
-    a[q.axis] = q.faceCoord; a[q.u] = uu; a[q.v] = vv;
-    return [q.baseX + a[0], a[1], q.baseZ + a[2]];
-  };
-  const verts = [
-    [corner(q.i, q.j), 0, 0],
-    [corner(q.i + q.w, q.j), q.w, 0],
-    [corner(q.i + q.w, q.j + q.h), q.w, q.h],
-    [corner(q.i, q.j + q.h), 0, q.h],
-  ];
   const tinted = (q.id === GRASS && q.faceType === 'top') || q.id === LEAVES;
   const vi = buf.positions.length / 3;
+  corner[q.axis] = q.faceCoord;
   for (let k = 0; k < 4; k++) {
-    const [c, u, v] = verts[k];
-    buf.positions.push(c[0], c[1], c[2]);
+    const du = QU[k] * q.w, dv = QV[k] * q.h;
+    corner[q.u] = q.i + du; corner[q.v] = q.j + dv;
+    const x = q.baseX + corner[0], z = q.baseZ + corner[2];
+    buf.positions.push(x, corner[1], z);
     buf.normals.push(q.normal[0], q.normal[1], q.normal[2]);
-    buf.uvs.push(u, v);
+    buf.uvs.push(du, dv);
     // Corners tucked against neighbouring blocks darken (soft contact shadow).
     // Skylight (sl) multiplied in so underground faces are genuinely dark while
     // surface faces (sl=1.0) are unchanged from the previous behaviour.
     const aoF = 0.6 + 0.4 * (q.ao[k] / 3);
     const bright = shade * aoF * sl;
     if (tinted) {
-      const t = climateTint(c[0], c[2]);
+      const t = climateTint(x, z);
       buf.colors.push(bright * t[0], bright * t[1], bright * t[2]);
     } else {
       buf.colors.push(bright, bright, bright);
@@ -187,9 +285,10 @@ function pushQuad(buf, q) {
   }
 }
 
-// Turn one or more buffers into a BufferGeometry, concatenated in the order
-// given. Sized up front and filled with typed-array copies — no per-element
-// pushes or argument spreading, whatever the chunk's size.
+// Turn one or more buffers into one geometry's worth of typed arrays,
+// concatenated in the order given. Sized up front and filled with typed-array
+// copies — no per-element pushes or argument spreading, whatever the chunk's
+// size. Returns null when there is nothing to draw.
 function assemble(...bufs) {
   let verts = 0, idx = 0, tiled = false;
   for (const b of bufs) {
@@ -216,15 +315,35 @@ function assemble(...bufs) {
     v += b.positions.length / 3;
     i += src.length;
   }
-  const g = new THREE.BufferGeometry();
-  g.setAttribute('position', new THREE.BufferAttribute(position, 3));
-  g.setAttribute('normal', new THREE.BufferAttribute(normal, 3));
-  g.setAttribute('uv', new THREE.BufferAttribute(uv, 2));
-  g.setAttribute('color', new THREE.BufferAttribute(color, 3));
-  if (tile) g.setAttribute('tile', new THREE.BufferAttribute(tile, 3));
-  g.setIndex(new THREE.BufferAttribute(index, 1));
-  g.computeBoundingSphere();
-  return g;
+  // Bounding sphere, the way three's computeBoundingSphere does it (centre of
+  // the bounding box, radius to the farthest vertex) — worked out here so the
+  // page does not have to walk the vertices again.
+  let x0 = Infinity, y0 = Infinity, z0 = Infinity, x1 = -Infinity, y1 = -Infinity, z1 = -Infinity;
+  for (let p = 0; p < position.length; p += 3) {
+    const x = position[p], y = position[p + 1], z = position[p + 2];
+    if (x < x0) x0 = x; if (x > x1) x1 = x;
+    if (y < y0) y0 = y; if (y > y1) y1 = y;
+    if (z < z0) z0 = z; if (z > z1) z1 = z;
+  }
+  const sx = (x0 + x1) / 2, sy = (y0 + y1) / 2, sz = (z0 + z1) / 2;
+  let r2 = 0;
+  for (let p = 0; p < position.length; p += 3) {
+    const dx = position[p] - sx, dy = position[p + 1] - sy, dz = position[p + 2] - sz;
+    const d = dx * dx + dy * dy + dz * dz;
+    if (d > r2) r2 = d;
+  }
+  return { position, normal, uv, color, tile, index, sphere: [sx, sy, sz, Math.sqrt(r2)], leafCount: 0 };
+}
+
+// The ArrayBuffers of a meshVolume result, for postMessage's transfer list.
+export function meshTransferables(mesh) {
+  const out = [];
+  for (const g of [mesh.solid, mesh.cutout, mesh.water]) {
+    if (!g) continue;
+    out.push(g.position.buffer, g.normal.buffer, g.uv.buffer, g.color.buffer, g.index.buffer);
+    if (g.tile) out.push(g.tile.buffer);
+  }
+  return out;
 }
 
 const decodeAO = (bits) => bits === AO_UNIFORM
@@ -257,10 +376,12 @@ const SL_VALUES = [
   1.0,                                     // bucket 3: full surface light
 ];
 
-// Greedy mesh. Returns { solid, cutout, water } geometries (any may be null):
-// every solid face in one, every cut-out face (leaves first) in another, and
-// the translucent water sheet in the third.
-export function buildChunkGeometry(chunk, worldGet) {
+// Greedy mesh of one chunk from its snapshot (see buildVolume). Returns
+// { solid, cutout, water } — typed arrays for up to three geometries, any of
+// which may be null: every solid face in one, every cut-out face (leaves
+// first, `leafCount` indices of them) in another, and the translucent water
+// sheet in the third.
+export function meshVolume(vol, cx, cz) {
   const terrain = [emptyBuf(), emptyBuf(), emptyBuf()]; // by TILE_KIND: solid, leaves, other cut-outs
   const water = emptyBuf();
   // The buffer a tile's faces go in, primed so the next faces pushed into it
@@ -270,96 +391,78 @@ export function buildChunkGeometry(chunk, worldGet) {
     buf.tile = tile;
     return buf;
   };
-  const baseX = chunk.cx * CHUNK_SIZE;
-  const baseZ = chunk.cz * CHUNK_SIZE;
+  const baseX = cx * CHUNK_SIZE;
+  const baseZ = cz * CHUNK_SIZE;
 
-  const at = (lx, ly, lz) =>
-    (lx >= 0 && lx < CHUNK_SIZE && lz >= 0 && lz < CHUNK_SIZE && ly >= 0 && ly < WORLD_HEIGHT)
-      ? chunk.get(lx, ly, lz)
-      : worldGet(baseX + lx, ly, baseZ + lz);
-  const occ = (x, y, z) => (isOpaque(at(x, y, z)) ? 1 : 0);
+  resetTints(baseX, baseZ);
 
-  // Precompute per-column sky-roof heights once for the whole chunk.
-  // skyHeight[lz * CHUNK_SIZE + lx] = y of the first solid block from top.
-  const skyHeightMap = buildSkyHeightMap(chunk);
+  // Any cell of the snapshot: lx/lz in -1..CHUNK_SIZE, ly in -1..WORLD_HEIGHT.
+  const at = (lx, ly, lz) => vol[(ly + 1) * PLANE + (lz + 1) * PAD + lx + 1];
 
-  // Sky-roof height for any column, including the one-block ring outside this
-  // chunk: border faces sample the *neighbour's* column, and clamping back into
-  // the local chunk (whose roof is the terrain surface above the face) painted
-  // dark seams on daylight cliff walls at every chunk boundary. Neighbour
-  // columns are scanned on demand via worldGet and cached — at most the 4×16
-  // border ring per mesh build (World.update generates neighbours first, so the
-  // scan always sees real terrain).
-  const borderRoof = new Map();
-  const roofAt = (lx, lz) => {
-    if (lx >= 0 && lx < CHUNK_SIZE && lz >= 0 && lz < CHUNK_SIZE) {
-      return skyHeightMap[lz * CHUNK_SIZE + lx];
-    }
-    const k = (lx + 1) * (CHUNK_SIZE + 2) + (lz + 1); // lx/lz ∈ -1..CHUNK_SIZE
-    let r = borderRoof.get(k);
-    if (r === undefined) {
-      r = WORLD_HEIGHT; // open sky unless an opaque roof is found
-      const wx = baseX + lx, wz = baseZ + lz;
-      for (let y = WORLD_HEIGHT - 1; y >= 0; y--) {
-        if (isOpaque(worldGet(wx, y, wz))) { r = y; break; }
-      }
-      borderRoof.set(k, r);
-    }
-    return r;
-  };
+  // Sky-roof height of every column (ring included), and how high the chunk
+  // goes: nothing above `top` can have a face, so the passes stop there.
+  const { roof, top } = scanColumns(vol);
+  if (top < 0) return { solid: null, cutout: null, water: null };
+  const DIMS = [CHUNK_SIZE, top + 1, CHUNK_SIZE];
+
+  // One mask for every layer. The merge below zeroes each cell it consumes,
+  // so the mask is clean again by the time the next layer fills it.
+  const mask = new Int32Array(CHUNK_SIZE * Math.max(CHUNK_SIZE, top + 1));
 
   for (let axis = 0; axis < 3; axis++) {
     const u = (axis + 1) % 3, v = (axis + 2) % 3;
     const du = DIMS[u], dv = DIMS[v];
+    // The sweep walks the snapshot by index: one step along an axis is a
+    // fixed stride, so a cell's neighbours are plain offsets from it.
+    const sa = STRIDE[axis], su = STRIDE[u], sv = STRIDE[v];
 
     for (let dir = -1; dir <= 1; dir += 2) {
       const faceType = axis === 1 ? (dir > 0 ? 'top' : 'bottom') : 'side';
       const normal = [0, 0, 0]; normal[axis] = dir;
+      const step = sa * dir; // from a cell to the one its face looks at
 
       for (let layer = 0; layer < DIMS[axis]; layer++) {
-        const mask = new Array(du * dv).fill(0);
-        const cell = [0, 0, 0];
+        let faces = 0;
+        const layerAt = ORIGIN + layer * sa;
         for (let j = 0; j < dv; j++) {
-          for (let i = 0; i < du; i++) {
-            cell[axis] = layer; cell[u] = i; cell[v] = j;
-            const id = at(cell[0], cell[1], cell[2]);
-            if (id === 0 || id === TORCH || SPECIAL.has(id) || FLOW.has(id)) continue; // non-cubes drawn separately
-            const nb = [cell[0], cell[1], cell[2]]; nb[axis] += dir;
-            const neighbor = at(nb[0], nb[1], nb[2]);
-            const block = getBlock(id);
-            if (isOpaque(neighbor)) continue;
+          let idx = layerAt + j * sv;
+          for (let i = 0; i < du; i++, idx += su) {
+            const id = vol[idx];
+            if (id === 0 || NON_CUBE[id]) continue; // non-cubes drawn separately
+            const nIdx = idx + step;
+            const neighbor = vol[nIdx];
+            if (OPAQUE[neighbor]) continue;
             // Skip faces between two cells of the same non-cube liquid (lava is
             // opaque but still merges its surface like water).
-            if ((block.transparent || id === LAVA) && neighbor === id) continue;
+            if (SELF_CULL[id] && neighbor === id) continue;
 
-            // 4-corner AO for this face (liquids skip it to merge maximally).
+            // 4-corner AO for this face (liquids skip it to merge maximally):
+            // each corner looks at the two cells beside it in the face's
+            // plane and the one diagonal.
             let aoBits = AO_UNIFORM;
             if (id !== WATER && id !== LAVA) {
               aoBits = 0;
               for (let ci = 0; ci < 4; ci++) {
-                const [su, sv] = AO_CORNERS[ci];
-                const p1 = [nb[0], nb[1], nb[2]]; p1[u] += su;
-                const p2 = [nb[0], nb[1], nb[2]]; p2[v] += sv;
-                const pc = [nb[0], nb[1], nb[2]]; pc[u] += su; pc[v] += sv;
-                const s1 = occ(p1[0], p1[1], p1[2]);
-                const s2 = occ(p2[0], p2[1], p2[2]);
-                const ao = s1 && s2 ? 0 : 3 - (s1 + s2 + occ(pc[0], pc[1], pc[2]));
+                const ou = AO_CORNERS[ci][0] * su, ov = AO_CORNERS[ci][1] * sv;
+                const s1 = OPAQUE[vol[nIdx + ou]], s2 = OPAQUE[vol[nIdx + ov]];
+                const ao = s1 && s2 ? 0 : 3 - (s1 + s2 + OPAQUE[vol[nIdx + ou + ov]]);
                 aoBits |= ao << (ci * 2);
               }
             }
 
-            // Skylight bucket: side faces (axis 0/2) sample the neighbour air
-            // cell's column — the face surface lives at nb, so it's lit by
-            // whatever sky reaches that column, even across a chunk border.
-            // Top/bottom faces use the cell's own column.
-            const faceLx = (axis === 0) ? nb[0] : cell[0];
-            const faceLz = (axis === 2) ? nb[2] : cell[2];
-            const sl = skylightAt(cell[1], roofAt(faceLx, faceLz));
-            const slB = slBucket(sl);
+            // Skylight bucket, from the sky-roof of the column the face is
+            // in: for a side face that is the neighbour air cell's column —
+            // it is lit by whatever sky reaches *that* column, even across a
+            // chunk border — and for top/bottom faces it is the cell's own
+            // (the same column as the neighbour's, one layer up or down).
+            const y = axis === 1 ? layer : (u === 1 ? i : j);
+            const sl = skylightAt(y, roof[nIdx % PLANE]);
 
-            mask[j * du + i] = id | (aoBits << ID_BITS) | (slB << SL_SHIFT);
+            mask[j * du + i] = id | (aoBits << ID_BITS) | (slBucket(sl) << SL_SHIFT);
+            faces++;
           }
         }
+        if (faces === 0) continue;
 
         const faceCoord = layer + (dir > 0 ? 1 : 0);
         for (let j = 0; j < dv; j++) {
@@ -398,16 +501,17 @@ export function buildChunkGeometry(chunk, worldGet) {
   // beds a low mattress slab.
   for (let lx = 0; lx < CHUNK_SIZE; lx++) {
     for (let lz = 0; lz < CHUNK_SIZE; lz++) {
-      for (let y = 1; y < WORLD_HEIGHT - 1; y++) {
-        const id = chunk.get(lx, y, lz);
+      for (let y = 1; y <= top && y < WORLD_HEIGHT - 1; y++) {
+        const id = at(lx, y, lz);
+        if (!NON_CUBE[id]) continue;
         const flow = FLOW.get(id);
-        if (!SPECIAL.has(id) && !flow) continue;
+        if (!SPECIAL.has(id) && !flow) continue; // a torch: drawn as a stick mesh elsewhere
         const wx = baseX + lx, wz = baseZ + lz;
 
         // Per-cell skylight for the special pass (plants, boxes).  Same
         // column lookup as the greedy pass so special blocks underground darken
         // consistently with the surrounding cube faces.
-        const roofY = skyHeightMap[lz * CHUNK_SIZE + lx];
+        const roofY = roof[(lz + 1) * PAD + lx + 1];
         const cellSl = skylightAt(y, roofY);
 
         if (flow) {
@@ -434,7 +538,7 @@ export function buildChunkGeometry(chunk, worldGet) {
           // along x (panel spans x); otherwise it spans z. The open panel
           // swings to the cell edge so the passage is clear.
           const wallX = isSolid(at(lx - 1, y, lz)) || isSolid(at(lx + 1, y, lz));
-          const isTop = chunk.get(lx, y - 1, lz) === DOOR || chunk.get(lx, y - 1, lz) === DOOR_OPEN;
+          const isTop = at(lx, y - 1, lz) === DOOR || at(lx, y - 1, lz) === DOOR_OPEN;
           const mat = faceMaterialIndex(DOOR, isTop ? 'top' : 'side');
           let b; // panel bounds [x0,y0,z0,x1,y1,z1] within the cell
           if (id === DOOR) {
@@ -507,7 +611,7 @@ export function buildChunkGeometry(chunk, worldGet) {
   const cutout = assemble(terrain[1], terrain[2]);
   // Leaves sit first in the cut-out geometry, so World can draw just them
   // (as the canopy's shadow caster) with a draw range.
-  if (cutout) cutout.userData.leafCount = terrain[1].indices.length;
+  if (cutout) cutout.leafCount = terrain[1].indices.length;
   return { solid: assemble(terrain[0]), cutout, water: assemble(water) };
 }
 

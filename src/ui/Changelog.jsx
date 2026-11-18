@@ -7,6 +7,11 @@ import React from 'react';
 const CHANGELOG = [
   {
     date: 'November 18, 2026',
+    title: 'Smooth exploring',
+    body: 'Walking, sprinting or flying into new territory used to cause small stutters, because the game had to stop and build each new piece of the world before it could draw the next frame. That work now happens in the background, on your other processor cores, while the game keeps running — so the land streams in ahead of you without the hitches, and worlds open in a fraction of the time. Breaking and placing blocks responds faster too. Nothing looks different; exploring just feels smoother.',
+  },
+  {
+    date: 'November 18, 2026',
     title: 'Faster, smoother worlds',
     body: 'After all the new shadows, skies and creatures, the engine got a tune-up so it all runs lighter than before. The world is now drawn in about a seventh as many steps, which makes each frame several times cheaper to render — expect a smoother game, especially in forests and on laptops. Moving, mining and fighting do less work behind the scenes, the on-screen readouts no longer redraw themselves sixty times a second, and a rare bug that could drop animals and items through thin floors after a stutter is fixed. Nothing looks different; it just runs better.',
   },

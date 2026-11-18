@@ -81,6 +81,9 @@ export function carveCaves(chunk) {
   const TF = 0.017, TY = 0.028; // tunnel field frequencies
   // Most chunks can't contain a landmark cavern — decide once, not per voxel.
   const landmark = landmarkPossible(baseX, baseZ);
+  // Generator version 2 only (Terrain2 sets it; version 1 never does, and is
+  // unchanged): where carving would open onto a lake or the sea.
+  const shore = chunk.shore || null;
 
   for (let x = 0; x < CHUNK_SIZE; x++) {
     for (let z = 0; z < CHUNK_SIZE; z++) {
@@ -114,8 +117,10 @@ export function carveCaves(chunk) {
       // Tunnels can reach the surface on land (cave entrances), but stay a few
       // blocks under the seabed so oceans don't drain.
       const carveTop = underSea ? surf - 4 : surf;
+      const shoreY = shore ? shore[z * CHUNK_SIZE + x] : WORLD_HEIGHT;
 
       for (let y = 3; y <= Math.min(Math.max(carveTop, riftTop), WORLD_HEIGHT - 2); y++) {
+        if (y >= shoreY && y <= SEA_LEVEL) continue; // open water next door at this height
         // Rifts cut everything in their band (except water, just in case).
         if (riftTop >= 0 && y >= riftBot && y <= riftTop) {
           if (chunk.get(x, y, z) !== WATER) chunk.set(x, y, z, 0);

@@ -5,7 +5,7 @@ import { loadGraphics } from './Game.js';
 import { SunRig } from '../systems/SunRig.js';
 import { tickWater } from '../textures/water.js';
 import { DayNight } from '../systems/DayNight.js';
-import { reseed, Noise } from '../world/noise.js';
+import { reseed, newSeed, Noise } from '../world/noise.js';
 import { setGenMode } from '../world/generators/TerrainGen.js';
 import { columnHeight } from '../world/generators/Height.js';
 import { getBiome, BiomeParams } from '../world/biomes/BiomeMap.js';
@@ -73,7 +73,7 @@ let tour = null;
 // A new world and the best-looking of a few dozen random places in it to
 // start from (a random spot is too often open sea).
 function newTour() {
-  const seed = Math.floor(Math.random() * 1e9);
+  const seed = newSeed(); // the current generator: the flyover shows what a new world looks like
   reseed(seed);
   let best = null, bestScore = -Infinity;
   for (let i = 0; i < 48; i++) {

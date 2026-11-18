@@ -1,8 +1,9 @@
 import { CHUNK_SIZE, WORLD_HEIGHT, SEA_LEVEL } from '../../config.js';
-import { Noise } from '../noise.js';
+import { Noise, getGen } from '../noise.js';
 import { getBiome, BiomeParams } from '../biomes/BiomeMap.js';
 import { getBlockId } from '../../blocks/BlockRegistry.js';
 import { columnHeight } from './Height.js';
+import { generateTerrain2 } from './Terrain2.js';
 import { carveCaves } from './CaveGen.js';
 import { generateOres } from './OreGen.js';
 import { generateTrees } from '../structures/Tree.js';
@@ -41,6 +42,22 @@ export function getGenMode() { return GEN_MODE; }
 
 export function generateChunk(chunk) {
   if (GEN_MODE === 'arena') { generateArenaChunk(chunk); return; }
+  // The ground, by the world's generator version (see noise.js)...
+  if (getGen() >= 2) generateTerrain2(chunk);
+  else generateTerrain1(chunk);
+  // ...then what is cut into it and what grows on it.
+  carveCaves(chunk);
+  chunk.shore = undefined; // a note from Terrain2 to the cave pass, not chunk data
+  generateOres(chunk);
+  generateVillages(chunk); // before trees so trees skip village ground
+  generateTrees(chunk);
+  generateDecorations(chunk);
+  chunk.generated = true;
+  chunk.dirty = true;
+}
+
+// Generator version 1. Frozen: worlds made with it depend on every block.
+function generateTerrain1(chunk) {
   const baseX = chunk.cx * CHUNK_SIZE;
   const baseZ = chunk.cz * CHUNK_SIZE;
 
@@ -87,14 +104,6 @@ export function generateChunk(chunk) {
       }
     }
   }
-
-  carveCaves(chunk);
-  generateOres(chunk);
-  generateVillages(chunk); // before trees so trees skip village ground
-  generateTrees(chunk);
-  generateDecorations(chunk);
-  chunk.generated = true;
-  chunk.dirty = true;
 }
 
 // Flat arena base: bedrock floor, stone fill, the map's surface block at

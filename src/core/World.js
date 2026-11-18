@@ -4,7 +4,8 @@ import { Chunk } from './Chunk.js';
 import { ChunkPool } from './ChunkPool.js';
 import { generateChunk, getGenMode } from '../world/generators/TerrainGen.js';
 import { activeMap } from '../world/arenas/index.js';
-import { getSeed } from '../world/noise.js';
+import { getSeed, getGen } from '../world/noise.js';
+import { columnHeight } from '../world/generators/Height.js';
 import { buildVolume, meshVolume, setTileTables } from './ChunkMesher.js';
 import {
   BLOCK_MATERIALS, TERRAIN_SOLID, TERRAIN_CUTOUT, LEAVES_MATERIAL_INDEX,
@@ -614,6 +615,9 @@ export class World {
   // Find a dry land column (surface above sea level) near the origin so the
   // player doesn't spawn underwater. Spirals outward until one is found.
   findSpawn() {
+    if (getGen() >= 2) return this._findSpawn2();
+    // Generator version 1: unchanged, so a version-1 world's spawn (where
+    // you come back to after dying) stays where it always was.
     for (let r = 0; r <= 96; r += 3) {
       for (let dx = -r; dx <= r; dx += 3) {
         for (let dz = -r; dz <= r; dz += 3) {
@@ -623,5 +627,29 @@ export class World {
       }
     }
     return { x: 0, z: 0 };
+  }
+
+  // Generator version 2. Continents are bigger, so the origin can be far out
+  // at sea — but the heightfield is cheap to ask (no chunks are generated), so
+  // the search goes out two kilometres, and is choosier: low, gentle ground,
+  // not a beach and not a ledge.
+  _findSpawn2() {
+    const gentle = (x, z) => {
+      const h = columnHeight(x, z);
+      if (h < SEA_LEVEL + 3 || h > SEA_LEVEL + 26) return false;
+      return Math.abs(columnHeight(x + 5, z) - h) <= 2 && Math.abs(columnHeight(x - 5, z) - h) <= 2
+        && Math.abs(columnHeight(x, z + 5) - h) <= 2 && Math.abs(columnHeight(x, z - 5) - h) <= 2;
+    };
+    let dry = null; // first land of any kind, in case nothing gentle turns up
+    for (let r = 0; r <= 2048; r += 12) {
+      const n = Math.max(1, Math.round((Math.PI * 2 * r) / 12));
+      for (let i = 0; i < n; i++) {
+        const a = (i / n) * Math.PI * 2;
+        const x = Math.round(Math.cos(a) * r), z = Math.round(Math.sin(a) * r);
+        if (gentle(x, z)) return { x, z };
+        if (!dry && columnHeight(x, z) >= SEA_LEVEL + 1) dry = { x, z };
+      }
+    }
+    return dry || { x: 0, z: 0 };
   }
 }

@@ -10,6 +10,7 @@ import { ChestStorage } from '../player/ChestStorage.js';
 import { Vitals } from '../player/Vitals.js';
 import { DayNight } from '../systems/DayNight.js';
 import { SunRig } from '../systems/SunRig.js';
+import { tickWater } from '../textures/water.js';
 import { MobManager } from '../systems/MobManager.js';
 import { TorchLights } from '../systems/TorchLights.js';
 import { Projectiles } from '../systems/Projectiles.js';
@@ -36,7 +37,7 @@ import { TAUNTS, tauntById } from '../systems/taunts.js';
 import { getBlockId, isSolid, isOpaque, liquidKind } from '../blocks/BlockRegistry.js';
 import { getItem } from '../items/ItemRegistry.js';
 import { MOBS } from '../entities/mobTypes.js';
-import { SEA_LEVEL, WORLD_HEIGHT } from '../config.js';
+import { SEA_LEVEL, WORLD_HEIGHT, WATER_DROP } from '../config.js';
 
 // Pet toast label: 'black_cat' -> 'Black Cat'.
 const petLabel = (type) => type.split('_').map((w) => w[0].toUpperCase() + w.slice(1)).join(' ');
@@ -325,7 +326,6 @@ export class Game {
     // Jukebox contents: "x,y,z" -> disc item name. Local + saved, like chests.
     this.jukeboxes = new Map(Object.entries(this._save?.jukeboxes || {}));
     this._discBoxKey = null; // which jukebox the playing disc sits in
-    this._waterT = 0; // water texture scroll clock
 
     // Every block edit: spray break particles (local AND remote breaks), and
     // broadcast local edits in multiplayer (remote applies suppress the echo).
@@ -1592,7 +1592,11 @@ export class Game {
     const c = this.camera.position;
     const bx = Math.floor(c.x), by = Math.floor(c.y), bz = Math.floor(c.z);
     const e = this._env;
-    const wet = liquidKind(this.world.getBlock(bx, by, bz)) === 'water' ? 1 : 0;
+    // In water — but the surface sits WATER_DROP below the top of its block,
+    // so the top sliver of a surface block is still air.
+    const inWater = liquidKind(this.world.getBlock(bx, by, bz)) === 'water';
+    const wet = inWater && (c.y - by < 1 - WATER_DROP
+      || liquidKind(this.world.getBlock(bx, by + 1, bz)) === 'water') ? 1 : 0;
     e.underwater += (wet - e.underwater) * Math.min(1, dt * 10);
     if (Math.abs(wet - e.underwater) < 0.002) e.underwater = wet;
 
@@ -1799,10 +1803,8 @@ export class Game {
       this._musicCtx = cave ? 'cave' : this.dayNight.isNight ? 'night' : 'day';
     }
     this.music.update(dt, { context: this._musicCtx, playerPos: this.player.pos });
-    // Drift the shared water texture for a gentle current.
-    this._waterT += dt;
-    const waterMap = this.world.waterMaterial.map;
-    waterMap.offset.set((this._waterT * 0.02) % 1, (this._waterT * 0.012) % 1);
+    // Move the water, and match it to the sky it mirrors.
+    tickWater(dt, this.dayNight);
     this.world.update(this.player.pos.x, this.player.pos.z);
     this._animateHeld(dt);
     this.renderer.render(this.scene, this.camera);

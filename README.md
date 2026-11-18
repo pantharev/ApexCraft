@@ -111,6 +111,7 @@ See [LICENSE](LICENSE) and [CLA.md](CLA.md) for full details.
 
 ### Graphics
 - **A living title screen**: the menus sit in front of the game itself — a slow flight over freshly generated terrain, with the sun crossing the sky and a short starry night. A different place every visit, and no video file behind it.
+- **Living water**: a surface that swells and drifts in pixel art, mirrors the sky toward the horizon, glitters under the sun and moon, foams along the shore and runs pale and clear where it is shallow. The ground under it darkens with depth and has light rippling across it, waterfalls fall in streaks, and from below the surface is a bright window ringed by a dark mirror.
 - **Real-time sun and moon shadows**: terrain, trees (dappled through the leaves), mobs, players, and dropped items all cast and catch them. A **Graphics: High / Low** switch in the pause menu turns shadows off on slower machines (Low is the default on touch devices).
 - **Filmic lighting and atmosphere**: tone-mapped rendering, a gradient sky with drifting voxel clouds, warm low-sun light and cool moonlight, distance haze that dissolves the world's edge into the horizon, dense blue murk under water, and eyes that adjust to the dark underground.
 - **Procedural pixel-art textures** drawn on canvas at load (zero asset files): bladed grass with ragged turf edges, pebbly dirt, voronoi cobblestone/gravel, growth-ring logs, nugget ores with bright facets, wind-rippled sand, grainy planks — shaded with warm highlights and cool shadows.
@@ -119,7 +120,7 @@ See [LICENSE](LICENSE) and [CLA.md](CLA.md) for full details.
 - **A body of your own**: in first person you cast your own shadow, arms and held item included; press **C** for a third-person camera that orbits your character.
 - **Per-vertex ambient occlusion** baked into the greedy mesher — soft contact shadows in every corner and crevice (with the classic diagonal-flip fix for smooth interpolation).
 - **Climate-tinted foliage**: grass tops and leaves blend per-vertex from lush deep green (wet) to dry yellow-brown (hot+dry) across the map.
-- **Block-break particles** colored from the broken block's texture, a gently **drifting water surface**, and animated star/dusk skies.
+- **Block-break particles** colored from the broken block's texture, and animated star/dusk skies.
 
 ### Performance
 - **Greedy meshing** merges coplanar block faces into large quads (AO patterns are part of the merge key, so shading stays exact).

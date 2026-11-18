@@ -9,7 +9,7 @@
 // must run with no DOM and no three.js. Break that and this fails to load.
 // Prints `ok -` / `FAIL -` lines like the other test scripts.
 
-import { CHUNK_SIZE, WORLD_HEIGHT } from '../config.js';
+import { CHUNK_SIZE, WORLD_HEIGHT, WATER_DROP } from '../config.js';
 import { Chunk } from './Chunk.js';
 import { reseed } from '../world/noise.js';
 import { generateChunk, setGenMode } from '../world/generators/TerrainGen.js';
@@ -136,6 +136,8 @@ for (const seed of [1337, 987654321]) {
   if (mesh.water) {
     checkGeometry(mesh.water, 3, -2, `${tag} water`);
     ok(mesh.water.tile === null, `${tag}: the water sheet carries no tile attribute`);
+    ok(mesh.water.depth && mesh.water.depth.length === mesh.water.position.length / 3
+      && mesh.water.depth.every((d) => d >= 0 && d <= 1), `${tag}: every water vertex has a depth between 0 and 1`);
   }
   const again = meshVolume(buildVolume(blocksAt(chunks)), 3, -2);
   ok(sameBytes(again.solid.position, mesh.solid.position) && sameBytes(again.solid.color, mesh.solid.color) && sameBytes(again.solid.index, mesh.solid.index),
@@ -164,6 +166,44 @@ for (const seed of [1337, 987654321]) {
   vol[volIndex(4, 10, 4)] = WATER;
   const m = meshVolume(vol, 0, 0);
   ok(m.water && m.water.position.length / 3 === 24 && !m.solid, 'a lone water block is six water quads and no terrain');
+  let top = -Infinity, bottom = Infinity;
+  for (let p = 1; p < m.water.position.length; p += 3) { top = Math.max(top, m.water.position[p]); bottom = Math.min(bottom, m.water.position[p]); }
+  ok(Math.abs(top - (11 - WATER_DROP)) < 1e-6 && bottom === 10, 'its surface sits WATER_DROP below the top of the block; its base does not move');
+}
+
+// A pool: a 6x6 basin of stone, three blocks of water deep.
+{
+  const STONE = getBlockId('stone');
+  const vol = new Uint8Array(VOL_SIZE);
+  for (let x = 2; x <= 9; x++) for (let z = 2; z <= 9; z++) for (let y = 5; y <= 9; y++) {
+    const inside = x >= 3 && x <= 8 && z >= 3 && z <= 8 && y >= 7;
+    vol[volIndex(x, y, z)] = inside ? WATER : STONE;
+  }
+  const m = meshVolume(vol, 0, 0);
+  const w = m.water, g = m.solid;
+  // The surface: rim vertices are shore, the middle is deep.
+  let rimOk = true, midOk = true, surface = 0;
+  for (let v = 0; v < w.position.length / 3; v++) {
+    if (w.normal[v * 3 + 1] !== 1) continue;
+    surface++;
+    const x = w.position[v * 3], y = w.position[v * 3 + 1], z = w.position[v * 3 + 2];
+    if (Math.abs(y - (10 - WATER_DROP)) > 1e-6) rimOk = false;
+    const onRim = x === 3 || x === 9 || z === 3 || z === 9;
+    if (onRim && w.depth[v] !== 0) rimOk = false;
+    if (x >= 5 && x <= 7 && z >= 5 && z <= 7 && w.depth[v] !== 1) midOk = false;
+  }
+  ok(surface > 0 && rimOk, 'pool: the surface is lowered and its depth is 0 all along the shore');
+  ok(midOk, 'pool: the depth is 1 in the middle, three blocks down');
+  // The ground: faces that look into the water are marked wet (variation + 4), the rest are not.
+  let floorWet = true, rimDry = true, floor = 0, rim = 0;
+  for (let v = 0; v < g.position.length / 3; v++) {
+    if (g.normal[v * 3 + 1] !== 1) continue;
+    const y = g.position[v * 3 + 1], variation = g.tile[v * 3 + 1];
+    if (y === 7) { floor++; if (variation !== 4) floorWet = false; }
+    if (y === 10) { rim++; if (variation !== 0) rimDry = false; }
+  }
+  ok(floor > 0 && floorWet, 'pool: the floor under the water is marked wet');
+  ok(rim > 0 && rimDry, 'pool: the dry rim is not');
 }
 
 // --- arena mode (Prop Hunt / Zombies maps) ---

@@ -3,6 +3,7 @@ import { SEA_LEVEL, WORLD_HEIGHT } from '../config.js';
 import { World } from './World.js';
 import { loadGraphics } from './Game.js';
 import { SunRig } from '../systems/SunRig.js';
+import { tickWater } from '../textures/water.js';
 import { DayNight } from '../systems/DayNight.js';
 import { reseed, Noise } from '../world/noise.js';
 import { setGenMode } from '../world/generators/TerrainGen.js';
@@ -122,7 +123,6 @@ export class Backdrop {
     this._age = 0;
     this._steerT = 0;
     this._turn = 0;
-    this._waterT = 0;
     this._meshed = -1;    // still mode: chunks meshed last frame...
     this._settledAt = 0;  // ...and when that last changed
     // Honour "reduce motion": hold one still view instead of flying.
@@ -220,11 +220,7 @@ export class Backdrop {
     this.dayNight.t = tour.clock;
     this.dayNight.update(this.still ? 0 : dt);
     this.sunRig.aim(this.dayNight.lightDir, this.camera.position);
-    if (!this.still) {
-      // Drift the shared water texture, as the game does.
-      this._waterT += dt;
-      this.world.waterMaterial.map.offset.set((this._waterT * 0.02) % 1, (this._waterT * 0.012) % 1);
-    }
+    tickWater(this.still ? 0 : dt, this.dayNight); // the water moves with the sky, as in the game
     this.renderer.render(this.scene, this.camera);
 
     if (this.ready && !this.still) return;

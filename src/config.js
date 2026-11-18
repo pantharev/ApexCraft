@@ -3,6 +3,9 @@
 export const CHUNK_SIZE = 16; // blocks per chunk on X and Z
 export const WORLD_HEIGHT = 128; // vertical block count (y: 0..WORLD_HEIGHT-1)
 export const SEA_LEVEL = 62;
+// The surface of a body of water sits this far below the top of its block, so
+// a shoreline has a lip instead of water flush with the land.
+export const WATER_DROP = 0.12;
 
 // How many chunks (radius) to keep loaded around the player.
 export const LOAD_RADIUS = 8;

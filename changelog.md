@@ -9,6 +9,40 @@ updated with every merged PR** (and mirror a short player-facing entry in the
 
 ---
 
+## 2026-11-18 — #60 Water: an animated surface, depth, foam, caustics
+
+Water was one flat scrolling tile. `src/textures/water.js` now holds its own
+surface material (`WATER_SURFACE`, a Lambert patched in `onBeforeCompile`
+like the terrain materials): two layers of drifting value noise, sampled on
+the texel grid so the motion stays pixel art, give a swell whose slope
+perturbs the normal. From that come a sky mirror that strengthens toward the
+horizon (Fresnel), thresholded sun and moon sparkles, pale crest lines, and
+foam at the shore. Colour and opacity follow a new per-vertex `depth`
+attribute from the mesher — 0 where a corner touches anything that is not
+water, up to 1 where the four columns around it are three or more deep — so
+shallows are pale and clear and deep water dark. The top of a body of water
+is lowered by `WATER_DROP` (0.12, `config.js`), flowing water falls in
+streaks and reads as a thin sheet, and from below the surface is a bright
+window ringed by a mirror of the deep. Terrain faces that look into water
+are marked wet (tile variation + 4); the terrain shader darkens them with
+depth below sea level and plays sunlight caustics over upward ones. One
+uniform set (`WATER`) drives both shaders; `tickWater(dt, dayNight)` is
+called by `Game` and `Backdrop`. Frame cost in a sea view is within 0.6 ms
+of the old water.
+
+Gotchas: the mesher's greedy mask gained a flag bit (wet for terrain, top
+layer for water) and a water top face reuses the AO byte for its four corner
+depths, so shoreline water no longer merges into one big quad. `gl_FrontFacing`
+is useless in a double-sided transparent material — three draws it in two
+passes and flips the winding for the back one — so the shader tests
+`dot(viewDir, normal)`. `Game._senseSurroundings` treats the top 0.12 of a
+surface block as air. Depth tint is measured from sea level, so a pond up a
+hill just reads as shallow. The old `water` tile and its `BLOCK_MATERIALS`
+entry remain for off-grid uses (icons, held block). `chunkTest.js` covers
+the lowered surface, the depth attribute, the shore and the wet mark. Not
+done: side faces between a source and a lower flow are still full height;
+no reflections of terrain; no splash particles.
+
 ## 2026-11-18 — #59 Menu backdrop: a live flyover behind the title screen and world list
 
 `src/core/Backdrop.js` runs the real engine behind the menus: a `World` in
@@ -635,8 +669,9 @@ From the 2026-07-02 code audit (see PR #37–#39 review + session notes):
 Pre-alpha. Four game modes on `main` — survival, creative, Prop Hunt (town /
 castle / playroom), and Zombies (bastion) — plus pets, flowing liquids, a
 procedural soundtrack, the six graphics/performance passes above (#53 to
-#58), and the live menu backdrop (#59). Tycoon mode (#52, `feature/tycoon`) is parked and unmerged: it needs its
+#58), the live menu backdrop (#59), and animated water (#60). Tycoon mode (#52, `feature/tycoon`) is parked and unmerged: it needs its
 changelog entries and its `worker` mob merged by hand, and it claims block ids
 69–72, so new blocks on `main` start at 73. Deploys: Vercel builds previews
 per PR; CI = `npm run build` + `server/test.js` + `chess/engineTest.js` +
-`core/chunkTest.js`. Next up: water (still a flat scrolling sheet).
+`core/chunkTest.js`. Next up: terrain generation (more varied, closer to
+Minecraft), then the cave system.

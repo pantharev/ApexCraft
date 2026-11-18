@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { WATER, GLSL_NOISE, WET_PARS, WET_GROUND } from './water.js';
 import blockData from '../blocks/blocks.json';
 
 // Procedural pixel-art textures generated on a canvas at load time — no binary
@@ -906,18 +907,8 @@ uniform highp sampler2DArray tileTex;
 varying vec3 vTile;
 varying vec3 vTilePos;
 varying vec3 vTileN;
-float tileHash(vec3 p) {
-  p = fract(p * vec3(0.1031, 0.1030, 0.0973));
-  p += dot(p, p.yzx + 33.33);
-  return fract((p.x + p.y) * p.z);
-}
-float tileNoise(vec2 p) {
-  vec2 i = floor(p), f = fract(p);
-  f = f * f * (3.0 - 2.0 * f);
-  float a = tileHash(vec3(i, 7.0)), b = tileHash(vec3(i + vec2(1.0, 0.0), 7.0));
-  float c = tileHash(vec3(i + vec2(0.0, 1.0), 7.0)), d = tileHash(vec3(i + vec2(1.0, 1.0), 7.0));
-  return mix(mix(a, b, f.x), mix(c, d, f.x), f.y);
-}`;
+${WET_PARS}
+${GLSL_NOISE}`;
 
 // Replaces three's <map_fragment>. textureGrad keeps mip selection on the
 // continuous UV — the turned UV jumps at every block edge, which would
@@ -927,7 +918,11 @@ const TILE_MAP = /* glsl */`
   vec3 tileCell = floor(vTilePos - vTileN * 0.5); // half a block in from the face
   float tileRnd = tileHash(tileCell);
   vec2 tileUv = fract(vMapUv);
-  if (vTile.y > 1.5) {
+  // vTile.y is the tile's variation (0, 1 or 2), plus 4 on a face that is
+  // under water (see the mesher's WET).
+  float tileWet = step(3.5, vTile.y);
+  float tileVar = vTile.y - 4.0 * tileWet;
+  if (tileVar > 1.5) {
     float tileTurn = floor(tileRnd * 8.0);
     if (mod(tileTurn, 2.0) >= 1.0) tileUv = vec2(tileUv.y, 1.0 - tileUv.x);
     if (mod(tileTurn, 4.0) >= 2.0) tileUv = 1.0 - tileUv;
@@ -939,10 +934,10 @@ const TILE_MAP = /* glsl */`
   #else
     vec4 sampledDiffuseColor = textureGrad(tileTex, tileCoord, dFdx(vMapUv), dFdy(vMapUv));
   #endif
-  if (vTile.y > 0.5) {
+  if (tileVar > 0.5) {
     float tileMacro = tileNoise(vTilePos.xz * 0.05 + vTilePos.y * 0.035);
     sampledDiffuseColor.rgb *= 0.95 + 0.07 * fract(tileRnd * 13.7) + 0.12 * (tileMacro - 0.5);
-  }
+  }${WET_GROUND}
   totalEmissiveRadiance += sampledDiffuseColor.rgb * vTile.z;
   diffuseColor *= sampledDiffuseColor;
 }`;
@@ -959,6 +954,10 @@ function terrainMaterial(cutout) {
   });
   m.onBeforeCompile = (shader) => {
     shader.uniforms.tileTex = { value: tileArray };
+    // Shared with the water surface (water.js), so one tick moves both.
+    shader.uniforms.waterTime = WATER.time;
+    shader.uniforms.waterLevel = WATER.level;
+    shader.uniforms.waterCaustics = WATER.caustics;
     shader.vertexShader = shader.vertexShader
       .replace('#include <common>', `#include <common>\n${TILE_VERTEX_PARS}`)
       .replace('#include <begin_vertex>',

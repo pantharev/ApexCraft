@@ -9,198 +9,106 @@ updated with every merged PR** (and mirror a short player-facing entry in the
 
 ---
 
-## 2026-11-18 — Player character pass (painted avatars, own shadow, third person)
+## 2026-11-18 — #57 Performance pass: texture-array terrain
 
-Fourth graphics pass, stacked on the mob branch.
+Every block tile is now also a layer of one `DataArrayTexture` (`atlas.js`),
+and chunk meshes draw with two materials — `TERRAIN_SOLID` and
+`TERRAIN_CUTOUT` — instead of one per tile. Each vertex carries a `tile`
+attribute (layer, variation, glow) that the mesher stamps from the
+`TILE_KIND` / `TILE_VARIATION` / `TILE_GLOW` tables; `ChunkMesher` fills three
+buffers (solid, leaves, other cut-outs) and returns `{ solid, cutout, water }`.
+In one forest view draw calls fell from 1,801 to 258 and render time from
+7.1 ms to 1.6 ms (11.6 to 3.4 ms with shadows). Solid terrain now casts its
+own shadow; only leaves keep a caster proxy on `SHADOW_CASTER_LAYER`.
 
-- **`src/entities/PlayerAvatar.js` (new)**: the player's body, built with the
-  mob skin system (`MobModels.buildModel(def, key, painter)` — the generalised
-  form of `buildMobModel`; skins are cached per key). `appearanceFor(name)`
-  hashes the player's NAME into skin tone, hair colour/style, shirt (+ sleeve
-  length, optional stripe), trousers, and eye colour, so a player looks the
-  same to everyone with no new netcode. The model is a 2.0-block figure
-  scaled 0.9 to the 1.8-block player. `update(dt, {speed, pitch, swinging})`
-  swings legs and arms, pitches the head, lifts the right arm for a held
-  item, and chops it while mining/attacking. `setHeld(itemName)` puts the
-  item in the right hand (shared plate/cube geometry — never disposed here).
-- **`RemotePlayers`** now wraps a `PlayerAvatar` per peer (and per Prop Hunt
-  bot). `setState` takes the player look-yaw convention (0 faces −z); the
-  model faces +z, so the avatar is turned `yaw + PI` — `HideSeekBots` (which
-  uses `atan2(dx, dz)`) now adds PI when it reports. The disguise cube stays
-  on the outer, unrotated group. `remove()` calls `avatar.dispose()` (own
-  geometry + material only; skin textures are a shared cache).
-- **Local player** (`Game.selfAvatar`, `_updateSelfAvatar`): in first person
-  the body sits on `SHADOW_CASTER_LAYER`, so it is drawn only into the
-  shadow map — you cast a shadow (arms, held item and all) without seeing
-  your own body. `C` toggles third person (`Game.setThirdPerson`; reuses
-  `Player.thirdPerson`, now with `camHeight` so it orbits the shoulders),
-  which moves the body to layer 0 and hides the first-person view-model.
-  Prop Hunt owns the camera, so the toggle is off there; the body is hidden
-  while dead or while a hider wears a disguise.
-- **Aiming no longer uses the camera**: `Player.eye` / `Player.look` are
-  updated every frame, and `Interaction` (targeting, buckets) and `Game`
-  (melee, pet use, tagging, bow, guns) read those. Identical in first
-  person; correct in third. GOTCHA for new code: `camera.position` is NOT
-  the player's eye any more when `thirdPerson` is on.
-- **Net**: player `state` gained `h` (held item name) and `a` (action bits,
-  bit 0 = swinging); `server/index.js` relays both (it whitelists fields) and
-  `server/test.js` covers it. **The deployed relay must be redeployed** for
-  guests to see held items and swings — against an old server avatars still
-  work, just empty-handed. Pitch was already on the wire and is now used.
-- The first-person bare hand takes the player's skin tone (and sleeve).
-- Not done: no appearance picker (the look is whatever the name hashes to);
-  no hurt flash or death pose on remote players (no state for it); no
-  third-person toggle on touch devices; sitting/swimming/flying poses.
+Also: `World` uses numeric chunk keys with a last-chunk cache (`edits` keeps
+its `"cx,cz"` strings — that is the save/net format) and a precomputed visit
+order; `Game._loop` clamps `dt` to 0.05 s, which stops mobs and drops
+tunnelling through floors after a hitch; `onStats` reaches React 10 times a
+second, so HUD values can be 100 ms stale — never read gameplay state back
+out of them. Gotchas: array-texture rows are flipped on upload; the terrain
+material's 1×1 `map` exists only so three passes UVs through; off-grid blocks
+(drops, held block, disguises) still use `BLOCK_MATERIALS`. Still open: chunk
+generation and meshing on the main thread.
 
-## 2026-11-18 — Mob pass (painted skins, glowing eyes, tails/wings/spider legs)
+## 2026-11-18 — #56 Player character pass: painted avatars, own shadow, third person
 
-Third graphics pass, stacked on the texture branch. No AI, stat, loot, or
-netcode changes — collision boxes (`hw`/`h`) are untouched.
+`src/entities/PlayerAvatar.js` gives players a real body built on the mob skin
+system (`MobModels.buildModel`). Its look — skin tone, hair, shirt, trousers,
+eyes — is hashed from the player's name, so everyone sees the same character
+with no extra netcode. It walks, swings its arms, pitches its head, carries
+the held item, and chops while mining or attacking. `RemotePlayers` wraps one
+per peer and per Prop Hunt bot; `Game.selfAvatar` is the local player's, drawn
+only into the shadow map in first person (you cast a shadow) and normally in
+third person (`C`, `Game.setThirdPerson`).
 
-- **`src/entities/MobModels.js` rewritten.** Every mob type gets one
-  generated *skin sheet* (cached per type): each box part is unwrapped onto
-  it at 16 px per block — the block tiles' pixel scale — base-coated in the
-  part colour, then detailed by the type's painter. A model is now a handful
-  of meshes sharing **one material per mob instance**: merged rigid body,
-  merged head, and one mesh per limb/tail/wing. (Before: one mesh + one
-  material per part, textured with 8×8 random noise.)
-- **`src/entities/mobSkins.js` (new)**: one painter per type (`SKINS`), built
-  on a small `Face` API (`px`, `rect`, `speckle`, `blotches`, `fromFront`)
-  with the origin at a face's top-left as seen from outside. Parts are
-  addressed by the new `id` field in `mobTypes.js`. Unknown ids are a no-op,
-  and a type with no painter just gets the base coat — so the Tycoon
-  `worker` (other branch) keeps working unpainted.
-- **Glow map**: a second sheet = the skin × `FILL` (0.16, replacing the old
-  flat 0.32 emissive that washed mobs out in sunlight) plus any pixels a
-  painter flagged as glowing at full strength. That is the eyes-in-the-dark
-  effect (zombie family, spiders, golems, cats, bats). Material = Lambert
-  with `emissive: white, emissiveMap: glow`.
-- **Hurt flash** is now `flashMob(parts, on)` (exported; `Mob._flashRed/
-  _clearFlash` and `GhostMobs` call it): it swaps the emissive map for a 1×1
-  white texture and tints red. Swapping rather than nulling keeps the same
-  shader program — no recompile hitch mid-fight. The death fade is unchanged
-  (it sets opacity on `part.material`, which is now the one shared material).
-- **`mobTypes.js`**: parts gained `id`s and new flags — `tail: 'back'|'hang'`,
-  `wing: true`, and `pivot`/`rest`/`axis`/`phase`/`amp` overrides (all read in
-  `buildMobModel`; the file header documents them). New parts: pig ears +
-  tail, cow horns/udder/tail, sheep wool cap, chicken comb/wattle/wings/tail
-  fan, cat/wolf tails, a four-legged creeper, an eight-legged spider. Painted
-  features replaced the old stuck-on eye/mouth boxes.
-- **Animation** (`animateMob`): legs swing on a per-part axis around a rest
-  pose (spider legs are splayed out/down and sweep around y; same phase on
-  both sides gives opposite motion because the hinges mirror); tails sway,
-  and wag fast on a tamed pet; wings flutter on the run and flap in the air
-  (bats always). Skeleton arms rest raised as if drawing a bow (`arm` with a
-  `rest`, no `gait`, so nothing re-poses them).
-- GOTCHAS: arm order still matters — index 0 must be the −x arm (`animateMob`
-  splays by index). Pets' sitting pose in `Mob.js`/`GhostMobs.js` assumes
-  legs 0–1 are the front pair (`legs4` keeps that). Face image axes are
-  documented on `FACES` in `MobModels.js`; side faces are mirrored, hence
-  `fromFront`.
-- Found while testing, not fixed: the game loop does not clamp `dt`, so at
-  very low frame rates (a throttled background tab) mobs tunnel through
-  one-block-thick floors.
-- Merge note for `feature/tycoon`: it adds a `worker` entry to `mobTypes.js`
-  right where this pass rewrote the file — keep both; the worker needs no
-  other change.
+Gotchas: aiming now reads `Player.eye` / `Player.look`, never the camera — in
+third person `camera.position` is not the eye. Avatars take the player
+look-yaw convention (0 faces −z) while the model faces +z, so they are turned
+`yaw + PI`; `HideSeekBots` adds PI when reporting. Player `state` gained `h`
+(held item) and `a` (action bits) and the relay whitelists fields, so **the
+deployed relay must be redeployed** or avatars appear empty-handed. Not done:
+an appearance picker, a third-person toggle on touch, hurt/death poses for
+remote players.
 
-## 2026-11-18 — Texture pass (redrawn tiles, no more tiling quilt)
+## 2026-11-18 — #55 Mob pass: painted skins, glowing eyes, tails and wings
 
-Second graphics pass, stacked on the lighting branch. All in
-`src/textures/atlas.js` plus one line in `World.js`. Still 16×16 tiles, still
-zero asset files.
+`MobModels.js` was rewritten: each mob type gets one generated skin sheet at
+16 px per block (the block tiles' scale), base-coated per part and detailed by
+its painter in the new `mobSkins.js`, which addresses parts by the new `id`
+field in `mobTypes.js`. A model is now a few meshes sharing one material per
+mob — merged body, merged head, one mesh per limb, tail, or wing. A glow map
+(a faint copy of the skin plus painter-flagged pixels at full strength)
+replaced the flat emissive fill, which is what makes eyes shine at night. New
+parts and motion: ears, horns, tails that wag, wings that flap, a four-legged
+creeper, and an eight-legged spider whose legs sweep around their own axis.
 
-- **Hue-shifted shading** (`HUE_SHIFT` in `paint` and `voronoi`): a brightness
-  step now also leans warm when lighter and cool when darker, so every tile
-  built on those helpers gained colour depth at once.
-- **Redrawn tiles**: grass top (blades: dark root + lit tip), grass side
-  (ragged turf overhang + its shadow on the soil), dirt (damp clumps, lit
-  pebbles), stone, sand (grains), snow (blue hollows), andesite, log bark
-  (lit ridges), leaves (leaf clumps; only the interior *between* clumps is
-  punched out), water (glints), wool, sandstone (bedded strata), mossy
-  cobblestone (moss in the joints, not a green blanket), and the ores
-  (`ORE_SHAPES` nuggets with a socket shadow and a facet).
-- **`TERRAIN_MATERIALS`** (what chunk meshes draw with; same indices as
-  `BLOCK_MATERIALS`): patched clones of the natural tiles. Their fragment
-  shader finds the block a fragment belongs to from its *world position*
-  (`floor(pos - normal*0.5)`), hashes it, and (a) for `ROTATE` tiles turns/
-  flips the tile one of eight ways, (b) for all `DRIFT` tiles adds a
-  per-block brightness nudge plus a soft large-scale drift. World-keyed, so a
-  block keeps its look across re-meshes (keying on the greedy quad's UV cell
-  would reshuffle neighbours whenever you mine).
-  - `textureGrad` with the *continuous* UV's derivatives is required: the
-    turned UV jumps at each block edge and plain `texture2D` drags a seam of
-    the lowest mip along every one.
-  - **Anything drawn off the block grid must keep `BLOCK_MATERIALS`** (item
-    drops, held block, Prop Hunt disguise cubes — all via `ItemModels`):
-    with the patched materials the hash would swim as the cube moves.
-  - GOTCHA: because blocks are turned at random, hard directional lines in a
-    `ROTATE` tile point every which way and read as scratches — the first
-    stone redraw had to be softened for exactly this. Keep such tiles
-    isotropic, or put them in `DRIFT` only.
-- New-block how-to in `docs/MODDING.md` mentions `ROTATE`/`DRIFT`.
-- Not done: tiles are still 16px (a 32px redraw would mean re-authoring every
-  hand-placed detail and the 16px item icons); water is still a flat sheet.
+Gotchas: the hurt flash is `flashMob(parts, on)`, which swaps the emissive map
+for a white texel rather than nulling it (same shader program, no hitch). Arm
+index 0 must be the −x arm, and pets' sitting pose assumes legs 0–1 are the
+front pair. A type with no painter still gets the base coat, so the Tycoon
+`worker` (other branch) needs no change beyond keeping its entry when
+`mobTypes.js` is merged.
 
-## 2026-11-18 — Renderer & lighting pass (shadows, sky, tone mapping)
+## 2026-11-18 — #54 Texture pass: redrawn tiles, no more tiling quilt
 
-First of the planned graphics passes (next: performance, then character/mob
-models). No gameplay, save, or netcode changes.
+The most-seen tiles were redrawn in `atlas.js` (grass top and side, dirt,
+stone, sand, snow, andesite, bark, leaves, water, wool, sandstone, mossy
+cobblestone, and chunky nugget ores), and `paint`/`voronoi` now hue-shift with
+brightness — warm highlights, cool shadows — which deepened every tile built
+on them. Tiles are still 16×16 and drawn in code.
 
-- **Renderer** (`Game` ctor): `ACESFilmicToneMapping` + `PCFSoftShadowMap`.
-  Exposure is `EXPOSURE` (1.0) in the open, eased to `CAVE_EXPOSURE` (2.2)
-  underground. **GOTCHA: ACES crushes low light ~3x compared with the old
-  untone-mapped output**, so the night palette is deliberately bright
-  (`MOON_INTENSITY` 1.2, `HEMI_NIGHT` 1.45, light-blue night ambient). After
-  any retune, look at Zombies (night-locked) and a deep cave. three's lights
-  are physical: a Lambert surface reflects intensity/PI.
-- **Shadows**: one `DirectionalLight` plays sun *and* moon — `DayNight.lightDir`
-  flips at the horizon, where its intensity is zero, so the swap is invisible.
-  `Game._aimSun` parks a ±64-block, 2048² shadow box a little ahead of the
-  player, snapped to shadow texels (no edge crawl while walking).
-- **Chunk shadow casters** (`World.js`, `ChunkMesher.assembleGrouped`): the
-  terrain mesh has a draw group per tile, so letting it cast would redraw
-  every group. Instead it only *receives*; groups are ordered solid → leaves →
-  other cut-outs (split points in `geometry.userData.shadow`) and each chunk
-  gets up to two caster meshes sharing its buffers through a draw range —
-  solids in one call, leaves in one alpha-tested call. Glass, plants, and
-  ladders cast nothing (skylit arenas stay lit). Casters are front-sided, so
-  three renders their back faces: no self-shadowing (double-sided leaves went
-  near-black). **They live on `SHADOW_CASTER_LAYER`**: `scene.onBeforeRender`
-  hides the layer from the camera and a wrapper on `sun.shadow.updateMatrices`
-  shows it — this leans on three building the main draw list *before* it
-  renders shadow maps (true in r169). Measured in a forest: shadow pass
-  ~0.5–1 ms; casters drawn as no-ops in the main pass cost +2.3 ms (~25%),
-  which is why the layer exists. If a three upgrade changes that order they
-  fall back to invisible no-op draws (colour/depth writes are off).
-- **Entities**: mob parts, remote avatars, Prop Hunt disguise cubes (a prop
-  without a shadow would be a tell), and item drops cast + receive. The held
-  view-model receives only, on private material clones that `_animateHeld`
-  dims underground (`CAVE_HAND_DIM`) — it has no baked skylight and glowed.
-- **Sky** (`src/systems/Sky.js`): gradient dome `ShaderMaterial` whose horizon
-  colour *is* the fog colour (fogged terrain dissolves into it), plus a
-  blocky cloud plane (64² `DataTexture`, sampled in world space, y=172).
-  Neither is tone-mapped — same as fog, which three applies after tone
-  mapping. `DayNight.js` owns the palette (`PAL`), blended by `dayAmt`/`dusk`.
-- **Fog**: 58–112 in open worlds — `far` sits inside the nearest unloaded
-  terrain, so the world's edge no longer pops in; arena maps keep 90–200
-  (`DayNight` ctor option). `Game._senseSurroundings` eases `_env
-  {underwater, cave}`: under water = dense blue murk (the dome collapses to
-  it, sun/moon/stars/clouds hide); cave (rock roof > 5 blocks over five
-  sampled columns, never in arenas) = near-black fog + the exposure lift.
-- Solid block tiles are now mipmapped (`NearestMipmapLinearFilter`) so
-  distant terrain stops shimmering; cut-out/translucent tiles are not (their
-  alpha would average away). Torch point lights flicker (`TorchLights`).
-- **Quality**: `Game.graphics` `'high'` | `'low'` (no shadows; default on
-  touch), stored in localStorage `apex_graphics`, switched from the pause
-  menu via `Game.setGraphics` (marks chunks dirty to add/remove casters).
-- **For the performance pass**: the main pass is ~1,800–2,000 draw calls and
-  ~8–9 ms of render time in a forest (one group per tile per chunk). A texture
-  array/atlas (one draw per chunk) is the real fix and would also let terrain
-  cast directly.
-- Known gaps: the player has no body, so no own shadow; the shadow box ends
-  at ~64 blocks (just past where fog starts); mobs keep their 0.32 emissive
-  fill and look washed in direct sun — left for the mob pass.
+The terrain shader also hides the tiling: it finds the block a fragment
+belongs to from its world position, hashes it, and turns the tile one of
+eight ways (`ROTATE` tiles) and nudges its brightness with a soft large-scale
+drift (`DRIFT` tiles). It is world-keyed, so a block keeps its look across
+re-meshes, and it needs `textureGrad` on the continuous UV or a seam of the
+lowest mip follows every block edge. Gotcha: because blocks are turned at
+random, hard directional lines in a `ROTATE` tile read as scratches — keep
+such tiles isotropic or list them under `DRIFT` only (`docs/MODDING.md`).
+
+## 2026-11-18 — #53 Renderer & lighting pass: shadows, sky, tone mapping
+
+The renderer gained ACES tone mapping and soft shadow maps; one directional
+light plays the sun by day and the moon by night (`DayNight.lightDir`, fading
+to zero at the horizon where it swaps sides), with its shadow box parked
+ahead of the player and texel-snapped (`Game._aimSun`). `src/systems/Sky.js`
+adds a gradient dome whose horizon colour is the fog colour, plus a drifting
+voxel cloud layer; `DayNight.js` owns one palette for light, ambient, sky,
+clouds, and fog. Fog now ends inside the loaded terrain so the world's edge is
+hidden (arena maps keep the long range), with dense murk under water and
+near-black fog plus an exposure lift in caves (`Game._senseSurroundings`).
+`Game.graphics` (`'high'` | `'low'`, no shadows; the default on touch) is
+switched from the pause menu.
+
+Gotchas: ACES crushes low light about 3×, so night and cave light values are
+deliberately generous — after any retune, check Zombies (night-locked) and a
+deep cave. Shadow-only meshes live on `SHADOW_CASTER_LAYER`:
+`scene.onBeforeRender` hides the layer from the camera and a wrapper on
+`sun.shadow.updateMatrices` shows it, which relies on three building the main
+draw list before rendering shadow maps (true in r169). Glass, plants, and
+ladders cast nothing, so skylit arenas stay lit. New entity meshes need
+`castShadow`/`receiveShadow` set by hand.
 
 ## 2026-07-17 — Creative mob spawner items
 
@@ -643,9 +551,12 @@ From the 2026-07-02 code audit (see PR #37–#39 review + session notes):
 
 - **Host migration silently disables saving** — `onBecomeHost` never sets
   `_canPersist`; edits after the origin host leaves are lost. High priority.
-- `onStats` pushes to React at 60 Hz (whole HUD re-renders every frame; also
+- ~~`onStats` pushes to React at 60 Hz~~ — throttled to 10 Hz in the
+  performance pass (2026-11-18). Was: (whole HUD re-renders every frame; also
   the main aggravator of the mobile drag-and-drop bug). Throttle to ~8 Hz.
-- `World.getBlock` allocates a `"cx,cz"` string per voxel query (hot in every
+- ~~`World.getBlock` string keys, mesher spread-push~~ — fixed in the
+  performance pass (2026-11-18); gen/meshing is still main-thread. Was:
+  `World.getBlock` allocates a `"cx,cz"` string per voxel query (hot in every
   collision test); mesher has heavy per-quad allocation churn + a spread-push
   `RangeError` risk in `assembleGrouped`; all gen/meshing is main-thread.
 - Autosave re-serializes the whole world every 15 s even when nothing changed.
@@ -657,10 +568,14 @@ From the 2026-07-02 code audit (see PR #37–#39 review + session notes):
   frame, palette re-renders on mousemove (details in the #30–#36 review).
 - HUD `underwater` flag uses a Y-heuristic instead of `vitals.submerged`.
 
-## Current state (2026-07-03)
+## Current state (2026-11-18)
 
-Pre-alpha MVP being demoed to a potential client. Three Prop Hunt maps
-(town / castle / playroom), flowing liquids, full procedural soundtrack +
-music discs, changelog page on the landing screen. Deploys: Vercel builds
-previews per PR; CI = `npm run build` + `server/test.js` + `chess/engineTest.js`.
-Next map candidates (parked): Harbor Cove, Hedge Garden — specs in todos.md.
+Pre-alpha. Four game modes on `main` — survival, creative, Prop Hunt (town /
+castle / playroom), and Zombies (bastion) — plus pets, flowing liquids, a
+procedural soundtrack, and the five graphics/performance passes above (#53 to
+#57). Tycoon mode (#52, `feature/tycoon`) is parked and unmerged: it needs its
+changelog entries and its `worker` mob merged by hand, and it claims block ids
+69–72, so new blocks on `main` start at 73. Deploys: Vercel builds previews
+per PR; CI = `npm run build` + `server/test.js` + `chess/engineTest.js`. Next
+up: chunk generation and meshing in a web worker, then water (still a flat
+scrolling sheet).

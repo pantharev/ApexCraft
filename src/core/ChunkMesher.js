@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { CHUNK_SIZE, WORLD_HEIGHT } from '../config.js';
 import { getBlock, isOpaque, isSolid, getBlockId, liquidKind } from '../blocks/BlockRegistry.js';
-import { faceMaterialIndex, CUTOUT_MATERIAL_INDICES, LEAVES_MATERIAL_INDEX } from '../textures/atlas.js';
+import { faceMaterialIndex, TILE_KIND, TILE_VARIATION, TILE_GLOW } from '../textures/atlas.js';
 import { Noise } from '../world/noise.js';
 
 const SHADE = { top: 1.0, bottom: 0.5, side: 0.8 };
@@ -108,7 +108,21 @@ const AO_UNIFORM = 255;
 // Corner sample offsets in (u, v): a00, a10, a11, a01 — matches vertex order.
 const AO_CORNERS = [[-1, -1], [1, -1], [1, 1], [-1, 1]];
 
-function emptyBuf() { return { positions: [], normals: [], uvs: [], colors: [], indices: [] }; }
+// A geometry under construction. Terrain buffers also collect the per-vertex
+// `tile` attribute — (texture-array layer, variation, glow) — that the terrain
+// shader reads; `tile` is the tile the next faces pushed belong to (-1 for
+// the water buffer, which has its own plain material).
+function emptyBuf() {
+  return { positions: [], normals: [], uvs: [], colors: [], tiles: [], indices: [], tile: -1 };
+}
+
+// Stamp the four vertices just pushed with the buffer's current tile.
+function stampTile(buf) {
+  const t = buf.tile;
+  if (t < 0) return;
+  const v = TILE_VARIATION[t], g = TILE_GLOW[t];
+  buf.tiles.push(t, v, g, t, v, g, t, v, g, t, v, g);
+}
 
 const clamp01 = (v) => Math.max(0, Math.min(1, v));
 
@@ -160,6 +174,7 @@ function pushQuad(buf, q) {
       buf.colors.push(bright, bright, bright);
     }
   }
+  stampTile(buf);
   // Split the quad across the brighter diagonal so AO interpolates smoothly
   // (the classic anisotropy fix), honouring the face winding direction.
   const flip = q.ao[0] + q.ao[2] > q.ao[1] + q.ao[3];
@@ -172,57 +187,42 @@ function pushQuad(buf, q) {
   }
 }
 
-// Assemble one BufferGeometry from a set of per-material buffers, adding a draw
-// group per material so a single mesh can use the shared material array.
-//
-// Groups are ordered solid tiles first, then leaves, then the other cut-outs,
-// and the split points are recorded in userData.shadow. That lets World draw
-// the shadow casters straight out of this geometry's own buffers with a draw
-// range: one call for everything solid, one for the leaves (see buildMesh).
-const shadowRank = (matIndex) =>
-  !CUTOUT_MATERIAL_INDICES.has(matIndex) ? 0 : matIndex === LEAVES_MATERIAL_INDEX ? 1 : 2;
-
-function assembleGrouped(byMat) {
-  const positions = [], normals = [], uvs = [], colors = [], indices = [];
-  const groups = [];
-  const shadow = { solidCount: 0, leafStart: 0, leafCount: 0 };
-  let vBase = 0;
-  const ordered = [...byMat].sort((a, b) => shadowRank(a[0]) - shadowRank(b[0]));
-  for (const [matIndex, b] of ordered) {
-    if (b.positions.length === 0) continue;
-    const start = indices.length;
-    positions.push(...b.positions);
-    normals.push(...b.normals);
-    uvs.push(...b.uvs);
-    colors.push(...b.colors);
-    for (const idx of b.indices) indices.push(idx + vBase);
-    vBase += b.positions.length / 3;
-    groups.push({ start, count: b.indices.length, materialIndex: matIndex });
-    const rank = shadowRank(matIndex);
-    if (rank === 0) shadow.solidCount = indices.length;
-    else if (rank === 1) { shadow.leafStart = start; shadow.leafCount = b.indices.length; }
+// Turn one or more buffers into a BufferGeometry, concatenated in the order
+// given. Sized up front and filled with typed-array copies — no per-element
+// pushes or argument spreading, whatever the chunk's size.
+function assemble(...bufs) {
+  let verts = 0, idx = 0, tiled = false;
+  for (const b of bufs) {
+    verts += b.positions.length / 3;
+    idx += b.indices.length;
+    if (b.tiles.length) tiled = true;
   }
-  if (positions.length === 0) return null;
+  if (verts === 0) return null;
+  const position = new Float32Array(verts * 3);
+  const normal = new Float32Array(verts * 3);
+  const uv = new Float32Array(verts * 2);
+  const color = new Float32Array(verts * 3);
+  const tile = tiled ? new Float32Array(verts * 3) : null;
+  const index = verts > 65535 ? new Uint32Array(idx) : new Uint16Array(idx);
+  let v = 0, i = 0;
+  for (const b of bufs) {
+    position.set(b.positions, v * 3);
+    normal.set(b.normals, v * 3);
+    uv.set(b.uvs, v * 2);
+    color.set(b.colors, v * 3);
+    if (tile) tile.set(b.tiles, v * 3);
+    const src = b.indices;
+    for (let k = 0; k < src.length; k++) index[i + k] = src[k] + v;
+    v += b.positions.length / 3;
+    i += src.length;
+  }
   const g = new THREE.BufferGeometry();
-  g.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
-  g.setAttribute('normal', new THREE.Float32BufferAttribute(normals, 3));
-  g.setAttribute('uv', new THREE.Float32BufferAttribute(uvs, 2));
-  g.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3));
-  g.setIndex(indices);
-  for (const gr of groups) g.addGroup(gr.start, gr.count, gr.materialIndex);
-  g.computeBoundingSphere();
-  g.userData.shadow = shadow;
-  return g;
-}
-
-function assembleSingle(buf) {
-  if (buf.positions.length === 0) return null;
-  const g = new THREE.BufferGeometry();
-  g.setAttribute('position', new THREE.Float32BufferAttribute(buf.positions, 3));
-  g.setAttribute('normal', new THREE.Float32BufferAttribute(buf.normals, 3));
-  g.setAttribute('uv', new THREE.Float32BufferAttribute(buf.uvs, 2));
-  g.setAttribute('color', new THREE.Float32BufferAttribute(buf.colors, 3));
-  g.setIndex(buf.indices);
+  g.setAttribute('position', new THREE.BufferAttribute(position, 3));
+  g.setAttribute('normal', new THREE.BufferAttribute(normal, 3));
+  g.setAttribute('uv', new THREE.BufferAttribute(uv, 2));
+  g.setAttribute('color', new THREE.BufferAttribute(color, 3));
+  if (tile) g.setAttribute('tile', new THREE.BufferAttribute(tile, 3));
+  g.setIndex(new THREE.BufferAttribute(index, 1));
   g.computeBoundingSphere();
   return g;
 }
@@ -257,10 +257,19 @@ const SL_VALUES = [
   1.0,                                     // bucket 3: full surface light
 ];
 
-// Greedy mesh + texture grouping. Returns { opaque, water } geometries.
+// Greedy mesh. Returns { solid, cutout, water } geometries (any may be null):
+// every solid face in one, every cut-out face (leaves first) in another, and
+// the translucent water sheet in the third.
 export function buildChunkGeometry(chunk, worldGet) {
-  const byMat = new Map();   // matIndex -> buffer (opaque + cutout)
+  const terrain = [emptyBuf(), emptyBuf(), emptyBuf()]; // by TILE_KIND: solid, leaves, other cut-outs
   const water = emptyBuf();
+  // The buffer a tile's faces go in, primed so the next faces pushed into it
+  // are stamped with that tile.
+  const bufFor = (tile) => {
+    const buf = terrain[TILE_KIND[tile]];
+    buf.tile = tile;
+    return buf;
+  };
   const baseX = chunk.cx * CHUNK_SIZE;
   const baseZ = chunk.cz * CHUNK_SIZE;
 
@@ -373,10 +382,7 @@ export function buildChunkGeometry(chunk, worldGet) {
             if (id === WATER) {
               pushQuad(water, q);
             } else {
-              const matIndex = faceMaterialIndex(id, faceType);
-              let buf = byMat.get(matIndex);
-              if (!buf) { buf = emptyBuf(); byMat.set(matIndex, buf); }
-              pushQuad(buf, q);
+              pushQuad(bufFor(faceMaterialIndex(id, faceType)), q);
             }
 
             for (let l = 0; l < h; l++) for (let k = 0; k < w; k++) mask[(j + l) * du + i + k] = 0;
@@ -390,11 +396,6 @@ export function buildChunkGeometry(chunk, worldGet) {
   // Special pass: non-cube blocks. Plants become crossed quads; doors thin
   // panels (orientation read from the wall they sit in); stairs two boxes;
   // beds a low mattress slab.
-  const bufFor = (matIndex) => {
-    let buf = byMat.get(matIndex);
-    if (!buf) { buf = emptyBuf(); byMat.set(matIndex, buf); }
-    return buf;
-  };
   for (let lx = 0; lx < CHUNK_SIZE; lx++) {
     for (let lz = 0; lz < CHUNK_SIZE; lz++) {
       for (let y = 1; y < WORLD_HEIGHT - 1; y++) {
@@ -503,7 +504,11 @@ export function buildChunkGeometry(chunk, worldGet) {
     }
   }
 
-  return { opaque: assembleGrouped(byMat), water: assembleSingle(water) };
+  const cutout = assemble(terrain[1], terrain[2]);
+  // Leaves sit first in the cut-out geometry, so World can draw just them
+  // (as the canopy's shadow caster) with a draw range.
+  if (cutout) cutout.userData.leafCount = terrain[1].indices.length;
+  return { solid: assemble(terrain[0]), cutout, water: assemble(water) };
 }
 
 // Push an axis-aligned box with per-face materials, face shading, and UVs
@@ -529,6 +534,7 @@ function pushBox(bufFor, x0, y0, z0, x1, y1, z1, matTop, matSide, matBottom, sl 
       buf.uvs.push(uvs[k][0], uvs[k][1]);
       buf.colors.push(bright, bright, bright);
     }
+    stampTile(buf);
     buf.indices.push(vi, vi + 1, vi + 2, vi, vi + 2, vi + 3);
   }
 }
@@ -557,6 +563,7 @@ function pushLiquidBox(buf, x, y, z, h, faces, sl = 1.0) {
       buf.uvs.push(uvs[k][0], uvs[k][1]);
       buf.colors.push(bright, bright, bright);
     }
+    stampTile(buf);
     buf.indices.push(vi, vi + 1, vi + 2, vi, vi + 2, vi + 3);
   }
 }
@@ -579,6 +586,7 @@ function pushCross(buf, x, y, z, tint, sl = 1.0) {
       buf.uvs.push(uvs[k][0], uvs[k][1]);
       buf.colors.push(tint[0] * sl, tint[1] * sl, tint[2] * sl);
     }
+    stampTile(buf);
     buf.indices.push(vi, vi + 1, vi + 2, vi, vi + 2, vi + 3);
   }
 }

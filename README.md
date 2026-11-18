@@ -122,6 +122,7 @@ See [LICENSE](LICENSE) and [CLA.md](CLA.md) for full details.
 
 ### Performance
 - **Greedy meshing** merges coplanar block faces into large quads (AO patterns are part of the merge key, so shading stays exact).
+- **One texture array for the whole world**: every block tile is a layer of a single array texture, so each chunk's solid terrain draws in one call (cut-outs in a second) instead of one per block type.
 - **Chunk streaming** around the player with an LRU cache that preserves edits on revisit.
 - **Frustum culling** of off-screen chunks.
 

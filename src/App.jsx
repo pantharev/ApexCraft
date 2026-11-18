@@ -219,8 +219,8 @@ export default function App() {
             }} />
           )}
 
-          {/* Crosshair */}
-          {active && (
+          {/* Crosshair — not in the front view, where it would sit on your own face */}
+          {active && stats?.view !== 'front' && (
             <div style={{ position: 'absolute', top: '50%', left: '50%', width: 18, height: 18, transform: 'translate(-50%, -50%)', pointerEvents: 'none' }}>
               <div style={{ position: 'absolute', top: 8, left: 0, width: 18, height: 2, background: 'rgba(255,255,255,0.8)' }} />
               <div style={{ position: 'absolute', left: 8, top: 0, width: 2, height: 18, background: 'rgba(255,255,255,0.8)' }} />

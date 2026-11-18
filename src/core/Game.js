@@ -22,6 +22,7 @@ import { Music } from '../systems/Music.js';
 import { ChessGames } from '../chess/ChessGames.js';
 import { RemotePlayers } from '../net/RemotePlayers.js';
 import { PlayerAvatar } from '../entities/PlayerAvatar.js';
+import { loadSkin, skinNumber } from '../entities/playerSkins.js';
 import { GhostMobs } from '../net/GhostMobs.js';
 import { Sound } from '../systems/Sound.js';
 import { blockAverageColor } from '../textures/atlas.js';
@@ -210,11 +211,12 @@ export class Game {
     this.player = new Player(this.world, this.camera, this.renderer.domElement);
     // The local player's own body. In first person it sits on the shadow-
     // caster layer — never drawn to the screen, but it casts your shadow; in
-    // third person (C) it moves to the normal layer. Its look comes from the
-    // player's name, the same one other players build their copy from.
+    // third person (C) it moves to the normal layer. It wears the skin chosen
+    // in the menu, which other players are told with our state (see _loop).
     let selfName = 'Player';
     try { selfName = localStorage.getItem('apex_player_name') || 'Player'; } catch (_) { /* private mode */ }
-    this.selfAvatar = new PlayerAvatar(selfName);
+    this.selfAvatar = new PlayerAvatar(selfName, loadSkin());
+    this.view = 'first'; // camera: 'first' | 'behind' | 'front' (see setView)
     this.selfAvatar.setLayer(SHADOW_CASTER_LAYER);
     this.scene.add(this.selfAvatar.group);
     this._selfLast = new THREE.Vector3();
@@ -872,7 +874,7 @@ export class Game {
       else if (e.code === 'KeyM') { const on = Sound.toggle(); if (this.music.enabled !== on) this.music.toggle(); }
       else if (e.code === 'KeyX' && !this.openScreen) this._cycleAmmo();
       // Prop Hunt owns the camera (hiders orbit their disguise), so no toggle there.
-      else if (e.code === 'KeyC' && !this.openScreen && !this.hideseek) this.setThirdPerson(!this.player.thirdPerson);
+      else if (e.code === 'KeyC' && !this.openScreen) this.cycleView();
     });
   }
 
@@ -1541,14 +1543,31 @@ export class Game {
     }
   }
 
-  // Toggle the third-person orbit camera (C). Aiming is unaffected: mining,
-  // attacks, and shots all come from the player's eye (Player.eye / .lookDir).
-  setThirdPerson(on) {
-    this.player.thirdPerson = on;
-    this.player.camHeight = 1.45; // orbit the shoulders rather than the feet
-    this.player.camDist = 4.5;
-    this.heldAnchor.visible = !on;
-    if (this.onToast) this.onToast(on ? 'Third-person view — C to switch back' : 'First-person view');
+  // The camera (C, or the Cam button on touch) steps through three views:
+  // first person, third person from behind, third person from the front —
+  // the camera out ahead, looking back at your face. Aiming is unaffected in
+  // all three: mining, attacks, and shots come from the player's eye
+  // (Player.eye / .lookDir), never from the camera.
+  cycleView() {
+    if (this.hideseek) return; // Prop Hunt owns the camera (hiders orbit their disguise)
+    this.setView(this.view === 'first' ? 'behind' : this.view === 'behind' ? 'front' : 'first');
+  }
+
+  setView(view) {
+    const p = this.player;
+    this.view = view === 'behind' || view === 'front' ? view : 'first';
+    p.thirdPerson = this.view !== 'first';
+    p.camFront = this.view === 'front';
+    p.camHeight = 1.45;                           // orbit the shoulders rather than the feet
+    p.camDist = this.view === 'front' ? 3.6 : 4.5; // a little closer from the front, to see the face
+    this.heldAnchor.visible = this.view === 'first';
+    if (this.onToast) {
+      this.onToast({
+        first: 'First-person view',
+        behind: 'Third-person view',
+        front: 'Third-person view — from the front',
+      }[this.view]);
+    }
   }
 
   // Keep the local player's body on the player: position, facing, pose, and
@@ -1761,7 +1780,10 @@ export class Game {
           x: +p.x.toFixed(2), y: +p.y.toFixed(2), z: +p.z.toFixed(2),
           yaw: +this.player.yaw.toFixed(3), pitch: +this.player.pitch.toFixed(3),
           h: this._heldName || undefined, // held item, shown in our avatar's hand
-          a: this._swinging ? 1 : 0,      // bit 0: mining / attacking
+          // Bit 0: mining / attacking. Bits 4 up: which skin we wear — it rides
+          // here, with the held item, so every peer has it from our first state
+          // and the relay needs to know nothing about skins.
+          a: (this._swinging ? 1 : 0) | (skinNumber(this.selfAvatar.skin) << 4),
         });
       }
       if (this.net.isHost) {
@@ -1843,6 +1865,7 @@ export class Game {
         creative: this.creative,
         hideseek: this.hideseek,
         zombies: this.zombies,
+        view: this.view, // 'front' hides the crosshair: it would sit on your own face
         gunAmmo: item && item.gun && this.guns[item.name]
           ? { mag: this.guns[item.name].mag, reserve: this.guns[item.name].reserve, reloading: this._reloading > 0 }
           : null,

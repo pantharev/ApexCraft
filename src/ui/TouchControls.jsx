@@ -3,7 +3,7 @@ import React, { useRef, useState } from 'react';
 // On-screen controls for touch devices:
 //   • left analog joystick = move
 //   • touch the world = look (drag), place (quick tap), or mine (press & hold)
-//   • buttons: Jump (and Down while flying), Fly, Bag, Pause
+//   • buttons: Jump (and Down while flying), Cam (first / third person), Fly, Bag, Pause
 const HOLD_MS = 220;     // press-and-hold before mining starts
 const TAP_MS = 250;      // max duration for a tap (= place)
 const MOVE_PX = 12;      // movement beyond this = a look drag (not a tap/mine)
@@ -129,6 +129,8 @@ export function TouchControls({ game, onInventory, onPause }) {
 
       {/* Utility buttons (top-right) */}
       <div style={{ position: 'absolute', right: 16, top: 16, display: 'flex', gap: 10, zIndex: 7, pointerEvents: 'auto' }}>
+        {/* Prop Hunt owns the camera, so no button there. */}
+        {!game.hideseek && <div style={smallBtn} {...tap(() => game.cycleView())}>Cam</div>}
         <div style={{ ...smallBtn, background: flying ? 'rgba(120,180,255,0.4)' : smallBtn.background }}
           {...tap(() => { player.flying = !player.flying; setFlying(player.flying); })}>Fly</div>
         <div style={smallBtn} {...tap(onInventory)}>Bag</div>

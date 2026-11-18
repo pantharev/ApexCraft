@@ -1,6 +1,7 @@
-import React, { useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { MAPS, MAP_LIST, ZOMBIE_MAP_LIST } from '../world/arenas/index.js';
 import { MENU_FONT, Wordmark } from './MenuBackdrop.jsx';
+import { SKIN_LIST, loadSkin, saveSkin, skinPortrait } from '../entities/playerSkins.js';
 
 const panel = {
   background: '#1b1d22', border: '3px solid #3a3d44', borderRadius: 8,
@@ -70,22 +71,48 @@ const choice = (on, accent) => ({
   border: on ? '2px solid rgba(255,255,255,0.4)' : '2px solid rgba(255,255,255,0.1)',
 });
 
-// Pick an existing world or create a new one. Worlds can also be hosted for
-// friends (multiplayer), or you can join a friend's room by code.
+// A skin seen from the front, drawn from its painted sheet at `scale` screen
+// pixels a texel (a whole number, so the pixels stay square). The figures
+// differ in height (hats), so the picker stands them on a common floor.
+function SkinPortrait({ id, scale }) {
+  const ref = useRef(null);
+  useEffect(() => {
+    const src = skinPortrait(id);
+    const c = ref.current;
+    c.width = src.width; c.height = src.height;
+    c.style.width = `${src.width * scale}px`;
+    c.style.height = `${src.height * scale}px`;
+    c.getContext('2d').drawImage(src, 0, 0);
+  }, [id, scale]);
+  return <canvas ref={ref} style={{ imageRendering: 'pixelated', display: 'block', filter: 'drop-shadow(0 3px 3px rgba(0,0,0,0.45))' }} />;
+}
+
+// Pick who you are, then an existing world or a new one. Worlds can also be
+// hosted for friends (multiplayer), or you can join a friend's room by code.
 export function MainMenu({ worlds, onPlay, onCreate, onDelete, onHome, onHost, onJoin, netError, netBusy }) {
   const [name, setName] = useState('');
   const [mode, setMode] = useState('survival');
   const [map, setMap] = useState(MAP_LIST[0].id); // Prop Hunt arena map
   const [joinCode, setJoinCode] = useState('');
-  const [playerName, setPlayerName] = useState(
-    () => (typeof localStorage !== 'undefined' && localStorage.getItem('apex_player_name')) || ''
-  );
+  const [playerName, setPlayerName] = useState(() => {
+    try { return localStorage.getItem('apex_player_name') || ''; } catch (_) { return ''; }
+  });
+  // The character you play: remembered here, read by the Game when a world
+  // starts (single player and multiplayer alike).
+  const [skin, setSkin] = useState(loadSkin);
+  const pickSkin = (id) => { setSkin(id); saveSkin(id); };
+  // Smaller figures on a phone, where the picker would otherwise fill the screen.
+  const portraitScale = Math.min(window.innerWidth, window.innerHeight) < 520 ? 2 : 3;
 
-  const myName = () => {
-    const n = playerName.trim() || 'Player';
-    try { localStorage.setItem('apex_player_name', n); } catch (_) { /* private mode */ }
-    return n;
+  const changeName = (value) => {
+    setPlayerName(value);
+    const n = value.trim();
+    try {
+      if (n) localStorage.setItem('apex_player_name', n);
+      else localStorage.removeItem('apex_player_name');
+    } catch (_) { /* private mode */ }
   };
+  const myName = () => playerName.trim() || 'Player';
   const create = () => {
     if (!name.trim()) return;
     onCreate(name.trim(), mode, map);
@@ -109,6 +136,37 @@ export function MainMenu({ worlds, onPlay, onCreate, onDelete, onHome, onHost, o
           <Wordmark size="clamp(24px, 7.2vw, 38px)" />
           <div />
         </div>
+
+        <div style={{ ...sectionLabel, marginTop: 12 }}>Your character</div>
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+          {SKIN_LIST.map((s) => {
+            const on = skin === s.id;
+            return (
+              <button key={s.id} onClick={() => pickSkin(s.id)} aria-pressed={on} title={`Play as ${s.name}`}
+                style={{
+                  flex: '1 1 76px', minWidth: 0, padding: '8px 2px 6px', cursor: 'pointer', borderRadius: 8,
+                  display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 5,
+                  font: `12px ${MENU_FONT}`, fontWeight: on ? 700 : 400,
+                  color: on ? '#fff' : '#a9b4c4',
+                  background: on ? 'rgba(70,130,200,0.38)' : 'rgba(255,255,255,0.05)',
+                  border: on ? '2px solid rgba(160,205,255,0.85)' : '2px solid rgba(255,255,255,0.09)',
+                }}>
+                {/* Tall enough for the tallest hat; everyone stands on the bottom edge. */}
+                <div style={{ height: 40 * portraitScale, display: 'flex', alignItems: 'flex-end' }}>
+                  <SkinPortrait id={s.id} scale={portraitScale} />
+                </div>
+                {s.name}
+              </button>
+            );
+          })}
+        </div>
+        <input
+          value={playerName}
+          onChange={(e) => changeName(e.target.value)}
+          placeholder="Your name (shown to other players)"
+          maxLength={16}
+          style={{ ...mInput, width: '100%', boxSizing: 'border-box', marginTop: 8 }}
+        />
 
         <div style={sectionLabel}>Your worlds</div>
         <div style={{ maxHeight: 232, overflowY: 'auto' }}>
@@ -199,13 +257,6 @@ export function MainMenu({ worlds, onPlay, onCreate, onDelete, onHome, onHost, o
               </span>
             </div>
             <div style={{ display: 'flex', gap: 8 }}>
-              <input
-                value={playerName}
-                onChange={(e) => setPlayerName(e.target.value)}
-                placeholder="Your name"
-                maxLength={16}
-                style={{ ...mInput, flex: '0 1 120px' }}
-              />
               <input
                 value={joinCode}
                 onChange={(e) => setJoinCode(e.target.value.toUpperCase())}

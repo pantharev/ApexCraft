@@ -53,6 +53,10 @@ function valueNoise(rng, cells = 4) {
   };
 }
 
+// How far a brightness step also shifts hue: lighter pixels lean warm, darker
+// ones lean cool (the pixel-art rule of thumb — plain grey steps look flat).
+const HUE_SHIFT = 0.12;
+
 // Per-pixel painter: base colour modulated by brighten(x, y) (in colour steps,
 // ±) plus white jitter. Writes a full ImageData in one pass.
 function paint(ctx, hex, brighten, jitter, rng) {
@@ -62,14 +66,17 @@ function paint(ctx, hex, brighten, jitter, rng) {
     for (let x = 0; x < TILE; x++) {
       const i = (y * TILE + x) * 4;
       const d = (brighten ? brighten(x, y) : 0) + (jitter ? (rng() - 0.5) * 2 * jitter : 0);
-      img.data[i] = clamp(r + d);
+      img.data[i] = clamp(r + d * (1 + HUE_SHIFT));
       img.data[i + 1] = clamp(g + d);
-      img.data[i + 2] = clamp(b + d);
+      img.data[i + 2] = clamp(b + d * (1 - HUE_SHIFT));
       img.data[i + 3] = 255;
     }
   }
   ctx.putImageData(img, 0, 0);
 }
+
+const wrap = (v) => ((v % TILE) + TILE) % TILE;
+const pick = (rng) => (rng() * TILE) | 0;
 
 // Backwards-compatible simple fill (kept for a few tiles).
 function fillNoise(ctx, hex, jitter, rng) { paint(ctx, hex, null, jitter, rng); }
@@ -106,9 +113,10 @@ function voronoi(ctx, baseHex, mortarHex, k, rng, vary = 26, mortarW = 1.1) {
         const j = (rng() - 0.5) * 14;
         // Stones get a soft 3D feel: brighter at their centre.
         const dome = Math.max(0, 1 - Math.sqrt(d1) / 6) * 10;
-        img.data[i] = clamp(br + s1 + j + dome);
-        img.data[i + 1] = clamp(bg + s1 + j + dome);
-        img.data[i + 2] = clamp(bb + s1 + j + dome);
+        const d = s1 + j + dome;
+        img.data[i] = clamp(br + d * (1 + HUE_SHIFT));
+        img.data[i + 1] = clamp(bg + d);
+        img.data[i + 2] = clamp(bb + d * (1 - HUE_SHIFT));
       }
       img.data[i + 3] = 255;
     }
@@ -151,54 +159,101 @@ function chalkGun(c, { barrel, mag, stock }) {
 
 const DRAW = {
   grass_top: (c, r) => {
-    const vn = valueNoise(r, 4);
-    paint(c, '#5b9c3a', (x, y) => (vn(x, y) - 0.5) * 34, 9, r);
-    for (let i = 0; i < 20; i++) setPx(c, (r() * TILE) | 0, (r() * TILE) | 0, '#477e2c', 1, 14, r); // dark blades
-    for (let i = 0; i < 10; i++) setPx(c, (r() * TILE) | 0, (r() * TILE) | 0, '#79bd4e', 1, 14, r); // light blades
+    // Broad light/dark patches under a finer mottle, then individual blades:
+    // a dark root pixel with a sunlit tip above it.
+    const vn = valueNoise(r, 4), fine = valueNoise(r, 8);
+    paint(c, '#579838', (x, y) => (vn(x, y) - 0.5) * 30 + (fine(x, y) - 0.5) * 18, 6, r);
+    for (let i = 0; i < 26; i++) {
+      const x = pick(r), y = pick(r);
+      setPx(c, x, y, '#3d7326', 1, 10, r);
+      setPx(c, x, wrap(y - 1), '#7bc04e', 1, 12, r);
+    }
+    for (let i = 0; i < 8; i++) setPx(c, pick(r), pick(r), '#93d265', 1, 10, r); // bright tips
+    for (let i = 0; i < 6; i++) setPx(c, pick(r), pick(r), '#33621e', 1, 8, r);  // deep gaps
   },
   grass_side: (c, r) => {
     DRAW.dirt(c, r);
-    // Grass band with a wavy lower edge and hanging drips.
+    // Ragged turf overhang: a lit top row, darker blade ends of uneven
+    // length, and the shadow the overhang throws on the soil beneath.
     for (let x = 0; x < TILE; x++) {
-      const top = 2 + ((x * 7 + 3) % 3 === 0 ? 1 : 0) + (r() < 0.3 ? 1 : 0);
-      for (let y = 0; y < top; y++) setPx(c, x, y, y === top - 1 ? '#4d8531' : '#5b9c3a', 1, 12, r);
-      if (r() < 0.22) setPx(c, x, top, '#4d8531', 1, 10, r); // drip
+      const depth = 3 + ((r() * 3) | 0) - (x % 4 === 1 ? 1 : 0);
+      for (let y = 0; y < depth; y++) {
+        const col = y === 0 ? '#74b84a' : y === depth - 1 ? '#3d7326' : '#579838';
+        setPx(c, x, y, col, 1, 10, r);
+      }
+      setPx(c, x, depth, '#4a3420', 0.7, 6, r);
     }
   },
   dirt: (c, r) => {
-    const vn = valueNoise(r, 4);
-    paint(c, '#7a5a3c', (x, y) => (vn(x, y) - 0.5) * 30, 11, r);
-    for (let i = 0; i < 6; i++) { // little stones with a shadow pixel
-      const x = (r() * TILE) | 0, y = (r() * TILE) | 0;
-      setPx(c, x, y, '#9b8259', 1, 10, r);
-      setPx(c, x, (y + 1) % TILE, '#5e4429', 0.8, 10, r);
+    // Loamy base with darker damp clumps, pebbles lit from the upper left,
+    // and a scatter of dark crumbs and pale root flecks.
+    const vn = valueNoise(r, 4), fine = valueNoise(r, 8);
+    paint(c, '#7b5a3b', (x, y) => (vn(x, y) - 0.5) * 28 + (fine(x, y) < 0.3 ? -15 : 0), 9, r);
+    for (let i = 0; i < 4; i++) {
+      const x = pick(r), y = pick(r);
+      setPx(c, wrap(x + 1), wrap(y + 1), '#4b3622', 0.9);
+      setPx(c, x, y, '#a89068', 1, 8, r);
+      setPx(c, wrap(x + 1), y, '#917957', 1, 8, r);
+      setPx(c, x, wrap(y + 1), '#8a7250', 1, 8, r);
     }
-    for (let i = 0; i < 5; i++) setPx(c, (r() * TILE) | 0, (r() * TILE) | 0, '#65482c', 1, 10, r);
+    for (let i = 0; i < 7; i++) setPx(c, pick(r), pick(r), '#5b4028', 1, 8, r);
+    for (let i = 0; i < 4; i++) setPx(c, pick(r), pick(r), '#9c7a52', 1, 8, r);
   },
   stone: (c, r) => {
-    const vn = valueNoise(r, 3);
-    paint(c, '#8b8b8f', (x, y) => (vn(x, y) - 0.5) * 22, 7, r);
-    crack(c, r, '#6c6c70', '#a2a2a6');
-    crack(c, r, '#707074', '#9e9ea2');
+    // Mottled rock with one faint fracture seam (dark line, lit lip beneath
+    // it), chipped pits, and pale mineral flecks. The seam is kept soft: the
+    // terrain shader turns every block a different way, and hard lines
+    // pointing in all directions read as scratches.
+    const vn = valueNoise(r, 3), fine = valueNoise(r, 7);
+    paint(c, '#8a8a8e', (x, y) => (vn(x, y) - 0.5) * 22 + (fine(x, y) - 0.5) * 12, 5, r);
+    let sy = 3 + ((r() * 10) | 0);
+    const sx = pick(r), len = 6 + ((r() * 5) | 0);
+    for (let k = 0; k < len; k++) {
+      setPx(c, wrap(sx + k), wrap(sy), '#6f6f74', 0.5);
+      setPx(c, wrap(sx + k), wrap(sy + 1), '#a2a2a7', 0.28);
+      if (r() < 0.35) sy += r() < 0.5 ? -1 : 1;
+    }
+    for (let i = 0; i < 4; i++) {
+      const x = pick(r), y = pick(r);
+      setPx(c, x, y, '#707075', 0.85, 6, r);
+      setPx(c, wrap(x + 1), wrap(y + 1), '#a6a6aa', 0.5);
+    }
+    for (let i = 0; i < 6; i++) setPx(c, pick(r), pick(r), '#9d9da1', 1, 6, r);
   },
   cobblestone: (c, r) => voronoi(c, '#8d8d8d', '#585858', 7, r, 24),
   sand: (c, r) => {
     const vn = valueNoise(r, 3);
     // Wind ripples: soft horizontal waves bent by the noise field.
-    paint(c, '#dccf9f', (x, y) => Math.sin((y + vn(x, y) * 5) * 1.15) * 9 + (vn(x, y) - 0.5) * 10, 6, r);
-    for (let i = 0; i < 5; i++) setPx(c, (r() * TILE) | 0, (r() * TILE) | 0, '#bda97a', 1, 8, r);
+    paint(c, '#dccf9f', (x, y) => Math.sin((y + vn(x, y) * 5) * 1.15) * 9 + (vn(x, y) - 0.5) * 10, 5, r);
+    // Individual grains: dark and pale specks over the ripples.
+    for (let i = 0; i < 14; i++) setPx(c, pick(r), pick(r), '#bfa978', 1, 8, r);
+    for (let i = 0; i < 10; i++) setPx(c, pick(r), pick(r), '#efe5bf', 1, 6, r);
   },
   gravel: (c, r) => voronoi(c, '#85807b', '#55504c', 13, r, 30, 0.8),
   snow: (c, r) => {
+    // Soft drifts: the hollows fall off toward blue, crests stay white, and
+    // a few crystals catch the light.
     const vn = valueNoise(r, 4);
-    paint(c, '#f3f7fb', (x, y) => (vn(x, y) - 0.6) * 16, 3, r);
-    for (let i = 0; i < 4; i++) setPx(c, (r() * TILE) | 0, (r() * TILE) | 0, '#ffffff', 1);
+    paint(c, '#eef3f9', null, 3, r);
+    const img = c.getImageData(0, 0, TILE, TILE);
+    for (let y = 0; y < TILE; y++) for (let x = 0; x < TILE; x++) {
+      const hollow = Math.max(0, 0.55 - vn(x, y)) * 2; // 0 on crests .. ~1 in dips
+      const i = (y * TILE + x) * 4;
+      img.data[i] = clamp(img.data[i] - hollow * 28);
+      img.data[i + 1] = clamp(img.data[i + 1] - hollow * 17);
+      img.data[i + 2] = clamp(img.data[i + 2] - hollow * 5);
+    }
+    c.putImageData(img, 0, 0);
+    for (let i = 0; i < 7; i++) setPx(c, pick(r), pick(r), '#ffffff', 1);
   },
   bedrock: (c, r) => voronoi(c, '#4e4e52', '#222226', 6, r, 44),
   andesite: (c, r) => {
+    // Salt-and-pepper igneous speckle with one hairline crack.
     const vn = valueNoise(r, 5);
-    paint(c, '#888d88', (x, y) => (vn(x, y) - 0.5) * 18, 9, r);
-    crack(c, r, '#6f746f', '#9da29d');
+    paint(c, '#888d88', (x, y) => (vn(x, y) - 0.5) * 16, 6, r);
+    for (let i = 0; i < 16; i++) setPx(c, pick(r), pick(r), '#6a706b', 1, 8, r);
+    for (let i = 0; i < 12; i++) setPx(c, pick(r), pick(r), '#a9aea8', 1, 8, r);
+    crack(c, r, '#666b66', '#a3a8a3');
   },
   log_top: (c, r) => {
     const vn = valueNoise(r, 3);
@@ -216,21 +271,36 @@ const DRAW = {
     for (let x = 0; x < TILE; x++) colShade.push((r() - 0.5) * 26 - (x % 5 === 0 ? 22 : 0));
     const vn = valueNoise(r, 4);
     paint(c, '#6e5536', (x, y) => colShade[x] + (vn(x, y) - 0.5) * 14, 8, r);
+    // Each furrow gets a lit ridge on its right, broken up so it reads as
+    // rough bark rather than a stripe.
+    for (let x = 0; x < TILE; x += 5) {
+      for (let y = 0; y < TILE; y++) if (r() < 0.6) setPx(c, wrap(x + 1), y, '#8f7350', 0.8, 8, r);
+    }
     const kx = 3 + ((r() * 10) | 0), ky = 4 + ((r() * 8) | 0);
     setPx(c, kx, ky, '#3f2e1a', 1); setPx(c, kx, ky + 1, '#3f2e1a', 1);
     setPx(c, kx, ky - 1, '#8a6b42', 1); setPx(c, kx, ky + 2, '#8a6b42', 1);
   },
   leaves: (c, r) => {
+    // A shaded interior with small leaf clumps laid over it (lit corner,
+    // mid body, shaded edge); only the interior that shows between clumps is
+    // punched through to the sky, so the gaps look like gaps.
     const vn = valueNoise(r, 4);
-    paint(c, '#3f7a2c', (x, y) => (vn(x, y) - 0.5) * 44, 15, r);
+    paint(c, '#2c5f22', (x, y) => (vn(x, y) - 0.5) * 26, 8, r);
+    const covered = new Uint8Array(TILE * TILE);
+    const leaf = (x, y, hex, jit) => {
+      setPx(c, wrap(x), wrap(y), hex, 1, jit, r);
+      covered[wrap(y) * TILE + wrap(x)] = 1;
+    };
+    for (let i = 0; i < 26; i++) {
+      const x = pick(r), y = pick(r);
+      leaf(x + 1, y + 1, '#356f27', 8);
+      leaf(x + 1, y, '#448a30', 10);
+      leaf(x, y + 1, '#3f8029', 10);
+      leaf(x, y, r() < 0.45 ? '#6cb648' : '#52993a', 12);
+    }
     const img = c.getImageData(0, 0, TILE, TILE);
     for (let i = 0; i < TILE * TILE; i++) {
-      if (r() < 0.16) img.data[i * 4 + 3] = 0;            // sky gaps
-      else if (r() < 0.12) {                              // deep shadow leaves
-        img.data[i * 4] = clamp(img.data[i * 4] * 0.6);
-        img.data[i * 4 + 1] = clamp(img.data[i * 4 + 1] * 0.6);
-        img.data[i * 4 + 2] = clamp(img.data[i * 4 + 2] * 0.6);
-      }
+      if (!covered[i] && r() < 0.5) img.data[i * 4 + 3] = 0;
     }
     c.putImageData(img, 0, 0);
   },
@@ -264,6 +334,11 @@ const DRAW = {
   water: (c, r) => {
     const vn = valueNoise(r, 3);
     paint(c, '#3567c9', (x, y) => Math.sin((y + vn(x, y) * 6) * 0.82) * 14 + (vn(x, y) - 0.5) * 18, 5, r);
+    // Short glints riding the wave crests.
+    for (let i = 0; i < 5; i++) {
+      const x = pick(r), y = pick(r), len = 2 + ((r() * 3) | 0);
+      for (let k = 0; k < len; k++) setPx(c, wrap(x + k), y, '#7fa8ee', 0.85, 8, r);
+    }
     const img = c.getImageData(0, 0, TILE, TILE);
     for (let i = 0; i < TILE * TILE; i++) img.data[i * 4 + 3] = 205;
     c.putImageData(img, 0, 0);
@@ -468,9 +543,16 @@ const DRAW = {
     c.fillStyle = '#f2c200'; c.fillRect(7, 7, 2, 2);                  // fuse glow
   },
   wool_block: (c, r) => {
-    const vn = valueNoise(r, 4);
-    // Soft weave: gentle diagonal crosshatch.
-    paint(c, '#e8e4dc', (x, y) => (vn(x, y) - 0.5) * 14 + ((x + y) % 4 === 0 ? -10 : 0) + ((x - y & 3) === 2 ? -5 : 0), 4, r);
+    // Fleece: soft puffs (lit above, shaded beneath) over a faint weave.
+    const vn = valueNoise(r, 5);
+    paint(c, '#e6e2da', (x, y) => (vn(x, y) - 0.5) * 16 + ((x + y) % 4 === 0 ? -7 : 0), 3, r);
+    for (let i = 0; i < 12; i++) {
+      const x = pick(r), y = pick(r);
+      setPx(c, x, y, '#f8f6f1', 1, 4, r);
+      setPx(c, wrap(x + 1), y, '#f1eee8', 1, 4, r);
+      setPx(c, x, wrap(y + 1), '#cbc6bc', 0.9, 4, r);
+      setPx(c, wrap(x + 1), wrap(y + 1), '#c3beb3', 0.9, 4, r);
+    }
   },
   pumpkin_side: (c, r) => {
     paint(c, '#d8821e', (x) => Math.sin(x * 1.35 + 0.6) * 18, 6, r); // ribs
@@ -495,19 +577,28 @@ const DRAW = {
   },
   sandstone: (c, r) => {
     const vn = valueNoise(r, 4);
-    // Horizontal strata with subtle pocking.
-    paint(c, '#d8c694', (x, y) => (y % 5 === 0 ? -16 : 0) + Math.sin(y * 0.8) * 6 + (vn(x, y) - 0.5) * 10, 5, r);
+    // Bedded strata: each layer has its own tone, a dark parting line with a
+    // lit lip under it, and a little pocking.
+    const band = [];
+    for (let y = 0; y < TILE; y++) band.push(y % 5 === 0 ? -20 : y % 5 === 1 ? 9 : Math.sin(y * 0.8) * 6);
+    paint(c, '#d8c694', (x, y) => band[y] + (vn(x, y) - 0.5) * 10, 4, r);
+    for (let i = 0; i < 8; i++) setPx(c, pick(r), pick(r), '#b9a676', 1, 6, r);
   },
   mossy_cobblestone: (c, r) => {
+    // Cobble first; moss then takes the mortar joints and creeps a little
+    // way up the damp stones, instead of blanketing the block.
     voronoi(c, '#8d8d8d', '#585858', 7, r, 24);
     const vn = valueNoise(r, 3);
     const img = c.getImageData(0, 0, TILE, TILE);
     for (let y = 0; y < TILE; y++) for (let x = 0; x < TILE; x++) {
-      if (vn(x, y) < 0.58) continue; // moss creeps over the high-noise patches
       const i = (y * TILE + x) * 4;
-      img.data[i] = img.data[i] * 0.45 + 40;
-      img.data[i + 1] = img.data[i + 1] * 0.5 + 80;
-      img.data[i + 2] = img.data[i + 2] * 0.4 + 30;
+      const mortar = img.data[i] < 100;
+      const damp = vn(x, y);
+      if (!(mortar ? damp > 0.42 : damp > 0.72 && r() < 0.6)) continue;
+      const lit = (r() - 0.5) * 26;
+      img.data[i] = clamp(58 + lit);
+      img.data[i + 1] = clamp((mortar ? 104 : 126) + lit);
+      img.data[i + 2] = clamp(44 + lit * 0.6);
     }
     c.putImageData(img, 0, 0);
   },
@@ -608,7 +699,14 @@ const DRAW = {
   },
 };
 
-// Ores: stone base + crystal clusters with a bright facet and dark outline.
+// Ores: stone base + nuggets with a bright facet and a socket shadow.
+const ORE_SHAPES = [
+  [[0, 0], [1, 0], [0, 1]],
+  [[0, 0], [1, 0], [1, 1]],
+  [[0, 0], [1, 0], [0, 1], [1, 1]],
+  [[0, 0], [1, 0], [2, 0], [1, 1]],
+  [[0, 0], [0, 1], [1, 1], [1, 2]],
+];
 const ORE_COLORS = {
   coal_ore: ['#2b2b2b', '#101010', '#4a4a4a'],
   iron_ore: ['#caa07e', '#8a6a4e', '#e8c8a8'],
@@ -621,15 +719,15 @@ const ORE_COLORS = {
 for (const [name, [col, dark, lite]] of Object.entries(ORE_COLORS)) {
   DRAW[name] = (c, r) => {
     DRAW.stone(c, r);
-    const clusters = 3 + ((r() * 2) | 0);
+    // Chunky nuggets set into the rock: each casts a shadow down-right into
+    // its socket and carries a bright facet on its upper-left corner.
+    const clusters = 4 + ((r() * 2) | 0);
     for (let i = 0; i < clusters; i++) {
-      const x = 2 + ((r() * 12) | 0), y = 2 + ((r() * 12) | 0);
-      // Diamond-shaped crystal: dark outline, body, bright facet.
-      setPx(c, x, y - 1, dark, 0.85); setPx(c, x, y + 1, dark, 0.85);
-      setPx(c, x - 1, y, dark, 0.85); setPx(c, x + 1, y, dark, 0.85);
-      setPx(c, x, y, col, 1, 14, r);
-      setPx(c, x + (r() < 0.5 ? 0 : 1), y, lite, 0.95);
-      if (r() < 0.6) setPx(c, x + 1, y + 1, col, 1, 18, r);
+      const x = pick(r), y = pick(r);
+      const shape = ORE_SHAPES[(r() * ORE_SHAPES.length) | 0];
+      for (const [dx, dy] of shape) setPx(c, wrap(x + dx + 1), wrap(y + dy + 1), dark, 0.75);
+      for (const [dx, dy] of shape) setPx(c, wrap(x + dx), wrap(y + dy), col, 1, 16, r);
+      setPx(c, x, y, lite, 0.95);
     }
   };
 }
@@ -739,6 +837,84 @@ for (const def of blockData) {
 }
 
 export const BLOCK_MATERIALS = materials; // index = material index used in geometry groups
+
+// --- Terrain variants: breaking up the tiling --------------------------------
+// A world of identical 16px tiles reads as a quilt from any distance. The
+// chunk meshes therefore use patched copies of the natural tiles whose
+// fragment shader works out which block a fragment belongs to (from its world
+// position) and, from a hash of that block:
+//   • ROTATE tiles: turns/flips the tile one of eight ways, so no two
+//     neighbours line up (only tiles with no "up" — soil, rock, foliage);
+//   • all DRIFT tiles: nudges brightness per block, plus a soft large-scale
+//     drift, so wide surfaces get lighter and darker patches.
+// Keyed on world position, not on the quad, so a block keeps its look when
+// its chunk is re-meshed. Everything that draws a block *off* the grid (item
+// drops, the held block, Prop Hunt disguises) keeps the plain BLOCK_MATERIALS
+// — there the hash would swim as the cube moves.
+const ROTATE = new Set(['grass_top', 'dirt', 'stone', 'sand', 'snow', 'andesite', 'clay', 'leaves',
+  ...Object.keys(ORE_COLORS)]);
+const DRIFT = new Set([...ROTATE, 'grass_side', 'gravel', 'cobblestone', 'mossy_cobblestone',
+  'sandstone', 'bedrock']);
+
+const TILE_PARS = /* glsl */`
+varying vec3 vTilePos;
+varying vec3 vTileN;
+float tileHash(vec3 p) {
+  p = fract(p * vec3(0.1031, 0.1030, 0.0973));
+  p += dot(p, p.yzx + 33.33);
+  return fract((p.x + p.y) * p.z);
+}
+float tileNoise(vec2 p) {
+  vec2 i = floor(p), f = fract(p);
+  f = f * f * (3.0 - 2.0 * f);
+  float a = tileHash(vec3(i, 7.0)), b = tileHash(vec3(i + vec2(1.0, 0.0), 7.0));
+  float c = tileHash(vec3(i + vec2(0.0, 1.0), 7.0)), d = tileHash(vec3(i + vec2(1.0, 1.0), 7.0));
+  return mix(mix(a, b, f.x), mix(c, d, f.x), f.y);
+}`;
+
+// Replaces three's <map_fragment>. textureGrad keeps mip selection on the
+// continuous UV — the turned UV jumps at every block edge, which would
+// otherwise drag a seam of the lowest mip along each one.
+const TILE_MAP = /* glsl */`
+#ifdef USE_MAP
+  vec3 tileCell = floor(vTilePos - vTileN * 0.5); // half a block in from the face
+  float tileRnd = tileHash(tileCell);
+  #ifdef TILE_ROTATE
+    vec2 tileUv = fract(vMapUv);
+    float tileTurn = floor(tileRnd * 8.0);
+    if (mod(tileTurn, 2.0) >= 1.0) tileUv = vec2(tileUv.y, 1.0 - tileUv.x);
+    if (mod(tileTurn, 4.0) >= 2.0) tileUv = 1.0 - tileUv;
+    if (tileTurn >= 4.0) tileUv.x = 1.0 - tileUv.x;
+    vec4 sampledDiffuseColor = textureGrad(map, tileUv, dFdx(vMapUv), dFdy(vMapUv));
+  #else
+    vec4 sampledDiffuseColor = texture2D(map, vMapUv);
+  #endif
+  float tileMacro = tileNoise(vTilePos.xz * 0.05 + vTilePos.y * 0.035);
+  sampledDiffuseColor.rgb *= 0.95 + 0.07 * fract(tileRnd * 13.7) + 0.12 * (tileMacro - 0.5);
+  diffuseColor *= sampledDiffuseColor;
+#endif`;
+
+function variedMaterial(material, rotate) {
+  const m = material.clone();
+  m.onBeforeCompile = (shader) => {
+    shader.vertexShader = shader.vertexShader
+      .replace('#include <common>', '#include <common>\nvarying vec3 vTilePos;\nvarying vec3 vTileN;')
+      .replace('#include <begin_vertex>',
+        '#include <begin_vertex>\nvTilePos = (modelMatrix * vec4(transformed, 1.0)).xyz;\nvTileN = normal;');
+    shader.fragmentShader = shader.fragmentShader
+      .replace('#include <common>', `#include <common>\n${rotate ? '#define TILE_ROTATE\n' : ''}${TILE_PARS}`)
+      .replace('#include <map_fragment>', TILE_MAP);
+  };
+  m.customProgramCacheKey = () => (rotate ? 'terrain-rotate' : 'terrain-drift');
+  return m;
+}
+
+// What the chunk meshes are drawn with (same indices as BLOCK_MATERIALS).
+export const TERRAIN_MATERIALS = materials.map((m, i) => {
+  const name = tileNames[i];
+  return ROTATE.has(name) ? variedMaterial(m, true) : DRIFT.has(name) ? variedMaterial(m, false) : m;
+});
+
 export const WATER_MATERIAL_INDEX = tileIndex.water;
 // Material indices of the see-through tiles, for the chunk shadow casters:
 // leaves throw dappled shadows through their own alpha; the rest (glass,

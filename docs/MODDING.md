@@ -23,9 +23,15 @@ After any change: `npm run dev` to test, `npm run build` to verify.
 
 2. **`src/textures/atlas.js`** — draw a 16×16 tile and map the block's faces:
    - add a `DRAW.mossy_stone = (c, r) => { ... }` routine (use the existing
-     helpers `fillNoise`, `blobs`, `setPx`);
+     helpers `paint`, `valueNoise`, `voronoi`, `setPx`; `wrap`/`pick` keep
+     details tileable);
    - add to `FACE_TILES`: `mossy_stone: t('mossy_stone')` (or
-     `{ top, side, bottom }` for different faces).
+     `{ top, side, bottom }` for different faces);
+   - natural tiles: add the tile name to `DRIFT` (per-block brightness
+     variation in the world) or, if the tile has no "up" — soil, rock,
+     foliage — to `ROTATE` (each block is also turned a random way, which
+     hides the tiling). Leave built or directional tiles (planks, bricks,
+     anything with a top edge) out of both.
 
 3. (Optional) make it placeable: add a matching **item** (below) with
    `"placeBlock": "mossy_stone"`.

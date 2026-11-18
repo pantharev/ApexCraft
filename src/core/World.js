@@ -3,7 +3,7 @@ import { CHUNK_SIZE, WORLD_HEIGHT, SEA_LEVEL, LOAD_RADIUS, UNLOAD_RADIUS, CHUNK_
 import { Chunk } from './Chunk.js';
 import { generateChunk } from '../world/generators/TerrainGen.js';
 import { buildChunkGeometry } from './ChunkMesher.js';
-import { BLOCK_MATERIALS, WATER_MATERIAL_INDEX, LEAVES_MATERIAL_INDEX } from '../textures/atlas.js';
+import { BLOCK_MATERIALS, TERRAIN_MATERIALS, WATER_MATERIAL_INDEX, LEAVES_MATERIAL_INDEX } from '../textures/atlas.js';
 import { getBlockId, isSolid } from '../blocks/BlockRegistry.js';
 
 const key = (cx, cz) => `${cx},${cz}`;
@@ -56,7 +56,7 @@ export class World {
 
     // Opaque chunk meshes use the shared per-tile material array (geometry
     // groups index into it); water uses its own transparent material.
-    this.materials = BLOCK_MATERIALS;
+    this.materials = TERRAIN_MATERIALS;
     this.waterMaterial = BLOCK_MATERIALS[WATER_MATERIAL_INDEX];
   }
 

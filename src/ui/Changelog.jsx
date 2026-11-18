@@ -7,6 +7,11 @@ import React from 'react';
 const CHANGELOG = [
   {
     date: 'November 18, 2026',
+    title: 'Sharper blocks, livelier land',
+    body: 'The blocks themselves got a fresh coat of pixels. Grass has individual blades and ragged turf hanging over the soil, dirt is studded with pebbles, stone is properly craggy, sand has grain, snow settles into soft blue hollows, bark has ridges, and leaves are built from little clumps you can see the sky between. Ores are now chunky nuggets set into the rock, much easier to spot down a dark tunnel. And the land no longer looks like a tiled floor: every block of grass, dirt, stone, and sand is turned a different way and shaded slightly differently, so meadows and cliffs read as one natural surface with lighter and darker patches.',
+  },
+  {
+    date: 'November 18, 2026',
     title: 'A new look: shadows, skies & atmosphere',
     body: 'ApexCraft got its first big graphics pass. The sun and moon now cast real shadows: trees throw dappled shade, hills darken the valleys behind them, and every mob, player, and dropped item has a shadow of its own. The flat blue backdrop is gone — in its place is a proper sky that deepens overhead, glows around the sun, burns orange at dawn and dusk, and carries drifting blocky clouds. Distant land now melts into haze instead of ending at a hard edge, diving under water plunges you into blue murk, and your eyes adjust as you head down into the caves, where torchlight flickers. Colours are richer and bright sand and snow no longer wash out. If shadows are too heavy for your machine, the pause menu has a new Graphics switch (phones and tablets start on Low).',
   },

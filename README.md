@@ -108,6 +108,8 @@ See [LICENSE](LICENSE) and [CLA.md](CLA.md) for full details.
   distance falloff), player hurt/death, jump/land. Press **M** to mute.
 
 ### Graphics
+- **Real-time sun and moon shadows**: terrain, trees (dappled through the leaves), mobs, players, and dropped items all cast and catch them. A **Graphics: High / Low** switch in the pause menu turns shadows off on slower machines (Low is the default on touch devices).
+- **Filmic lighting and atmosphere**: tone-mapped rendering, a gradient sky with drifting voxel clouds, warm low-sun light and cool moonlight, distance haze that dissolves the world's edge into the horizon, dense blue murk under water, and eyes that adjust to the dark underground.
 - **Procedural pixel-art textures** drawn on canvas at load (zero asset files): voronoi cobblestone/gravel, growth-ring logs, crystal ores with bright facets, wind-rippled sand, grainy planks.
 - **Per-vertex ambient occlusion** baked into the greedy mesher — soft contact shadows in every corner and crevice (with the classic diagonal-flip fix for smooth interpolation).
 - **Climate-tinted foliage**: grass tops and leaves blend per-vertex from lush deep green (wet) to dry yellow-brown (hot+dry) across the map.

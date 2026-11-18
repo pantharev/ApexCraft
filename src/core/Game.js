@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { World } from './World.js';
+import { World, SHADOW_CASTER_LAYER } from './World.js';
 import { Player } from '../player/Player.js';
 import { Interaction } from '../player/Interaction.js';
 import { ItemDrops } from '../player/ItemDrops.js';
@@ -31,10 +31,10 @@ import { HideSeek, TAG_RANGE } from '../systems/HideSeek.js';
 import { HideSeekBots } from '../systems/HideSeekBots.js';
 import { ZombiesMode } from '../systems/ZombiesMode.js';
 import { TAUNTS, tauntById } from '../systems/taunts.js';
-import { getBlockId, isSolid, liquidKind } from '../blocks/BlockRegistry.js';
+import { getBlockId, isSolid, isOpaque, liquidKind } from '../blocks/BlockRegistry.js';
 import { getItem } from '../items/ItemRegistry.js';
 import { MOBS } from '../entities/mobTypes.js';
-import { SEA_LEVEL } from '../config.js';
+import { SEA_LEVEL, WORLD_HEIGHT } from '../config.js';
 
 // Pet toast label: 'black_cat' -> 'Black Cat'.
 const petLabel = (type) => type.split('_').map((w) => w[0].toUpperCase() + w.slice(1)).join(' ');
@@ -95,6 +95,25 @@ const CREATIVE_KIT = [
   ['music_disc_voyage', 1],
 ];
 
+// Renderer tuning.
+const EXPOSURE = 1.0;        // tone-mapping exposure in the open
+const CAVE_EXPOSURE = 2.2;   // ...and deep underground (eased between the two)
+const CAVE_HAND_DIM = 0.7;   // how much darker the held item gets underground
+const SHADOW_MAP = 2048;     // sun/moon shadow map resolution
+const SHADOW_EXTENT = 64;    // half-width of the shadowed box, in blocks
+const SHADOW_DIST = 160;     // how far back along its direction the light sits
+
+const GFX_KEY = 'apex_graphics';
+function loadGraphics() {
+  try {
+    const v = localStorage.getItem(GFX_KEY);
+    if (v === 'high' || v === 'low') return v;
+  } catch (_) { /* private mode */ }
+  const touch = typeof window !== 'undefined' && window.matchMedia
+    && window.matchMedia('(pointer: coarse)').matches;
+  return touch ? 'low' : 'high';
+}
+
 // Owns the Three.js renderer/scene/camera, the World, and the Player, plus the
 // requestAnimationFrame loop. Mounted by the React <App/> into a container div.
 export class Game {
@@ -132,15 +151,28 @@ export class Game {
     this.dev = typeof location !== 'undefined' && ['localhost', '127.0.0.1'].includes(location.hostname);
     this._devTime = 0; // 0 = auto, 1 = day, 2 = night
 
-    this.renderer = new THREE.WebGLRenderer({ antialias: true });
+    // Graphics quality: 'high' adds real-time sun/moon shadows; 'low' keeps
+    // the rest (tone mapping, sky, fog) and is the default on touch devices.
+    // Remembered per browser and switchable from the pause menu.
+    this.graphics = loadGraphics();
+
+    this.renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' });
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     this.renderer.setSize(container.clientWidth, container.clientHeight);
+    // Filmic tone mapping: sunlit sand and snow roll off instead of clipping,
+    // and the frame gets real contrast. Exposure is nudged up underground
+    // each frame (see _loop), like eyes adjusting to the dark.
+    this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
+    this.renderer.toneMappingExposure = EXPOSURE;
+    // Always on; whether anything is rendered into it is decided by
+    // sun.castShadow (setGraphics), so toggling quality needs no reload.
+    this.renderer.shadowMap.enabled = true;
+    this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
     container.appendChild(this.renderer.domElement);
 
     this.scene = new THREE.Scene();
-    const skyColor = new THREE.Color('#87b6e8');
-    this.scene.background = skyColor;
-    this.scene.fog = new THREE.Fog(skyColor, 90, 200);
+    // Fog colour and distances are owned by DayNight — they follow the sky.
+    this.scene.fog = new THREE.Fog(0x87b6e8, 58, 112);
 
     this.camera = new THREE.PerspectiveCamera(
       75,
@@ -149,14 +181,46 @@ export class Game {
       1000
     );
 
-    // Lighting: sky hemisphere + a directional "sun" (driven by DayNight).
-    this.hemi = new THREE.HemisphereLight(0xffffff, 0x556677, 0.9);
+    // Lighting: sky hemisphere + one directional light that plays the sun by
+    // day and the moon by night. DayNight drives colour, strength, and
+    // direction; _aimSun keeps its shadow box over the area in view.
+    this.hemi = new THREE.HemisphereLight(0xffffff, 0x556677, 1.5);
     this.scene.add(this.hemi);
-    this.sun = new THREE.DirectionalLight(0xffffff, 0.8);
-    this.sun.position.set(50, 100, 30);
-    this.scene.add(this.sun);
+    this.sun = new THREE.DirectionalLight(0xffffff, 2.5);
+    this.scene.add(this.sun, this.sun.target);
+    const shadow = this.sun.shadow;
+    shadow.mapSize.set(SHADOW_MAP, SHADOW_MAP);
+    shadow.camera.left = shadow.camera.bottom = -SHADOW_EXTENT;
+    shadow.camera.right = shadow.camera.top = SHADOW_EXTENT;
+    shadow.camera.near = 1;
+    shadow.camera.far = SHADOW_DIST * 2;
+    shadow.camera.updateProjectionMatrix();
+    shadow.bias = -0.0004;
+    shadow.normalBias = 0.03;
+    // Chunk shadow casters live on their own layer (see World.js): hidden
+    // from the camera's normal pass, shown only while the shadow map is
+    // drawn. three builds the main draw list first and renders shadow maps
+    // second, testing both against camera.layers — so the layer is switched
+    // on as the sun's shadow pass begins and off at the top of each frame.
+    this.scene.onBeforeRender = () => this.camera.layers.disable(SHADOW_CASTER_LAYER);
+    const updateMatrices = shadow.updateMatrices.bind(shadow);
+    shadow.updateMatrices = (light, viewport) => {
+      this.camera.layers.enable(SHADOW_CASTER_LAYER);
+      updateMatrices(light, viewport);
+    };
+    this._shadowCenter = new THREE.Vector3();
+    this._shadowX = new THREE.Vector3();
+    this._shadowY = new THREE.Vector3();
+    // Camera surroundings, eased: how submerged it is and how far under a
+    // rock roof. Drives fog, sky murk, and exposure (see _senseSurroundings).
+    this._env = { underwater: 0, cave: 0 };
+    this._caveTarget = 0;
+    this._envT = 0;
+    this._heldMats = []; // the held view-model's private material copies
+    this._heldDim = -1;
 
     this.world = new World(this.scene);
+    this._applyGraphics();
     // Replay saved block edits before any terrain is generated.
     if (this._save) this.world.loadEdits(this._save.edits);
     this.player = new Player(this.world, this.camera, this.renderer.domElement);
@@ -229,7 +293,8 @@ export class Game {
     if (this._save?.vitals) this.vitals.load(this._save.vitals);
 
     // Day/night cycle + mobs.
-    this.dayNight = new DayNight(this.scene, this.sun, this.hemi, this.camera);
+    this.dayNight = new DayNight(this.scene, this.sun, this.hemi, this.camera,
+      this.map ? { fogNear: 90, fogFar: 200 } : undefined);
     if (this._save?.time != null) { this.dayNight.t = this._save.time; this.dayNight.update(0); }
     // Zombies arenas are locked to night on every client (a mode constant, not
     // synced state): zombies have burns:true and would cook in daylight.
@@ -1456,9 +1521,105 @@ export class Game {
         this.heldAnchor.remove(this.heldModel);
         this.heldModel.traverse((o) => o.geometry && o.geometry.dispose());
       }
+      for (const m of this._heldMats) m.dispose();
+      this._heldMats.length = 0;
+      this._heldDim = -1; // force a re-tint of the new materials
       this.heldModel = buildHeldModel(item);
+      // The hand darkens when you step into shade (it never casts: a shadow
+      // hanging off the camera would float in mid-air). Its materials are
+      // private copies, so _animateHeld can also dim it underground without
+      // touching the shared block/item materials the world is drawn with.
+      const own = (m) => {
+        const c = m.clone();
+        c.userData.base = c.color.clone();
+        this._heldMats.push(c);
+        return c;
+      };
+      this.heldModel.traverse((o) => {
+        if (!o.isMesh) return;
+        o.receiveShadow = true;
+        o.material = Array.isArray(o.material) ? o.material.map(own) : own(o.material);
+      });
       this.heldAnchor.add(this.heldModel);
     }
+  }
+
+  // Switch graphics quality at runtime (pause menu) and remember it.
+  setGraphics(quality) {
+    this.graphics = quality === 'low' ? 'low' : 'high';
+    try { localStorage.setItem(GFX_KEY, this.graphics); } catch (_) { /* private mode */ }
+    this._applyGraphics();
+    // Remesh so the chunks' shadow casters appear / go away (budgeted per
+    // frame by World.update, nearest first).
+    for (const c of this.world.chunks.values()) c.dirty = true;
+  }
+
+  _applyGraphics() {
+    const shadows = this.graphics === 'high';
+    this.sun.castShadow = shadows;
+    this.world.castShadows = shadows;
+  }
+
+  // Sample the camera's surroundings for the atmosphere: is it under water,
+  // and how far under a rock roof? Both are eased so fog, sky, and exposure
+  // glide instead of snapping as you cross a shoreline or a cave mouth.
+  _senseSurroundings(dt) {
+    const c = this.camera.position;
+    const bx = Math.floor(c.x), by = Math.floor(c.y), bz = Math.floor(c.z);
+    const e = this._env;
+    const wet = liquidKind(this.world.getBlock(bx, by, bz)) === 'water' ? 1 : 0;
+    e.underwater += (wet - e.underwater) * Math.min(1, dt * 10);
+    if (Math.abs(wet - e.underwater) < 0.002) e.underwater = wet;
+
+    // Roof depth is a column scan, so it's sampled a few times a second.
+    // Arena maps skip it: their roofs are skylights, not caves.
+    this._envT -= dt;
+    if (this._envT <= 0) {
+      this._envT = 0.25;
+      this._caveTarget = this.map ? 0 : this._roofCover(bx, by, bz);
+    }
+    e.cave += (this._caveTarget - e.cave) * Math.min(1, dt * 1.8);
+  }
+
+  // 0..1: how deep under solid rock the point is, averaged over five columns
+  // (so cave mouths blend). Shallow cover — a house roof, a tree, a ledge —
+  // counts for nothing; a dozen blocks of rock overhead is fully underground.
+  _roofCover(bx, by, bz) {
+    let sum = 0;
+    for (let i = 0; i < 5; i++) {
+      const x = bx + (i === 1 ? 5 : i === 2 ? -5 : 0);
+      const z = bz + (i === 3 ? 5 : i === 4 ? -5 : 0);
+      for (let y = WORLD_HEIGHT - 1; y > by; y--) {
+        if (isOpaque(this.world.getBlock(x, y, z))) {
+          sum += Math.max(0, Math.min(1, (y - by - 5) / 7));
+          break;
+        }
+      }
+    }
+    return sum / 5;
+  }
+
+  // Aim the directional light along DayNight's light direction and park its
+  // shadow box over the area in view: centred a little ahead of the player,
+  // and snapped to whole shadow-map texels so shadow edges don't crawl as the
+  // player moves.
+  _aimSun() {
+    const L = this.dayNight.lightDir;
+    const c = this._shadowCenter;
+    this.camera.getWorldDirection(c);
+    // The raw horizontal part of the view direction: it shrinks as the player
+    // looks up or down, which eases the box back over them.
+    const ahead = SHADOW_EXTENT * 0.35;
+    c.set(this.player.pos.x + c.x * ahead, this.player.pos.y, this.player.pos.z + c.z * ahead);
+    // The shadow camera's own right/up axes (it looks down -L with +Y up).
+    const X = this._shadowX.set(0, 1, 0).cross(L).normalize();
+    const Y = this._shadowY.copy(L).cross(X);
+    const texel = (SHADOW_EXTENT * 2) / SHADOW_MAP;
+    const sx = c.dot(X), sy = c.dot(Y);
+    c.addScaledVector(X, Math.round(sx / texel) * texel - sx);
+    c.addScaledVector(Y, Math.round(sy / texel) * texel - sy);
+    this.sun.target.position.copy(c);
+    this.sun.position.copy(c).addScaledVector(L, SHADOW_DIST);
   }
 
   start() {
@@ -1499,7 +1660,10 @@ export class Game {
     this.itemDrops.update(dt, this.player.pos);
     this.furnaces.update(dt);
     this.vitals.update(dt);
-    this.dayNight.update(dt);
+    this._senseSurroundings(dt);
+    this.dayNight.update(dt, this._env);
+    this._aimSun();
+    this.renderer.toneMappingExposure = EXPOSURE + (CAVE_EXPOSURE - EXPOSURE) * this._env.cave;
     this.torchLights.update(this.player.pos);
     if (this.hideSeek) this.hideSeek.update(dt);
     if (this.zombiesMode) this.zombiesMode.update(dt);
@@ -1676,6 +1840,13 @@ export class Game {
   // Idle bob plus a fast back-and-forth swing while mining.
   _animateHeld(dt) {
     if (!this.heldModel) return;
+    // Terrain darkens underground through its baked skylight, which the hand
+    // doesn't have — dim it to match, or it glows in a dark cave.
+    const dim = 1 - CAVE_HAND_DIM * this._env.cave;
+    if (Math.abs(dim - this._heldDim) > 0.005) {
+      this._heldDim = dim;
+      for (const m of this._heldMats) m.color.copy(m.userData.base).multiplyScalar(dim);
+    }
     this.heldTime += dt;
     const bob = Math.sin(this.heldTime * 2) * 0.012;
     this.heldAnchor.position.y = -0.38 + bob;
@@ -1704,6 +1875,9 @@ export class Game {
     this.torchLights.dispose();
     this.damageZones.dispose();
     this.music.dispose();
+    this.dayNight.dispose();
+    this.sun.dispose(); // frees the shadow map
+    for (const m of this._heldMats) m.dispose();
     this.renderer.dispose();
     if (this.renderer.domElement.parentNode) {
       this.renderer.domElement.parentNode.removeChild(this.renderer.domElement);

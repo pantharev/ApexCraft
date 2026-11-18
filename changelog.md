@@ -9,6 +9,66 @@ updated with every merged PR** (and mirror a short player-facing entry in the
 
 ---
 
+## 2026-11-18 — Renderer & lighting pass (shadows, sky, tone mapping)
+
+First of the planned graphics passes (next: performance, then character/mob
+models). No gameplay, save, or netcode changes.
+
+- **Renderer** (`Game` ctor): `ACESFilmicToneMapping` + `PCFSoftShadowMap`.
+  Exposure is `EXPOSURE` (1.0) in the open, eased to `CAVE_EXPOSURE` (2.2)
+  underground. **GOTCHA: ACES crushes low light ~3x compared with the old
+  untone-mapped output**, so the night palette is deliberately bright
+  (`MOON_INTENSITY` 1.2, `HEMI_NIGHT` 1.45, light-blue night ambient). After
+  any retune, look at Zombies (night-locked) and a deep cave. three's lights
+  are physical: a Lambert surface reflects intensity/PI.
+- **Shadows**: one `DirectionalLight` plays sun *and* moon — `DayNight.lightDir`
+  flips at the horizon, where its intensity is zero, so the swap is invisible.
+  `Game._aimSun` parks a ±64-block, 2048² shadow box a little ahead of the
+  player, snapped to shadow texels (no edge crawl while walking).
+- **Chunk shadow casters** (`World.js`, `ChunkMesher.assembleGrouped`): the
+  terrain mesh has a draw group per tile, so letting it cast would redraw
+  every group. Instead it only *receives*; groups are ordered solid → leaves →
+  other cut-outs (split points in `geometry.userData.shadow`) and each chunk
+  gets up to two caster meshes sharing its buffers through a draw range —
+  solids in one call, leaves in one alpha-tested call. Glass, plants, and
+  ladders cast nothing (skylit arenas stay lit). Casters are front-sided, so
+  three renders their back faces: no self-shadowing (double-sided leaves went
+  near-black). **They live on `SHADOW_CASTER_LAYER`**: `scene.onBeforeRender`
+  hides the layer from the camera and a wrapper on `sun.shadow.updateMatrices`
+  shows it — this leans on three building the main draw list *before* it
+  renders shadow maps (true in r169). Measured in a forest: shadow pass
+  ~0.5–1 ms; casters drawn as no-ops in the main pass cost +2.3 ms (~25%),
+  which is why the layer exists. If a three upgrade changes that order they
+  fall back to invisible no-op draws (colour/depth writes are off).
+- **Entities**: mob parts, remote avatars, Prop Hunt disguise cubes (a prop
+  without a shadow would be a tell), and item drops cast + receive. The held
+  view-model receives only, on private material clones that `_animateHeld`
+  dims underground (`CAVE_HAND_DIM`) — it has no baked skylight and glowed.
+- **Sky** (`src/systems/Sky.js`): gradient dome `ShaderMaterial` whose horizon
+  colour *is* the fog colour (fogged terrain dissolves into it), plus a
+  blocky cloud plane (64² `DataTexture`, sampled in world space, y=172).
+  Neither is tone-mapped — same as fog, which three applies after tone
+  mapping. `DayNight.js` owns the palette (`PAL`), blended by `dayAmt`/`dusk`.
+- **Fog**: 58–112 in open worlds — `far` sits inside the nearest unloaded
+  terrain, so the world's edge no longer pops in; arena maps keep 90–200
+  (`DayNight` ctor option). `Game._senseSurroundings` eases `_env
+  {underwater, cave}`: under water = dense blue murk (the dome collapses to
+  it, sun/moon/stars/clouds hide); cave (rock roof > 5 blocks over five
+  sampled columns, never in arenas) = near-black fog + the exposure lift.
+- Solid block tiles are now mipmapped (`NearestMipmapLinearFilter`) so
+  distant terrain stops shimmering; cut-out/translucent tiles are not (their
+  alpha would average away). Torch point lights flicker (`TorchLights`).
+- **Quality**: `Game.graphics` `'high'` | `'low'` (no shadows; default on
+  touch), stored in localStorage `apex_graphics`, switched from the pause
+  menu via `Game.setGraphics` (marks chunks dirty to add/remove casters).
+- **For the performance pass**: the main pass is ~1,800–2,000 draw calls and
+  ~8–9 ms of render time in a forest (one group per tile per chunk). A texture
+  array/atlas (one draw per chunk) is the real fix and would also let terrain
+  cast directly.
+- Known gaps: the player has no body, so no own shadow; the shadow box ends
+  at ~64 blocks (just past where fog starts); mobs keep their 0.32 emissive
+  fill and look washed in direct sun — left for the mob pass.
+
 ## 2026-07-17 — Creative mob spawner items
 
 One `spawn_<type>` item per `MOBS` entry (14, incl. wolf/cat pets and the

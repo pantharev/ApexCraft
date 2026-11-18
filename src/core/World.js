@@ -3,10 +3,43 @@ import { CHUNK_SIZE, WORLD_HEIGHT, SEA_LEVEL, LOAD_RADIUS, UNLOAD_RADIUS, CHUNK_
 import { Chunk } from './Chunk.js';
 import { generateChunk } from '../world/generators/TerrainGen.js';
 import { buildChunkGeometry } from './ChunkMesher.js';
-import { BLOCK_MATERIALS, WATER_MATERIAL_INDEX } from '../textures/atlas.js';
+import { BLOCK_MATERIALS, WATER_MATERIAL_INDEX, LEAVES_MATERIAL_INDEX } from '../textures/atlas.js';
 import { getBlockId, isSolid } from '../blocks/BlockRegistry.js';
 
 const key = (cx, cz) => `${cx},${cz}`;
+
+export const SHADOW_CASTER_LAYER = 1;
+
+// Shadow-caster materials. A chunk's terrain mesh has one draw group per tile,
+// and three's shadow pass would redraw every group — a dozen-plus calls per
+// chunk. Instead the terrain mesh only *receives* shadows, and each chunk gets
+// up to two caster meshes that reuse its vertex/index buffers through a draw
+// range: everything solid in one call, the leaves in another (alpha-tested, so
+// canopies throw dappled shade). The casters sit on their own layer, which the
+// Game shows to the camera only while the shadow map is being drawn — so the
+// normal pass never touches them (drawing them there as no-ops cost ~25% of
+// the frame). The colour/depth-write flags are a belt-and-braces fallback.
+// Both stay front-sided, which makes three render their *back* faces into the
+// shadow map: a canopy is shaded by its far side, so its sunlit faces never
+// shadow themselves (double-sided leaves did, and went near-black).
+const SOLID_CASTER = new THREE.MeshBasicMaterial({ colorWrite: false, depthWrite: false });
+const LEAF_CASTER = new THREE.MeshBasicMaterial({
+  map: BLOCK_MATERIALS[LEAVES_MATERIAL_INDEX].map, alphaTest: 0.5,
+  colorWrite: false, depthWrite: false,
+});
+
+function casterMesh(src, start, count, material) {
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', src.getAttribute('position'));
+  if (material.map) g.setAttribute('uv', src.getAttribute('uv'));
+  g.setIndex(src.index);
+  g.setDrawRange(start, count);
+  g.boundingSphere = src.boundingSphere;
+  const m = new THREE.Mesh(g, material);
+  m.castShadow = true;
+  m.layers.set(SHADOW_CASTER_LAYER);
+  return m;
+}
 const TORCH = getBlockId('torch');
 const GLOW = getBlockId('glow_mushroom');
 
@@ -19,6 +52,7 @@ export class World {
     this.torches = new Set(); // "x,y,z" of placed torches (for dynamic lights)
     this.torchVersion = 0;    // bumped when the torch set changes
     this.onEdit = null;       // (wx, wy, wz, id, prevId) — fired on every setBlock (sync + particles)
+    this.castShadows = false; // build shadow-caster meshes per chunk (Game.setGraphics)
 
     // Opaque chunk meshes use the shared per-tile material array (geometry
     // groups index into it); water uses its own transparent material.
@@ -187,12 +221,19 @@ export class World {
       // Material array; geometry groups select the per-tile material.
       const m = new THREE.Mesh(opaque, this.materials);
       m.frustumCulled = true;
+      m.receiveShadow = true;
       group.add(m);
+      if (this.castShadows) {
+        const { solidCount, leafStart, leafCount } = opaque.userData.shadow;
+        if (solidCount > 0) group.add(casterMesh(opaque, 0, solidCount, SOLID_CASTER));
+        if (leafCount > 0) group.add(casterMesh(opaque, leafStart, leafCount, LEAF_CASTER));
+      }
     }
     if (water) {
       const m = new THREE.Mesh(water, this.waterMaterial);
       m.frustumCulled = true;
       m.renderOrder = 1;
+      m.receiveShadow = true;
       group.add(m);
     }
     chunk.mesh = group;

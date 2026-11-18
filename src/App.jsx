@@ -356,6 +356,8 @@ export default function App() {
               onResume={resume}
               onSave={() => gameRef.current?.save()}
               onQuit={quitToMenu}
+              graphics={gameRef.current?.graphics}
+              onGraphics={(q) => gameRef.current?.setGraphics(q)}
             />
           )}
         </>

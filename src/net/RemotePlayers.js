@@ -49,6 +49,8 @@ function box(w, h, d, color, x, y, z, legPivot = false) {
   mat.emissiveIntensity = 0.3;
   const mesh = new THREE.Mesh(geo, mat);
   mesh.position.set(x, legPivot ? y + h / 2 : y, z);
+  mesh.castShadow = true;
+  mesh.receiveShadow = true;
   return mesh;
 }
 
@@ -66,7 +68,7 @@ export function nameTag(name, { y = 2.25, scale = 1 } = {}) {
   ctx.fillText(name, 128, 33);
   const tex = new THREE.CanvasTexture(c);
   tex.colorSpace = THREE.SRGBColorSpace;
-  const sprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, depthTest: false, transparent: true }));
+  const sprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, depthTest: false, transparent: true, toneMapped: false }));
   sprite.scale.set(1.6 * scale, 0.4 * scale, 1);
   sprite.position.y = y;
   return sprite;
@@ -84,7 +86,7 @@ export function emojiSprite(emoji) {
   ctx.fillText(emoji, 64, 72);
   const tex = new THREE.CanvasTexture(c);
   tex.colorSpace = THREE.SRGBColorSpace;
-  const sprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, depthTest: false, transparent: true }));
+  const sprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, depthTest: false, transparent: true, toneMapped: false }));
   sprite.scale.set(0.9, 0.9, 1);
   return sprite;
 }
@@ -157,6 +159,10 @@ export class RemotePlayers {
       // Full block size so it matches the arena's real placed blocks.
       p.disguiseMesh = buildBlockCube(getBlock(blockId).name, 1.0, true);
       p.disguiseMesh.position.y = 0.5; // sit the block on the ground
+      // Real blocks throw and catch shadows; a prop that didn't would be an
+      // instant tell for seekers.
+      p.disguiseMesh.castShadow = true;
+      p.disguiseMesh.receiveShadow = true;
       p.group.add(p.disguiseMesh);
     }
     for (const b of p.body) b.visible = !blockId || (showTag && b === p.tag);

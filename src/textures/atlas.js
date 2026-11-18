@@ -697,10 +697,20 @@ tileNames.forEach((name, i) => {
   DRAW[name](ctx, mulberry32(0x9e37 + i * 131));
   const tex = new THREE.CanvasTexture(canvas);
   tex.magFilter = THREE.NearestFilter;
-  tex.minFilter = THREE.NearestFilter;
   tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
   tex.colorSpace = THREE.SRGBColorSpace;
-  tex.generateMipmaps = false;
+  // Solid tiles get mipmaps so distant terrain settles into flat colour
+  // instead of shimmering as texels alias (every tile is its own texture, so
+  // mips can't bleed across tiles). Up close it is still crisp pixel art.
+  // Cut-out and translucent tiles stay unfiltered: averaging their alpha would
+  // thin leaves and grass out to nothing at a distance.
+  if (CUTOUT.has(name) || TRANSPARENT.has(name)) {
+    tex.minFilter = THREE.NearestFilter;
+    tex.generateMipmaps = false;
+  } else {
+    tex.minFilter = THREE.NearestMipmapLinearFilter;
+    tex.generateMipmaps = true;
+  }
   textures.push(tex);
 
   const opts = { map: tex, vertexColors: true };
@@ -730,6 +740,11 @@ for (const def of blockData) {
 
 export const BLOCK_MATERIALS = materials; // index = material index used in geometry groups
 export const WATER_MATERIAL_INDEX = tileIndex.water;
+// Material indices of the see-through tiles, for the chunk shadow casters:
+// leaves throw dappled shadows through their own alpha; the rest (glass,
+// plants, ladders…) cast none — so skylights still let the sun in.
+export const LEAVES_MATERIAL_INDEX = tileIndex.leaves;
+export const CUTOUT_MATERIAL_INDICES = new Set([...CUTOUT].map((n) => tileIndex[n]));
 export const LAVA_MATERIAL_INDEX = tileIndex.lava; // exported for optional texture animation later
 
 export function faceMaterialIndex(blockId, face) {

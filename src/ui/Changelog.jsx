@@ -6,6 +6,11 @@ import React from 'react';
 
 const CHANGELOG = [
   {
+    date: 'November 18, 2026',
+    title: 'A new look: shadows, skies & atmosphere',
+    body: 'ApexCraft got its first big graphics pass. The sun and moon now cast real shadows: trees throw dappled shade, hills darken the valleys behind them, and every mob, player, and dropped item has a shadow of its own. The flat blue backdrop is gone — in its place is a proper sky that deepens overhead, glows around the sun, burns orange at dawn and dusk, and carries drifting blocky clouds. Distant land now melts into haze instead of ending at a hard edge, diving under water plunges you into blue murk, and your eyes adjust as you head down into the caves, where torchlight flickers. Colours are richer and bright sand and snow no longer wash out. If shadows are too heavy for your machine, the pause menu has a new Graphics switch (phones and tablets start on Low).',
+  },
+  {
     date: 'July 17, 2026',
     title: 'Creative mode: mob spawners',
     body: 'The creative palette now carries a spawner item for every mob in the game — pigs to creepers, villagers to iron golems, and the new wolves and cats, now joined by black cats (for Claudia Claude 🐈‍⬛). Right-click the ground to place a live mob exactly where you want it: build a farm, stage a golem-versus-zombie brawl, or spawn a wolf and tame it on the spot (taming is free in creative). Black cats also prowl the wild and tame with raw fish, and creepers fear them just like their ginger cousins. Creative worlds no longer spawn mobs on their own, and your placed menagerie won’t wander-despawn while you build. Works in multiplayer too.',

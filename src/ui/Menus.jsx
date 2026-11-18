@@ -179,7 +179,14 @@ export function MainMenu({ worlds, onPlay, onCreate, onDelete, onHome, onHost, o
 }
 
 // In-game pause menu (shown when the mouse is released).
-export function PauseMenu({ worldName, onResume, onSave, onQuit, justSaved }) {
+export function PauseMenu({ worldName, onResume, onSave, onQuit, justSaved, graphics, onGraphics }) {
+  // Mirrors Game.graphics; the game applies the change live.
+  const [quality, setQuality] = useState(graphics || 'high');
+  const toggleQuality = () => {
+    const next = quality === 'high' ? 'low' : 'high';
+    setQuality(next);
+    onGraphics(next);
+  };
   return (
     <div style={overlay}>
       <div style={{ ...panel, minWidth: 300, textAlign: 'center' }}>
@@ -188,6 +195,12 @@ export function PauseMenu({ worldName, onResume, onSave, onQuit, justSaved }) {
         <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
           <button style={btn} onClick={onResume}>Resume</button>
           <button style={btnGrey} onClick={onSave}>{justSaved ? 'Saved!' : 'Save World'}</button>
+          {onGraphics && (
+            <button style={btnGrey} onClick={toggleQuality}
+              title="High adds real-time sun and moon shadows; Low turns them off for speed">
+              Graphics: {quality === 'high' ? 'High (shadows)' : 'Low (no shadows)'}
+            </button>
+          )}
           <button style={btnGrey} onClick={onQuit}>Save &amp; Quit to Menu</button>
         </div>
         <div style={{ marginTop: 16, fontSize: 12, opacity: 0.55, lineHeight: 1.7 }}>

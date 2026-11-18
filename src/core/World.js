@@ -122,8 +122,11 @@ export class World {
   // (setActiveMap) must be set before this is constructed: the chunk workers
   // are told them once, here. `workers: false` builds everything on the main
   // thread (also what happens by itself if workers cannot start).
-  constructor(scene, { workers = true } = {}) {
+  // `scenery: true` is for a world that is only looked at (the menu flyover):
+  // nothing stands on it, so update() never stops to build chunks itself.
+  constructor(scene, { workers = true, scenery = false } = {}) {
     this.scene = scene;
+    this.scenery = scenery;
     this.chunks = new Map();
     this.cache = new Map(); // LRU of unloaded chunks (insertion order = age)
     this.edits = new Map(); // chunkKey -> Map(localIndex -> blockId): player changes
@@ -552,7 +555,8 @@ export class World {
       this._drain();
       // The ground under and around the player has to exist before physics
       // runs. Normally the workers got there long ago and this does nothing.
-      for (let dx = -1; dx <= 1; dx++) {
+      // (Scenery has no player to drop through it, so it just waits.)
+      for (let dx = -1; dx <= 1 && !this.scenery; dx++) {
         for (let dz = -1; dz <= 1; dz++) {
           if (!this.getChunk(pcx + dx, pcz + dz)) this.ensureChunk(pcx + dx, pcz + dz);
         }
@@ -560,7 +564,7 @@ export class World {
     }
     this._remeshEdits(pcx, pcz);
     if (this.pool) this._stream(pcx, pcz);
-    else this._buildNearest(pcx, pcz, SYNC_BUDGET);
+    else this._buildNearest(pcx, pcz, this.scenery ? 1 : SYNC_BUDGET);
 
     // Unload far chunks: drop their meshes (free GPU memory) and move the block
     // data into the LRU cache so a revisit skips regeneration and keeps edits.

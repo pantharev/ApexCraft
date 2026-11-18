@@ -9,6 +9,7 @@ import { Furnaces } from '../player/Furnaces.js';
 import { ChestStorage } from '../player/ChestStorage.js';
 import { Vitals } from '../player/Vitals.js';
 import { DayNight } from '../systems/DayNight.js';
+import { SunRig } from '../systems/SunRig.js';
 import { MobManager } from '../systems/MobManager.js';
 import { TorchLights } from '../systems/TorchLights.js';
 import { Projectiles } from '../systems/Projectiles.js';
@@ -100,15 +101,13 @@ const CREATIVE_KIT = [
 const EXPOSURE = 1.0;        // tone-mapping exposure in the open
 const CAVE_EXPOSURE = 2.2;   // ...and deep underground (eased between the two)
 const CAVE_HAND_DIM = 0.7;   // how much darker the held item gets underground
-const SHADOW_MAP = 2048;     // sun/moon shadow map resolution
-const SHADOW_EXTENT = 64;    // half-width of the shadowed box, in blocks
-const SHADOW_DIST = 160;     // how far back along its direction the light sits
 
 const MAX_STEP = 0.05;       // longest simulation step, seconds (see _loop)
 const STATS_INTERVAL = 0.1;  // seconds between HUD snapshots pushed to React
 
 const GFX_KEY = 'apex_graphics';
-function loadGraphics() {
+// (Exported for the menu flyover, which honours the same setting.)
+export function loadGraphics() {
   try {
     const v = localStorage.getItem(GFX_KEY);
     if (v === 'high' || v === 'low') return v;
@@ -186,35 +185,12 @@ export class Game {
     );
 
     // Lighting: sky hemisphere + one directional light that plays the sun by
-    // day and the moon by night. DayNight drives colour, strength, and
-    // direction; _aimSun keeps its shadow box over the area in view.
-    this.hemi = new THREE.HemisphereLight(0xffffff, 0x556677, 1.5);
-    this.scene.add(this.hemi);
-    this.sun = new THREE.DirectionalLight(0xffffff, 2.5);
-    this.scene.add(this.sun, this.sun.target);
-    const shadow = this.sun.shadow;
-    shadow.mapSize.set(SHADOW_MAP, SHADOW_MAP);
-    shadow.camera.left = shadow.camera.bottom = -SHADOW_EXTENT;
-    shadow.camera.right = shadow.camera.top = SHADOW_EXTENT;
-    shadow.camera.near = 1;
-    shadow.camera.far = SHADOW_DIST * 2;
-    shadow.camera.updateProjectionMatrix();
-    shadow.bias = -0.0004;
-    shadow.normalBias = 0.03;
-    // Chunk shadow casters live on their own layer (see World.js): hidden
-    // from the camera's normal pass, shown only while the shadow map is
-    // drawn. three builds the main draw list first and renders shadow maps
-    // second, testing both against camera.layers — so the layer is switched
-    // on as the sun's shadow pass begins and off at the top of each frame.
-    this.scene.onBeforeRender = () => this.camera.layers.disable(SHADOW_CASTER_LAYER);
-    const updateMatrices = shadow.updateMatrices.bind(shadow);
-    shadow.updateMatrices = (light, viewport) => {
-      this.camera.layers.enable(SHADOW_CASTER_LAYER);
-      updateMatrices(light, viewport);
-    };
-    this._shadowCenter = new THREE.Vector3();
-    this._shadowX = new THREE.Vector3();
-    this._shadowY = new THREE.Vector3();
+    // day and the moon by night (systems/SunRig.js). DayNight drives colour,
+    // strength, and direction; _aimSun keeps the shadow box over the area in
+    // view.
+    this.sunRig = new SunRig(this.scene, this.camera);
+    this.hemi = this.sunRig.hemi;
+    this.sun = this.sunRig.sun;
     // Camera surroundings, eased: how submerged it is and how far under a
     // rock roof. Drives fog, sky murk, and exposure (see _senseSurroundings).
     this._env = { underwater: 0, cave: 0 };
@@ -1649,26 +1625,9 @@ export class Game {
   }
 
   // Aim the directional light along DayNight's light direction and park its
-  // shadow box over the area in view: centred a little ahead of the player,
-  // and snapped to whole shadow-map texels so shadow edges don't crawl as the
-  // player moves.
+  // shadow box over the area in view, a little ahead of the player.
   _aimSun() {
-    const L = this.dayNight.lightDir;
-    const c = this._shadowCenter;
-    this.camera.getWorldDirection(c);
-    // The raw horizontal part of the view direction: it shrinks as the player
-    // looks up or down, which eases the box back over them.
-    const ahead = SHADOW_EXTENT * 0.35;
-    c.set(this.player.pos.x + c.x * ahead, this.player.pos.y, this.player.pos.z + c.z * ahead);
-    // The shadow camera's own right/up axes (it looks down -L with +Y up).
-    const X = this._shadowX.set(0, 1, 0).cross(L).normalize();
-    const Y = this._shadowY.copy(L).cross(X);
-    const texel = (SHADOW_EXTENT * 2) / SHADOW_MAP;
-    const sx = c.dot(X), sy = c.dot(Y);
-    c.addScaledVector(X, Math.round(sx / texel) * texel - sx);
-    c.addScaledVector(Y, Math.round(sy / texel) * texel - sy);
-    this.sun.target.position.copy(c);
-    this.sun.position.copy(c).addScaledVector(L, SHADOW_DIST);
+    this.sunRig.aim(this.dayNight.lightDir, this.player.pos);
   }
 
   start() {

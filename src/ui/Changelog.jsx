@@ -7,6 +7,11 @@ import React from 'react';
 const CHANGELOG = [
   {
     date: 'November 18, 2026',
+    title: 'A living title screen',
+    body: 'The title screen and the world list now sit in front of a real world: the camera drifts slowly over freshly generated hills, forests, rivers and coasts while the sun crosses the sky, sets, and gives way to a short starry night. It is the game itself running behind the menu, not a recording — a different place every visit, and a look at what you are about to walk into. The menus were redrawn to match, with a new wordmark and glassy panels, and they are easier to use on a phone.',
+  },
+  {
+    date: 'November 18, 2026',
     title: 'Smooth exploring',
     body: 'Walking, sprinting or flying into new territory used to cause small stutters, because the game had to stop and build each new piece of the world before it could draw the next frame. That work now happens in the background, on your other processor cores, while the game keeps running — so the land streams in ahead of you without the hitches, and worlds open in a fraction of the time. Breaking and placing blocks responds faster too. Nothing looks different; exploring just feels smoother.',
   },
@@ -141,7 +146,9 @@ export function Changelog({ onClose }) {
   return (
     <div style={{
       position: 'absolute', inset: 0, overflowY: 'auto', zIndex: 6,
-      background: 'linear-gradient(180deg, #0a1430 0%, #16386b 60%, #1d4a85 100%)',
+      // A dark wash: the live menu backdrop still drifts behind the page,
+      // dimmed enough to read long text over.
+      background: 'rgba(6,12,28,0.80)',
       color: '#eaf2ff', font: '16px system-ui',
       display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '40px 20px',
     }}>

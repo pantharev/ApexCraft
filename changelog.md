@@ -9,6 +9,35 @@ updated with every merged PR** (and mirror a short player-facing entry in the
 
 ---
 
+## 2026-11-18 — #59 Menu backdrop: a live flyover behind the title screen and world list
+
+`src/core/Backdrop.js` runs the real engine behind the menus: a `World` in
+the new `scenery` mode (it never builds a chunk on the main thread — nothing
+stands on it), the game's `DayNight` sky, and the lights and shadow box, now
+factored out of `Game.js` into `src/systems/SunRig.js`. A camera glides over
+the terrain at 4.5 blocks/s: its altitude is planned over the highest ground
+in the next 78 blocks, the heading wanders and leans toward land, a day lasts
+150 s and a night 30 s. It starts at the best-scoring of 48 random spots in a
+random seed (mostly land, green, some relief and woods). The flight is module
+state, so the title screen and the world list share it and it resumes after a
+game. `src/ui/MenuBackdrop.jsx` starts it one frame after the menu paints and
+fades it in once about 90 chunks are meshed; it also holds the menus' shared
+look (`Wordmark`, `card`, `SHADE`), used by the restyled `Landing.jsx` and
+`MainMenu`. Cost on the test machine: about 3.4 ms a frame with shadows.
+
+Gotchas: the backdrop and the game share module state (the noise seed, the
+gen mode), so only one may exist at a time — the backdrop reseeds when
+constructed and must be disposed before `new Game`; being a child of the menu
+screens gives it that lifetime. Its `WebGLRenderer` is one per page, kept
+between visits: releasing a context took ~65 ms, right as the player clicks
+Play, and a fresh one recompiles every shader. A lost context falls back to
+the plain gradient and a new renderer is made on the next visit. "Reduce
+motion" holds a still view and stops drawing once the terrain has filled in.
+`loadGraphics` is exported from `Game.js` so the backdrop honours High/Low.
+A page that is delivered no animation frames (a hidden embed) never starts
+the backdrop, by design. Not done: mobs in the flyover; `Game.dispose` still
+leaves its own WebGL context to the garbage collector.
+
 ## 2026-11-18 — #58 Chunk workers: generation and meshing off the main thread
 
 Chunks are generated and meshed in a pool of workers (`src/core/ChunkPool.js`
@@ -605,8 +634,8 @@ From the 2026-07-02 code audit (see PR #37–#39 review + session notes):
 
 Pre-alpha. Four game modes on `main` — survival, creative, Prop Hunt (town /
 castle / playroom), and Zombies (bastion) — plus pets, flowing liquids, a
-procedural soundtrack, and the six graphics/performance passes above (#53 to
-#58). Tycoon mode (#52, `feature/tycoon`) is parked and unmerged: it needs its
+procedural soundtrack, the six graphics/performance passes above (#53 to
+#58), and the live menu backdrop (#59). Tycoon mode (#52, `feature/tycoon`) is parked and unmerged: it needs its
 changelog entries and its `worker` mob merged by hand, and it claims block ids
 69–72, so new blocks on `main` start at 73. Deploys: Vercel builds previews
 per PR; CI = `npm run build` + `server/test.js` + `chess/engineTest.js` +

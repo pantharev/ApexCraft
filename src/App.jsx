@@ -5,6 +5,7 @@ import { listWorlds, loadWorld, deleteWorld } from './systems/Storage.js';
 import { Net } from './net/Net.js';
 import { MainMenu, PauseMenu } from './ui/Menus.jsx';
 import { Landing } from './ui/Landing.jsx';
+import { MenuBackdrop } from './ui/MenuBackdrop.jsx';
 import { Hotbar, InventoryPanel, CreativeInventory, CraftingTableScreen, FurnaceScreen, ChestScreen } from './ui/InventoryUI.jsx';
 import { ChessScreen } from './ui/ChessScreen.jsx';
 import { HideSeekHUD, TauntWheel, HideSeekTouch } from './ui/HideSeekUI.jsx';
@@ -189,6 +190,11 @@ export default function App() {
   return (
     <div style={{ position: 'relative', width: '100%', height: '100%' }}>
       <div ref={containerRef} style={{ width: '100%', height: '100%' }} />
+
+      {/* A live flight over generated terrain behind the title screen and the
+          world list. One instance spans both, so it does not restart between
+          them; it is gone (and its workers stopped) before a Game is built. */}
+      {phase !== 'playing' && <MenuBackdrop />}
 
       {phase === 'landing' && <Landing onPlay={() => setPhase('menu')} />}
 

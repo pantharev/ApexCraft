@@ -7,6 +7,11 @@ import React from 'react';
 const CHANGELOG = [
   {
     date: 'November 18, 2026',
+    title: 'Creatures with character',
+    body: 'Every mob has been repainted and rebuilt. Animals have faces now: pigs with snouts and floppy ears, cows with patched hides, horns and a swishing tail, woolly sheep, chickens with a comb, wattle and wings that flap when they fall, tabby cats with striped coats. Wolves wag their tails when you tame them. The monsters got scarier: zombies wear torn shirts over rotting skin, skeletons show their ribs and hold their arms out to draw a bow, creepers finally have that face on four stubby legs, and spiders scuttle on eight splayed legs. And watch the dark — zombie, spider and golem eyes now glow at night, so you will see them looking at you before you see them.',
+  },
+  {
+    date: 'November 18, 2026',
     title: 'Sharper blocks, livelier land',
     body: 'The blocks themselves got a fresh coat of pixels. Grass has individual blades and ragged turf hanging over the soil, dirt is studded with pebbles, stone is properly craggy, sand has grain, snow settles into soft blue hollows, bark has ridges, and leaves are built from little clumps you can see the sky between. Ores are now chunky nuggets set into the rock, much easier to spot down a dark tunnel. And the land no longer looks like a tiled floor: every block of grass, dirt, stone, and sand is turned a different way and shaded slightly differently, so meadows and cliffs read as one natural surface with lighter and darker patches.',
   },

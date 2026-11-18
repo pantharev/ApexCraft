@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { MOBS } from '../entities/mobTypes.js';
-import { buildMobModel, animateMob } from '../entities/MobModels.js';
+import { buildMobModel, animateMob, flashMob } from '../entities/MobModels.js';
 import { rayAABB } from '../systems/MobManager.js';
 import { nameTag } from './RemotePlayers.js';
 
@@ -34,7 +34,7 @@ export class GhostMobs {
       // tip-over death animation (removal comes when the snapshot drops it).
       if (s.h < g.health && s.h > 0) {
         g.hurtTimer = 0.25;
-        this._tint(g, 0xff3030, 1);
+        flashMob(g.parts, true);
       }
       if (s.h <= 0) g.dead = true;
       g.health = s.h;
@@ -136,24 +136,7 @@ export class GhostMobs {
     return g;
   }
 
-  _tint(g, hex, intensity) {
-    for (const p of g.parts) {
-      if (p.material && p.material.emissive) {
-        p.material.emissive.setHex(hex);
-        p.material.emissiveIntensity = intensity;
-      }
-    }
-  }
-
-  _untint(g) {
-    for (const p of g.parts) {
-      const m = p.material;
-      if (m && m.emissive) {
-        m.emissive.setHex(m.userData.baseEmissive ?? 0x000000);
-        m.emissiveIntensity = 0.32;
-      }
-    }
-  }
+  _untint(g) { flashMob(g.parts, false); }
 
   update(dt) {
     const k = Math.min(1, dt * LERP);

@@ -11,13 +11,17 @@ import { getBlock, getBlockId } from '../blocks/BlockRegistry.js';
 //
 // Note: the Game disposes geometry when the held item changes, so everything
 // here builds fresh geometry (materials are shared and survive disposal).
-export function buildHeldModel(item) {
+// `look` is the player's appearance (PlayerAvatar.appearanceFor), so the bare
+// hand matches the body other players see.
+export function buildHeldModel(item, look = null) {
   const group = new THREE.Group();
 
   if (!item) {
-    // Bare hand: forearm + fist, skin-toned.
-    const skin = new THREE.MeshLambertMaterial({ color: '#e0ac69' });
-    const arm = new THREE.Mesh(new THREE.BoxGeometry(0.13, 0.13, 0.34), skin);
+    // Bare hand: forearm + fist, in the player's skin tone — the forearm is
+    // sleeved if their shirt has long sleeves.
+    const skin = new THREE.MeshLambertMaterial({ color: look ? look.skin : '#e0ac69' });
+    const sleeve = look && look.sleeves ? new THREE.MeshLambertMaterial({ color: look.shirt }) : skin;
+    const arm = new THREE.Mesh(new THREE.BoxGeometry(0.13, 0.13, 0.34), sleeve);
     arm.position.set(0, -0.04, 0.12);
     arm.rotation.x = 0.2;
     const fist = new THREE.Mesh(new THREE.BoxGeometry(0.16, 0.15, 0.16), skin);

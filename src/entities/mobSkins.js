@@ -20,7 +20,7 @@ const INK = '#141414';
 
 // A pair of eyes on a face: row `y`, each `inset` pixels in from its side
 // edge, `size` = [wide, tall]. `white` adds a pixel of white outboard of each.
-function eyes(f, y, inset, hex, { white = null, glow = false, size = [1, 1] } = {}) {
+export function eyes(f, y, inset, hex, { white = null, glow = false, size = [1, 1] } = {}) {
   const [wide, tall] = size;
   for (let j = 0; j < tall; j++) {
     for (let i = 0; i < wide; i++) {
@@ -36,9 +36,9 @@ function eyes(f, y, inset, hex, { white = null, glow = false, size = [1, 1] } = 
 
 // A band `rows` tall around a limb, `up` pixels above its bottom edge:
 // hooves, boots, cuffs, socks.
-const band = (p, id, up, rows, hex) => p.around(id, (f) => f.rect(0, f.h - up - rows, f.w, rows, hex));
+export const band = (p, id, up, rows, hex) => p.around(id, (f) => f.rect(0, f.h - up - rows, f.w, rows, hex));
 // …or measured down from its top edge: sleeves, wool leggings.
-const cuff = (p, id, rows, hex) => p.around(id, (f) => f.rect(0, 0, f.w, rows, hex));
+export const cuff = (p, id, rows, hex) => p.around(id, (f) => f.rect(0, 0, f.w, rows, hex));
 
 const LEGS4 = ['leg0', 'leg1', 'leg2', 'leg3'];
 const ALL = ['front', 'back', 'left', 'right', 'top', 'bottom'];

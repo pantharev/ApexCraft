@@ -19,6 +19,7 @@ import { Liquids } from '../systems/Liquids.js';
 import { Music } from '../systems/Music.js';
 import { ChessGames } from '../chess/ChessGames.js';
 import { RemotePlayers } from '../net/RemotePlayers.js';
+import { PlayerAvatar } from '../entities/PlayerAvatar.js';
 import { GhostMobs } from '../net/GhostMobs.js';
 import { Sound } from '../systems/Sound.js';
 import { blockAverageColor } from '../textures/atlas.js';
@@ -224,6 +225,18 @@ export class Game {
     // Replay saved block edits before any terrain is generated.
     if (this._save) this.world.loadEdits(this._save.edits);
     this.player = new Player(this.world, this.camera, this.renderer.domElement);
+    // The local player's own body. In first person it sits on the shadow-
+    // caster layer — never drawn to the screen, but it casts your shadow; in
+    // third person (C) it moves to the normal layer. Its look comes from the
+    // player's name, the same one other players build their copy from.
+    let selfName = 'Player';
+    try { selfName = localStorage.getItem('apex_player_name') || 'Player'; } catch (_) { /* private mode */ }
+    this.selfAvatar = new PlayerAvatar(selfName);
+    this.selfAvatar.setLayer(SHADOW_CASTER_LAYER);
+    this.scene.add(this.selfAvatar.group);
+    this._selfLast = new THREE.Vector3();
+    this._swingT = 0;       // seconds left on a melee swing
+    this._swinging = false; // mining or attacking right now (also sent to peers)
     this.itemDrops = new ItemDrops(this.world, this.scene);
     this.interaction = new Interaction(
       this.world, this.player, this.camera, this.scene, this.renderer.domElement, this.itemDrops
@@ -520,8 +533,8 @@ export class Game {
         const st = this.hideSeek.state;
         if (st.roles[this.hideSeek.selfId] !== 'seeker' || st.phase !== 'seeking') return false;
         const d = new THREE.Vector3();
-        this.camera.getWorldDirection(d);
-        let hit = this.remotePlayers ? this.remotePlayers.raycast(this.camera.position, d, TAG_RANGE) : null;
+        d.copy(this.player.look);
+        let hit = this.remotePlayers ? this.remotePlayers.raycast(this.player.eye, d, TAG_RANGE) : null;
         // The avatar raycast is a pure sphere test — also require voxel line of
         // sight, so a hider tucked behind a wall can't be tagged through it.
         // A blocked swing is a plain miss (the wrong-guess stun applies).
@@ -539,9 +552,10 @@ export class Game {
       if (heldDef && heldDef.gun) { this._shootGun(heldDef); return true; }
 
       const dir = new THREE.Vector3();
-      this.camera.getWorldDirection(dir);
-      const mob = this._mobApi().raycast(this.camera.position, dir, 4);
+      dir.copy(this.player.look);
+      const mob = this._mobApi().raycast(this.player.eye, dir, 4);
       Sound.swing();
+      this._swingT = 0.3; // the avatar's arm swing, seen in shadow / third person / by peers
       if (!mob) return false;
       const tool = this.interaction.currentTool;
       mob.lastHitBy = this._selfPid(); // kill attribution (Zombies points) + pet revenge
@@ -557,8 +571,8 @@ export class Game {
     this.interaction.onUseMob = () => {
       if (this.hideseek || this.vitals.dead) return false;
       const dir = new THREE.Vector3();
-      this.camera.getWorldDirection(dir);
-      const mob = this._mobApi().raycast(this.camera.position, dir, 3.5);
+      dir.copy(this.player.look);
+      const mob = this._mobApi().raycast(this.player.eye, dir, 3.5);
       if (!mob) return false;
       if (this.net && !this.net.isHost) return this._guestPetInteract(mob);
       return this._petInteract(mob, 'self');
@@ -743,7 +757,7 @@ export class Game {
   // height). Sampling stops short of the target so the block face a disguised
   // hider is hugging doesn't occlude them.
   _tagVisible(target) {
-    const from = this.camera.position;
+    const from = this.player.eye;
     const tx = target.x - from.x, ty = (target.y + 0.9) - from.y, tz = target.z - from.z;
     const steps = Math.ceil(Math.hypot(tx, ty, tz) / 0.25);
     for (let i = 1; i <= steps - 3; i++) {
@@ -876,6 +890,8 @@ export class Game {
       else if (e.code === 'Escape' && this.openScreen) this.setScreen(null);
       else if (e.code === 'KeyM') { const on = Sound.toggle(); if (this.music.enabled !== on) this.music.toggle(); }
       else if (e.code === 'KeyX' && !this.openScreen) this._cycleAmmo();
+      // Prop Hunt owns the camera (hiders orbit their disguise), so no toggle there.
+      else if (e.code === 'KeyC' && !this.openScreen && !this.hideseek) this.setThirdPerson(!this.player.thirdPerson);
     });
   }
 
@@ -1339,8 +1355,8 @@ export class Game {
     this.inventory.notify();
     const spec = AMMO[ammo];
     const dir = new THREE.Vector3();
-    this.camera.getWorldDirection(dir);
-    const o = this.camera.position;
+    dir.copy(this.player.look);
+    const o = this.player.eye;
     const kind = ammo === 'arrow' ? undefined : ammo;
     this.projectiles.spawn(o.x, o.y, o.z, dir, 30, spec.dmg, 'mob', {
       kind,
@@ -1417,14 +1433,14 @@ export class Game {
     g.mag--;
     this._gunCd = 60 / spec.rpm;
     const dir = new THREE.Vector3();
-    this.camera.getWorldDirection(dir);
+    dir.copy(this.player.look);
     if (spec.spread) {
       dir.x += (Math.random() * 2 - 1) * spec.spread;
       dir.y += (Math.random() * 2 - 1) * spec.spread;
       dir.z += (Math.random() * 2 - 1) * spec.spread;
       dir.normalize();
     }
-    const o = this.camera.position;
+    const o = this.player.eye;
     const kind = spec.boom ? 'ray' : 'bullet';
     this.projectiles.spawn(o.x, o.y, o.z, dir, spec.speed, spec.dmg, 'mob', {
       kind,
@@ -1524,7 +1540,7 @@ export class Game {
       for (const m of this._heldMats) m.dispose();
       this._heldMats.length = 0;
       this._heldDim = -1; // force a re-tint of the new materials
-      this.heldModel = buildHeldModel(item);
+      this.heldModel = buildHeldModel(item, this.selfAvatar.appearance);
       // The hand darkens when you step into shade (it never casts: a shadow
       // hanging off the camera would float in mid-air). Its materials are
       // private copies, so _animateHeld can also dim it underground without
@@ -1542,6 +1558,37 @@ export class Game {
       });
       this.heldAnchor.add(this.heldModel);
     }
+  }
+
+  // Toggle the third-person orbit camera (C). Aiming is unaffected: mining,
+  // attacks, and shots all come from the player's eye (Player.eye / .look).
+  setThirdPerson(on) {
+    this.player.thirdPerson = on;
+    this.player.camHeight = 1.45; // orbit the shoulders rather than the feet
+    this.player.camDist = 4.5;
+    this.heldAnchor.visible = !on;
+    if (this.onToast) this.onToast(on ? 'Third-person view — C to switch back' : 'First-person view');
+  }
+
+  // Keep the local player's body on the player: position, facing, pose, and
+  // which layer it draws on.
+  _updateSelfAvatar(dt) {
+    const a = this.selfAvatar, p = this.player;
+    if (this._swingT > 0) this._swingT -= dt;
+    this._swinging = !!this.interaction.breaking || this._swingT > 0;
+    // No body while dead, or while a Prop Hunt hider is wearing a disguise
+    // (the block is their body then).
+    const hidden = this.vitals.dead || (this.hideseek && p.thirdPerson);
+    a.group.visible = !hidden;
+    if (hidden) return;
+    a.setLayer(p.thirdPerson ? 0 : SHADOW_CASTER_LAYER);
+    a.group.position.copy(p.pos);
+    a.group.rotation.y = p.yaw + Math.PI; // the model faces +z; look yaw 0 faces -z
+    // Speed from actual displacement: flying moves the player without velocity.
+    const speed = dt > 0 ? Math.hypot(p.pos.x - this._selfLast.x, p.pos.z - this._selfLast.z) / dt : 0;
+    this._selfLast.copy(p.pos);
+    a.setHeld(this._heldName);
+    a.update(dt, { speed, pitch: p.pitch, swinging: this._swinging });
   }
 
   // Switch graphics quality at runtime (pause menu) and remember it.
@@ -1635,6 +1682,7 @@ export class Game {
     this._syncHeld();
     this.player.update(dt);
     this.interaction.update(dt);
+    this._updateSelfAvatar(dt);
 
     // Guns: fire-rate cooldown, reload completion, and full-auto while the
     // primary button is held (onAttack only fires once per press).
@@ -1744,6 +1792,8 @@ export class Game {
         this.net.sendState({
           x: +p.x.toFixed(2), y: +p.y.toFixed(2), z: +p.z.toFixed(2),
           yaw: +this.player.yaw.toFixed(3), pitch: +this.player.pitch.toFixed(3),
+          h: this._heldName || undefined, // held item, shown in our avatar's hand
+          a: this._swinging ? 1 : 0,      // bit 0: mining / attacking
         });
       }
       if (this.net.isHost) {
@@ -1878,6 +1928,7 @@ export class Game {
     this.dayNight.dispose();
     this.sun.dispose(); // frees the shadow map
     for (const m of this._heldMats) m.dispose();
+    this.selfAvatar.dispose();
     this.renderer.dispose();
     if (this.renderer.domElement.parentNode) {
       this.renderer.domElement.parentNode.removeChild(this.renderer.domElement);

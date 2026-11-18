@@ -1,58 +1,15 @@
 import * as THREE from 'three';
 import { buildBlockCube } from '../items/ItemModels.js';
 import { getBlock } from '../blocks/BlockRegistry.js';
+import { PlayerAvatar } from '../entities/PlayerAvatar.js';
 
-// Renders the other players in a multiplayer room: a blocky humanoid avatar
-// per peer with a floating name tag, interpolated between network snapshots
-// (~15 Hz) so movement looks smooth at render rate. In Prop Hunt a hider's
-// avatar is swapped for a textured block cube (setDisguise) so they blend into
-// the arena's real props.
+// Renders the other players in a multiplayer room: a painted, animated avatar
+// per peer (see PlayerAvatar) with a floating name tag, interpolated between
+// network snapshots (~15 Hz) so movement looks smooth at render rate. In Prop
+// Hunt a hider's avatar is swapped for a textured block cube (setDisguise) so
+// they blend into the arena's real props.
 
 const LERP = 12; // snap speed toward the latest snapshot (higher = tighter)
-
-// Distinct shirt colours, picked by a stable hash of the socket id.
-const SHIRTS = ['#2e6fbe', '#b8442e', '#3f9e4d', '#8a4dbe', '#c2902e', '#2e9e96', '#be4d8a', '#6d7a2e'];
-const hashColor = (id) => {
-  let h = 0;
-  for (let i = 0; i < id.length; i++) h = (h * 31 + id.charCodeAt(i)) | 0;
-  return SHIRTS[Math.abs(h) % SHIRTS.length];
-};
-
-function noiseTexture(hex) {
-  const n = parseInt(hex.slice(1), 16);
-  const r = (n >> 16) & 255, g = (n >> 8) & 255, b = n & 255;
-  const S = 8;
-  const c = document.createElement('canvas');
-  c.width = c.height = S;
-  const ctx = c.getContext('2d');
-  const img = ctx.createImageData(S, S);
-  for (let i = 0; i < S * S; i++) {
-    const d = (Math.random() - 0.5) * 30;
-    img.data[i * 4] = Math.max(0, Math.min(255, r + d));
-    img.data[i * 4 + 1] = Math.max(0, Math.min(255, g + d));
-    img.data[i * 4 + 2] = Math.max(0, Math.min(255, b + d));
-    img.data[i * 4 + 3] = 255;
-  }
-  ctx.putImageData(img, 0, 0);
-  const tex = new THREE.CanvasTexture(c);
-  tex.magFilter = THREE.NearestFilter;
-  tex.minFilter = THREE.NearestFilter;
-  tex.colorSpace = THREE.SRGBColorSpace;
-  return tex;
-}
-
-function box(w, h, d, color, x, y, z, legPivot = false) {
-  const geo = new THREE.BoxGeometry(w, h, d);
-  if (legPivot) geo.translate(0, -h / 2, 0);
-  const mat = new THREE.MeshLambertMaterial({ map: noiseTexture(color) });
-  mat.emissive = new THREE.Color(color);
-  mat.emissiveIntensity = 0.3;
-  const mesh = new THREE.Mesh(geo, mat);
-  mesh.position.set(x, legPivot ? y + h / 2 : y, z);
-  mesh.castShadow = true;
-  mesh.receiveShadow = true;
-  return mesh;
-}
 
 // Exported: pets reuse this for their owner tag (smaller, lower over the mob).
 export function nameTag(name, { y = 2.25, scale = 1 } = {}) {
@@ -98,25 +55,6 @@ function disposeTaunt(t, group) {
   t.sprite.material.dispose();
 }
 
-function buildAvatar(id, name) {
-  const shirt = hashColor(id);
-  const group = new THREE.Group();
-  const legs = [
-    box(0.24, 0.75, 0.24, '#3a3f55', -0.14, 0.0, 0, true),
-    box(0.24, 0.75, 0.24, '#3a3f55', 0.14, 0.0, 0, true),
-  ];
-  for (const l of legs) group.add(l);
-  group.add(box(0.52, 0.7, 0.3, shirt, 0, 1.1, 0));        // torso
-  group.add(box(0.18, 0.66, 0.24, shirt, -0.36, 1.1, 0));  // arms
-  group.add(box(0.18, 0.66, 0.24, shirt, 0.36, 1.1, 0));
-  group.add(box(0.46, 0.46, 0.46, '#caa17e', 0, 1.72, 0)); // head
-  const tag = nameTag(name);
-  group.add(tag);
-  group.userData.legs = legs;
-  group.userData.tag = tag;
-  return group;
-}
-
 export class RemotePlayers {
   constructor(scene) {
     this.scene = scene;
@@ -125,20 +63,24 @@ export class RemotePlayers {
 
   add(id, name) {
     if (this.map.has(id)) return;
-    const group = buildAvatar(id, name || 'Player');
+    // Appearance comes from the name, so a player looks the same to everyone.
+    const avatar = new PlayerAvatar(name || 'Player');
+    const group = new THREE.Group();
+    const tag = nameTag(name || 'Player');
+    group.add(avatar.group, tag);
     group.visible = false; // until the first state arrives
     this.scene.add(group);
     this.map.set(id, {
-      id, group,
-      legs: group.userData.legs,
-      tag: group.userData.tag,
-      body: group.children.slice(), // humanoid parts + name tag (hidden when disguised)
+      id, group, avatar, tag,
+      body: [avatar.group, tag], // hidden when disguised
       disguiseMesh: null,
       disguiseId: 0,
       tagShown: false,
       cur: { x: 0, y: 0, z: 0, yaw: 0 },
       target: null,
-      walkPhase: 0,
+      pitch: 0,     // look pitch, for the head
+      held: null,   // held item name, shown in the hand
+      action: 0,    // bit 0: swinging (mining / attacking)
     });
   }
 
@@ -202,23 +144,19 @@ export class RemotePlayers {
     const p = this.map.get(id);
     if (!p) return;
     disposeTaunt(p.taunt, p.group);
-    // The disguise cube's geometry/material come from ItemModels' shared cache
-    // (every other disguised player references the same GPU buffers) — detach
-    // it so the traverse below can't dispose resources still in use.
-    if (p.disguiseMesh) { p.group.remove(p.disguiseMesh); p.disguiseMesh = null; }
     this.scene.remove(p.group);
-    p.group.traverse((o) => {
-      if (o.geometry) o.geometry.dispose();
-      // Avatar body parts and the name tag own per-avatar canvas textures;
-      // bot churn builds a fresh avatar every round, so free them too.
-      if (o.material) {
-        if (o.material.map) o.material.map.dispose();
-        o.material.dispose();
-      }
-    });
+    // The avatar frees its own geometry + material (its skin textures, the
+    // held item, and the disguise cube are shared caches). The name tag owns a
+    // canvas texture; bot churn builds a fresh one every round.
+    p.avatar.dispose();
+    p.tag.material.map.dispose();
+    p.tag.material.dispose();
     this.map.delete(id);
   }
 
+  // Latest network state for a peer: position, look yaw (the player
+  // convention — yaw 0 looks down -z), and optionally pitch, held item `h`,
+  // and action bits `a`.
   setState(s) {
     const p = this.map.get(s.id);
     if (!p) return;
@@ -227,6 +165,9 @@ export class RemotePlayers {
       p.group.visible = true;
     }
     p.target = { x: s.x, y: s.y, z: s.z, yaw: s.yaw };
+    if (Number.isFinite(s.pitch)) p.pitch = s.pitch;
+    p.held = typeof s.h === 'string' ? s.h : null;
+    p.action = s.a | 0;
   }
 
   update(dt) {
@@ -243,19 +184,17 @@ export class RemotePlayers {
       c.yaw += dyaw * k;
 
       p.group.position.set(c.x, c.y, c.z);
-      // Disguised hiders render axis-aligned like a real placed block — a cube
-      // rotated to the player's yaw would stick out of the grid instantly.
-      p.group.rotation.y = p.disguiseId ? 0 : c.yaw;
+      // The avatar model faces +z; look yaw 0 faces -z, hence the half turn.
+      // The disguise cube sits on the outer group, which never rotates — a
+      // cube turned to the player's yaw would stick out of the grid instantly.
+      p.avatar.group.rotation.y = c.yaw + Math.PI;
 
-      // Swing legs while the avatar is moving horizontally.
-      const speed = Math.hypot(dx, dz) / Math.max(dt, 1e-4);
-      if (speed > 0.6) {
-        p.walkPhase += dt * 9;
-        for (let i = 0; i < p.legs.length; i++) {
-          p.legs[i].rotation.x = Math.sin(p.walkPhase + i * Math.PI) * 0.55;
-        }
-      } else {
-        for (const l of p.legs) l.rotation.x *= 0.8;
+      if (!p.disguiseId) {
+        // Remaining distance to the snapshot, eased the same way as the
+        // position, is the speed the avatar is actually moving at on screen.
+        const speed = (Math.hypot(dx, dz) * k) / Math.max(dt, 1e-4);
+        p.avatar.setHeld(p.held);
+        p.avatar.update(dt, { speed, pitch: p.pitch, swinging: (p.action & 1) === 1 });
       }
 
       // Advance any floating taunt: drift up and fade, then remove.

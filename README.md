@@ -83,8 +83,10 @@ See [LICENSE](LICENSE) and [CLA.md](CLA.md) for full details.
 - **Shared world**: block breaking/placing syncs instantly for everyone, and
   late joiners receive the full edited world. The host's save persists all
   changes.
-- **See each other**: blocky player avatars with name tags, smoothly
-  interpolated; everyone's arrows fly for all to see (no friendly fire).
+- **See each other**: painted player avatars with name tags — each player's
+  look (skin tone, hair, clothes) comes from their name — that walk, swing
+  their arms, look where their player is looking, and carry whatever that
+  player is holding; everyone's arrows fly for all to see (no friendly fire).
 - **One simulation**: the host runs the mobs — they hunt whichever player is
   nearest, and everyone can fight them. If the host leaves, another player
   takes over automatically.
@@ -113,6 +115,7 @@ See [LICENSE](LICENSE) and [CLA.md](CLA.md) for full details.
 - **Procedural pixel-art textures** drawn on canvas at load (zero asset files): bladed grass with ragged turf edges, pebbly dirt, voronoi cobblestone/gravel, growth-ring logs, nugget ores with bright facets, wind-rippled sand, grainy planks — shaded with warm highlights and cool shadows.
 - **No tiling quilt**: in the world, every block of soil, rock, and foliage is turned a random way and shaded slightly differently, with soft large-scale variation on top, so wide surfaces look natural rather than stamped.
 - **Painted mobs**: every creature wears a generated pixel-art skin at the same scale as the blocks — faces, patched hides, wool, striped fur, torn clothes, ribs — and hostile eyes glow in the dark. Tails wag, wings flap, and spiders scuttle on eight splayed legs.
+- **A body of your own**: in first person you cast your own shadow, arms and held item included; press **C** for a third-person camera that orbits your character.
 - **Per-vertex ambient occlusion** baked into the greedy mesher — soft contact shadows in every corner and crevice (with the classic diagonal-flip fix for smooth interpolation).
 - **Climate-tinted foliage**: grass tops and leaves blend per-vertex from lush deep green (wet) to dry yellow-brown (hot+dry) across the map.
 - **Block-break particles** colored from the broken block's texture, a gently **drifting water surface**, and animated star/dusk skies.
@@ -137,6 +140,7 @@ See [LICENSE](LICENSE) and [CLA.md](CLA.md) for full details.
 | **1–9 / Scroll** | Select hotbar slot |
 | **E** | Open/close inventory |
 | **F** | Toggle fly |
+| **C** | Switch between first- and third-person camera |
 | **M** | Mute / unmute sound |
 | **Esc** | Close UI / open pause menu (Resume, Save, Quit) |
 

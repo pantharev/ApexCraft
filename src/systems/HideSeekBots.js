@@ -236,7 +236,9 @@ export class HideSeekBots {
   _render(bot) {
     const rp = this.game.remotePlayers;
     if (!rp) return;
-    rp.setState({ id: bot.id, x: bot.x, y: bot.y, z: bot.z, yaw: bot.yaw });
+    // bot.yaw is atan2(dx, dz) (faces +z at 0); avatars take the player's
+    // look-yaw convention (faces -z at 0), half a turn away.
+    rp.setState({ id: bot.id, x: bot.x, y: bot.y, z: bot.z, yaw: bot.yaw + Math.PI });
     // Disguise only while a live hider; caught hiders revert to their avatar.
     // A local hider keeps the bot's name tag visible over the block (must match
     // what HideSeek._syncRemoteDisguises passes, or the two calls fight).

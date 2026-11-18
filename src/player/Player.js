@@ -56,6 +56,11 @@ export class Player {
     this.speedBoost = 1; // dev: walk/fly speed multiplier (G on localhost)
     this.thirdPerson = false; // orbit camera (hide & seek: hiders see their block)
     this.camDist = 4;        // third-person camera pull-back distance
+    this.camHeight = 0.6;    // ...and the height above the feet it orbits
+    // Where the player looks FROM and ALONG, whatever the camera is doing.
+    // Aiming (mining, attacks, shots) uses these, so it works in third person.
+    this.eye = new THREE.Vector3(0, 80 + EYE, 0);
+    this.look = new THREE.Vector3(0, 0, -1);
     this.lookFrozen = false; // suspend mouse-look (e.g. while the taunt wheel is open)
 
     this._bindEvents();
@@ -301,12 +306,14 @@ export class Player {
       Math.sin(this.pitch),
       -Math.cos(this.yaw) * Math.cos(this.pitch)
     );
+    this.eye.set(this.pos.x, this.pos.y + EYE, this.pos.z);
+    this.look.copy(dirVec);
     if (this.thirdPerson) {
-      // Orbit behind/above the feet so the player can see their own disguise
-      // block. Pull back along the look direction, clamped above the floor and
-      // short of any solid block — inside a building the camera must stay in
-      // the room, or a hiding player could watch seekers through the wall.
-      const target = new THREE.Vector3(this.pos.x, this.pos.y + 0.6, this.pos.z);
+      // Orbit behind/above the feet so the player can see their own body (or
+      // disguise block). Pull back along the look direction, clamped above the
+      // floor and short of any solid block — inside a building the camera must
+      // stay in the room, or a hiding player could watch seekers through the wall.
+      const target = new THREE.Vector3(this.pos.x, this.pos.y + this.camHeight, this.pos.z);
       let dist = this.camDist;
       for (let d = 0.4; d <= this.camDist; d += 0.2) {
         const px = target.x - dirVec.x * d;

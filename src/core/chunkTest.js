@@ -11,7 +11,7 @@
 
 import { CHUNK_SIZE, WORLD_HEIGHT, WATER_DROP } from '../config.js';
 import { Chunk } from './Chunk.js';
-import { reseed } from '../world/noise.js';
+import { reseed, genOf, newSeed, getGen, GEN_LATEST } from '../world/noise.js';
 import { generateChunk, setGenMode } from '../world/generators/TerrainGen.js';
 import { setActiveMap } from '../world/arenas/index.js';
 import { getBlockId, isOpaque } from '../blocks/BlockRegistry.js';
@@ -71,7 +71,9 @@ function checkGeometry(g, cx, cz, label) {
   return verts;
 }
 
-for (const seed of [1337, 987654321]) {
+// One world of each generator version (see noise.js): the first two seeds
+// predate versions and are version 1, the third is version 2.
+for (const seed of [1337, 987654321, 1289044641]) {
   reseed(seed);
   setGenMode(null);
   const tag = `seed ${seed}`;
@@ -204,6 +206,66 @@ for (const seed of [1337, 987654321]) {
   }
   ok(floor > 0 && floorWet, 'pool: the floor under the water is marked wet');
   ok(rim > 0 && rimDry, 'pool: the dry rim is not');
+}
+
+// --- Generator versions ---
+// A world is its seed plus the player's edits, so what a seed generates must
+// never change once worlds exist. The version rides in the seed...
+ok(genOf(1337) === 1 && genOf(999999999) === 1 && genOf(0) === 1, 'seeds from before versions existed are generator version 1');
+ok(genOf(newSeed()) === GEN_LATEST && genOf(newSeed(2)) === 2 && genOf(newSeed(7)) === 7, 'a new seed carries the version it was made for');
+reseed(1289044641);
+ok(getGen() === 2, 'reseeding sets the generator version from the seed');
+// ...and these fingerprints hold every version to its word. They cover the
+// whole pipeline (terrain, caves, ores, villages, trees, plants) for a spread
+// of chunks. If one changes, generation changed for existing worlds: put the
+// change behind a new version instead (noise.js explains how), and leave
+// these alone. Only add a line here, when a version is added.
+{
+  const fingerprint = (seed) => {
+    reseed(seed);
+    let h = 0x811c9dc5;
+    const mix = (bytes) => { for (let i = 0; i < bytes.length; i++) { h ^= bytes[i]; h = Math.imul(h, 0x01000193); } };
+    for (const [cx, cz] of [[0, 0], [1, 0], [0, 1], [-3, 7], [40, -25], [-120, -64], [300, 300], [9, 9]]) {
+      const c = gen(cx, cz);
+      mix(c.blocks);
+      mix(new TextEncoder().encode(JSON.stringify(c.lights || [])));
+    }
+    return h >>> 0;
+  };
+  const FROZEN = [
+    [1, 1337, 332789],
+    [1, 987654321, 2458805752],
+    [1, 583847868, 1589761591],
+    [2, 1289044641, 3787435600],
+    [2, 1100000007, 3542795061],
+  ];
+  for (const [version, seed, want] of FROZEN) {
+    const got = fingerprint(seed);
+    ok(got === want, `generator version ${version} still makes the same world for seed ${seed}${got === want ? '' : ` (fingerprint ${got}, expected ${want})`}`);
+  }
+}
+
+// Version 2 terrain across a wide area: sound from bedrock to sky.
+{
+  reseed(1100000007);
+  let sound = true, tallest = 0, wet = 0;
+  const BEDROCK = getBlockId('bedrock');
+  for (let i = 0; i < 48; i++) {
+    const c = gen(i * 37 - 800, (i * 53) % 400 - 200);
+    for (let x = 0; x < S; x++) for (let z = 0; z < S; z++) {
+      if (c.get(x, 0, z) !== BEDROCK) sound = false;
+      for (let y = H - 1; y > 0; y--) {
+        const id = c.get(x, y, z);
+        if (id === 0) continue;
+        if (y > tallest) tallest = y;
+        if (id === WATER && y > 62) wet++; // only a village well may hold water above sea level
+        break;
+      }
+    }
+  }
+  ok(sound, 'version 2: bedrock under every column');
+  ok(tallest > 62 && tallest <= H - 3, `version 2: land rises above the sea and stays under the ceiling (highest block ${tallest})`);
+  ok(wet < 40, 'version 2: no water standing above sea level');
 }
 
 // --- arena mode (Prop Hunt / Zombies maps) ---

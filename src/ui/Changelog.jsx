@@ -7,6 +7,11 @@ import React from 'react';
 const CHANGELOG = [
   {
     date: 'November 18, 2026',
+    title: 'New worlds, new land',
+    body: 'Worlds you create from now on have a new kind of landscape. Mountain ranges rise in jagged, snow-capped crests with bare rock faces, ledges and the odd overhang. Highlands step up in flat benches with cliffs between them. Rivers run in proper valleys and squeeze through gorges in the hills, coasts have real beaches, swamps sit at the waterline and deserts ripple into dunes. No two worlds start alike any more, and you always begin on dry, level ground. Your existing worlds are untouched — every block of them is exactly where you left it.',
+  },
+  {
+    date: 'November 18, 2026',
     title: 'Water that moves',
     body: 'Lakes, rivers and seas are no longer a flat blue sheet. The surface swells and drifts, mirrors the sky as you look toward the horizon, and glitters under the sun and the moon. It runs pale and clear in the shallows, deep and dark offshore, with a line of foam where it meets the land — and it now sits a little below the bank instead of flush with it. Look into it and the bottom fades into blue with light rippling across the sand; dive, and the surface overhead becomes a bright, wavering window. Waterfalls fall in streaks instead of hanging like glass.',
   },

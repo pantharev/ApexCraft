@@ -131,6 +131,13 @@ optionally, a `fuels` entry:
 
 - **Terrain/biomes:** `src/world/generators/TerrainGen.js`,
   `src/world/biomes/BiomeMap.js`, noise fields in `src/world/noise.js`.
+  **Existing worlds must not change.** Terrain is regenerated from the seed
+  every time, so if what a seed generates changes, everything a player built
+  ends up buried or in mid-air. Each world keeps the generator *version* it
+  was created with (it is stored in the top bits of the seed — see the notes
+  at the top of `noise.js`). To change generation: add a version, branch on
+  `getGen()`, leave the older branches alone, and bump `GEN_LATEST`. The
+  fingerprints in `src/core/chunkTest.js` fail if an existing version moves.
   World generation runs in web workers (`src/core/chunkWorker.js`), so this
   code — and anything it imports, structures and arena maps included — must
   not touch the DOM, three.js or the running game. A chunk may depend only on

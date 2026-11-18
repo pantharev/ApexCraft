@@ -9,6 +9,39 @@ updated with every merged PR** (and mirror a short player-facing entry in the
 
 ---
 
+## 2026-11-18 — #61 Terrain: generator version 2 (landforms, cliffs, overhangs)
+
+New worlds get a new terrain generator; existing worlds keep the old one,
+block for block. The version rides in the seed — its top four bits
+(`genOf` / `newSeed` / `getGen` in `noise.js`; old seeds are below 1e9, so
+all version 1) — which means saves, the relay and the chunk workers needed no
+change. `columnHeight`, `getBiome` and `generateChunk` switch on it.
+Version 2 is `generators/Height2.js` — a continental profile with real
+beaches, erosion-scaled hills, plateau country that steps up in benches with
+cliffs between, ridged ranges with jagged crests squashed (not clipped) under
+the ceiling, rivers in valleys wider than their channel that narrow to gorges,
+swamps at the waterline, desert dunes — and `Terrain2.js`, which turns it
+into blocks: a 3D field breaks steep ground into ledges and overhangs (never
+below the waterline, never under a village), and cover depends on slope as
+well as biome and altitude, so cliffs are bare rock and snow sits on what is
+flat enough to hold it. Version 2 also reads every noise field from a
+seed-derived offset: simplex is zero at its origin, so every version-1 world
+has a river across a temperate coast at (0, 0). Spawn search for version 2
+uses the heightfield out to 2 km (19% of worlds have no good ground within the
+old 96 blocks). Cost: 2.4–3.2 ms a chunk against 2.1–2.5 before.
+
+Gotchas: **any change to what an existing seed generates needs a new
+version** — caves, ores, trees, villages and plants included, since they are
+shared code. Branch on `getGen()`, leave old branches alone, bump
+`GEN_LATEST`; `chunkTest.js` fingerprints each version over the whole
+pipeline and fails if one moves (add a line per version, never edit one).
+Villages plan on `columnHeight`, which for version 2 is the heightfield
+before ledges — exact on gentle ground, a few blocks off on cliffs. Terrain2
+leaves `chunk.shore` for the cave pass (heights beside open water, so a
+tunnel never opens onto a lake) and TerrainGen clears it. `?seed=N` on
+localhost gives new worlds a chosen seed. Not done: caves are still version
+1's (next), one tree species, no ice.
+
 ## 2026-11-18 — #60 Water: an animated surface, depth, foam, caustics
 
 Water was one flat scrolling tile. `src/textures/water.js` now holds its own
@@ -669,9 +702,9 @@ From the 2026-07-02 code audit (see PR #37–#39 review + session notes):
 Pre-alpha. Four game modes on `main` — survival, creative, Prop Hunt (town /
 castle / playroom), and Zombies (bastion) — plus pets, flowing liquids, a
 procedural soundtrack, the six graphics/performance passes above (#53 to
-#58), the live menu backdrop (#59), and animated water (#60). Tycoon mode (#52, `feature/tycoon`) is parked and unmerged: it needs its
+#58), the live menu backdrop (#59), animated water (#60), and terrain
+generator version 2 for new worlds (#61). Tycoon mode (#52, `feature/tycoon`) is parked and unmerged: it needs its
 changelog entries and its `worker` mob merged by hand, and it claims block ids
 69–72, so new blocks on `main` start at 73. Deploys: Vercel builds previews
 per PR; CI = `npm run build` + `server/test.js` + `chess/engineTest.js` +
-`core/chunkTest.js`. Next up: terrain generation (more varied, closer to
-Minecraft), then the cave system.
+`core/chunkTest.js`. Next up: the cave system (as generator version 3).

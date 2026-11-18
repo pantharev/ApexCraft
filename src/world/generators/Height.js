@@ -1,5 +1,6 @@
 import { WORLD_HEIGHT, SEA_LEVEL } from '../../config.js';
-import { Noise } from '../noise.js';
+import { Noise, getGen } from '../noise.js';
+import { heightV2 } from './Height2.js';
 
 const smoothstep = (a, b, x) => {
   const t = Math.max(0, Math.min(1, (x - a) / (b - a)));
@@ -10,6 +11,14 @@ const lerp = (a, b, t) => a + (b - a) * t;
 // The terrain heightfield — extracted into its own module (depends only on
 // noise + config) so structure planning (villages) can query terrain shape
 // without importing the whole chunk generator, and so it stays node-testable.
+
+// The height of the ground at a column, for the current world's generator
+// version (see noise.js).
+export function columnHeight(worldX, worldZ) {
+  return getGen() >= 2 ? heightV2(worldX, worldZ) : heightV1(worldX, worldZ);
+}
+
+// --- Generator version 1. Frozen: worlds made with it depend on every block. ---
 //
 // A continuous heightfield — deliberately NOT keyed to the discrete biome, so
 // there are no cliffs at biome borders. Shape comes from independent fields:
@@ -19,7 +28,7 @@ const lerp = (a, b, t) => a + (b - a) * t;
 //   • mountain mask × ridged fBm       -> connected ridge lines that taper
 //     smoothly into foothills instead of jumping up at a seam
 //   • river field                      -> winding channels with soft banks
-export function columnHeight(worldX, worldZ) {
+function heightV1(worldX, worldZ) {
   // Warp the sampling domain so large shapes swirl organically.
   const wx = worldX + Noise.warpX(worldX, worldZ) * 55;
   const wz = worldZ + Noise.warpZ(worldX, worldZ) * 55;

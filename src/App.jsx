@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Game } from './core/Game.js';
-import { reseed } from './world/noise.js';
+import { reseed, newSeed } from './world/noise.js';
 import { listWorlds, loadWorld, deleteWorld } from './systems/Storage.js';
 import { Net } from './net/Net.js';
 import { MainMenu, PauseMenu } from './ui/Menus.jsx';
@@ -12,6 +12,7 @@ import { HideSeekHUD, TauntWheel, HideSeekTouch } from './ui/HideSeekUI.jsx';
 import { ZombiesHUD, ZombiesShop, ZombiesTouch } from './ui/ZombiesUI.jsx';
 import { TouchControls } from './ui/TouchControls.jsx';
 
+const DEV = typeof window !== 'undefined' && ['localhost', '127.0.0.1'].includes(window.location.hostname);
 const IS_TOUCH = typeof window !== 'undefined' &&
   (window.matchMedia ? window.matchMedia('(pointer: coarse)').matches : 'ontouchstart' in window);
 
@@ -113,7 +114,11 @@ export default function App() {
   };
 
   const createNew = (name, mode = 'survival', map = undefined) => {
-    const seed = Math.floor(Math.random() * 1e9);
+    // A new world gets the current terrain generator (the version rides in
+    // the seed — see world/noise.js). On localhost `?seed=N` picks the seed,
+    // to come back to the same test world.
+    const forced = DEV && Number(new URLSearchParams(window.location.search).get('seed'));
+    const seed = forced || newSeed();
     const id = `w_${Date.now()}_${Math.floor(Math.random() * 1000)}`;
     setStats(null); setLocked(false); setOpenScreen(null); setDead(false); setTouchActive(false);
     setCurrent({ id, name, seed, mode, map, save: null });

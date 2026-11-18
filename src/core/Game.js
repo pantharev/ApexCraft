@@ -104,6 +104,9 @@ const SHADOW_MAP = 2048;     // sun/moon shadow map resolution
 const SHADOW_EXTENT = 64;    // half-width of the shadowed box, in blocks
 const SHADOW_DIST = 160;     // how far back along its direction the light sits
 
+const MAX_STEP = 0.05;       // longest simulation step, seconds (see _loop)
+const STATS_INTERVAL = 0.1;  // seconds between HUD snapshots pushed to React
+
 const GFX_KEY = 'apex_graphics';
 function loadGraphics() {
   try {
@@ -750,6 +753,7 @@ export class Game {
     window.addEventListener('beforeunload', this._onUnload);
 
     this.onStats = null;  // optional callback for HUD
+    this._statsT = STATS_INTERVAL; // so the first frame pushes a snapshot
     this.onSaved = null;  // optional callback when a save completes
   }
 
@@ -1677,7 +1681,10 @@ export class Game {
 
   _loop = () => {
     if (!this._running) return;
-    const dt = this.clock.getDelta();
+    // Clamped: after a hitch or a backgrounded tab the raw delta can be whole
+    // seconds, and one step that long sends mobs and drops straight through
+    // floors. Below 20 fps the game slows down instead of taking giant steps.
+    const dt = Math.min(this.clock.getDelta(), MAX_STEP);
 
     this._syncHeld();
     this.player.update(dt);
@@ -1850,7 +1857,12 @@ export class Game {
       if (this._canPersist) this.save();
     }
 
-    if (this.onStats) {
+    // HUD snapshot for React, ~10 times a second. Pushing it every frame
+    // re-rendered the whole HUD 60 times a second for numbers nobody can
+    // read that fast.
+    this._statsT += dt;
+    if (this.onStats && this._statsT >= STATS_INTERVAL) {
+      this._statsT = 0;
       const p = this.player.pos;
       const stack = this.inventory.selectedStack();
       const item = stack ? getItem(stack.item) : null;

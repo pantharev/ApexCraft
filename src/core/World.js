@@ -3,26 +3,42 @@ import { CHUNK_SIZE, WORLD_HEIGHT, SEA_LEVEL, LOAD_RADIUS, UNLOAD_RADIUS, CHUNK_
 import { Chunk } from './Chunk.js';
 import { generateChunk } from '../world/generators/TerrainGen.js';
 import { buildChunkGeometry } from './ChunkMesher.js';
-import { BLOCK_MATERIALS, TERRAIN_MATERIALS, WATER_MATERIAL_INDEX, LEAVES_MATERIAL_INDEX } from '../textures/atlas.js';
+import { BLOCK_MATERIALS, TERRAIN_SOLID, TERRAIN_CUTOUT, WATER_MATERIAL_INDEX, LEAVES_MATERIAL_INDEX } from '../textures/atlas.js';
 import { getBlockId, isSolid } from '../blocks/BlockRegistry.js';
 
-const key = (cx, cz) => `${cx},${cz}`;
+// Chunk-map key. A number, not a string: getBlock runs for every voxel the
+// physics and the mesher look at, and building a "cx,cz" string each time
+// was a steady stream of garbage. Exact for |cx|,|cz| < 32768 chunks.
+const key = (cx, cz) => (cx + 0x8000) * 0x10000 + (cz + 0x8000);
+// The edits map keeps the "cx,cz" string form: it is the save and network
+// format (serializeEdits / Net.encodeEdit).
+const editKey = (cx, cz) => `${cx},${cz}`;
+
+// Nearest-first chunk offsets inside the load disc, computed once.
+const VISIT = [];
+for (let dx = -LOAD_RADIUS; dx <= LOAD_RADIUS; dx++) {
+  for (let dz = -LOAD_RADIUS; dz <= LOAD_RADIUS; dz++) {
+    const d = dx * dx + dz * dz;
+    if (d <= LOAD_RADIUS * LOAD_RADIUS) VISIT.push([d, dx, dz]);
+  }
+}
+VISIT.sort((a, b) => a[0] - b[0]);
 
 export const SHADOW_CASTER_LAYER = 1;
 
-// Shadow-caster materials. A chunk's terrain mesh has one draw group per tile,
-// and three's shadow pass would redraw every group — a dozen-plus calls per
-// chunk. Instead the terrain mesh only *receives* shadows, and each chunk gets
-// up to two caster meshes that reuse its vertex/index buffers through a draw
-// range: everything solid in one call, the leaves in another (alpha-tested, so
-// canopies throw dappled shade). The casters sit on their own layer, which the
-// Game shows to the camera only while the shadow map is being drawn — so the
-// normal pass never touches them (drawing them there as no-ops cost ~25% of
-// the frame). The colour/depth-write flags are a belt-and-braces fallback.
-// Both stay front-sided, which makes three render their *back* faces into the
-// shadow map: a canopy is shaded by its far side, so its sunlit faces never
-// shadow themselves (double-sided leaves did, and went near-black).
-const SOLID_CASTER = new THREE.MeshBasicMaterial({ colorWrite: false, depthWrite: false });
+// A chunk's solid terrain is one mesh with one material, so it casts its own
+// shadow in a single draw. Leaves are different: they share the cut-out mesh
+// with glass and plants (which must NOT cast — skylights have to let the sun
+// in), and their shadow needs the leaf texture's holes. So each chunk with
+// foliage gets a caster mesh that reuses the cut-out geometry's buffers
+// through a draw range covering just the leaves (the mesher puts them
+// first), alpha-tested so canopies throw dappled shade. It sits on its own
+// layer, which the Game shows to the camera only while the shadow map is
+// being drawn — the normal pass never touches it. The colour/depth-write
+// flags are a belt-and-braces fallback. It stays front-sided, which makes
+// three render its *back* faces into the shadow map: a canopy is shaded by
+// its far side, so its sunlit faces never shadow themselves (double-sided
+// leaves did, and went near-black).
 const LEAF_CASTER = new THREE.MeshBasicMaterial({
   map: BLOCK_MATERIALS[LEAVES_MATERIAL_INDEX].map, alphaTest: 0.5,
   colorWrite: false, depthWrite: false,
@@ -52,16 +68,22 @@ export class World {
     this.torches = new Set(); // "x,y,z" of placed torches (for dynamic lights)
     this.torchVersion = 0;    // bumped when the torch set changes
     this.onEdit = null;       // (wx, wy, wz, id, prevId) — fired on every setBlock (sync + particles)
-    this.castShadows = false; // build shadow-caster meshes per chunk (Game.setGraphics)
+    this.castShadows = false; // terrain casts shadows (Game.setGraphics)
+    this._last = null;        // the chunk the previous lookup hit (see getChunk)
 
-    // Opaque chunk meshes use the shared per-tile material array (geometry
-    // groups index into it); water uses its own transparent material.
-    this.materials = TERRAIN_MATERIALS;
+    // Terrain draws with the two array-texture materials (atlas.js); water
+    // keeps its own translucent one.
     this.waterMaterial = BLOCK_MATERIALS[WATER_MATERIAL_INDEX];
   }
 
+  // Lookups come in runs inside one chunk (a collision box, a mesher row), so
+  // the last hit is remembered and most calls skip the map entirely.
   getChunk(cx, cz) {
-    return this.chunks.get(key(cx, cz));
+    const last = this._last;
+    if (last !== null && last.cx === cx && last.cz === cz) return last;
+    const chunk = this.chunks.get(key(cx, cz));
+    if (chunk !== undefined) this._last = chunk;
+    return chunk;
   }
 
   ensureChunk(cx, cz) {
@@ -81,7 +103,7 @@ export class World {
     }
     if (!chunk.generated) {
       generateChunk(chunk);
-      this._applyEdits(k, chunk); // replay saved player edits onto fresh terrain
+      this._applyEdits(editKey(cx, cz), chunk); // replay saved player edits onto fresh terrain
     }
     return chunk;
   }
@@ -135,7 +157,7 @@ export class World {
     chunk.dirty = true;
 
     // Record the edit so it survives chunk unload/regeneration and can be saved.
-    const k = key(cx, cz);
+    const k = editKey(cx, cz);
     let e = this.edits.get(k);
     if (!e) { e = new Map(); this.edits.set(k, e); }
     e.set(Chunk.index(lx, wy, lz), id);
@@ -209,7 +231,7 @@ export class World {
 
   buildMesh(chunk) {
     const get = (wx, wy, wz) => this.getBlock(wx, wy, wz);
-    const { opaque, water } = buildChunkGeometry(chunk, get);
+    const { solid, cutout, water } = buildChunkGeometry(chunk, get);
 
     if (chunk.mesh) {
       this.scene.remove(chunk.mesh);
@@ -217,17 +239,18 @@ export class World {
     }
 
     const group = new THREE.Group();
-    if (opaque) {
-      // Material array; geometry groups select the per-tile material.
-      const m = new THREE.Mesh(opaque, this.materials);
-      m.frustumCulled = true;
+    if (solid) {
+      const m = new THREE.Mesh(solid, TERRAIN_SOLID);
+      m.receiveShadow = true;
+      m.castShadow = this.castShadows;
+      group.add(m);
+    }
+    if (cutout) {
+      const m = new THREE.Mesh(cutout, TERRAIN_CUTOUT);
       m.receiveShadow = true;
       group.add(m);
-      if (this.castShadows) {
-        const { solidCount, leafStart, leafCount } = opaque.userData.shadow;
-        if (solidCount > 0) group.add(casterMesh(opaque, 0, solidCount, SOLID_CASTER));
-        if (leafCount > 0) group.add(casterMesh(opaque, leafStart, leafCount, LEAF_CASTER));
-      }
+      const leaves = cutout.userData.leafCount;
+      if (this.castShadows && leaves > 0) group.add(casterMesh(cutout, 0, leaves, LEAF_CASTER));
     }
     if (water) {
       const m = new THREE.Mesh(water, this.waterMaterial);
@@ -250,17 +273,8 @@ export class World {
     let work = 0;
 
     // Load/generate nearest-first.
-    const toVisit = [];
-    for (let dx = -LOAD_RADIUS; dx <= LOAD_RADIUS; dx++) {
-      for (let dz = -LOAD_RADIUS; dz <= LOAD_RADIUS; dz++) {
-        const dist = dx * dx + dz * dz;
-        if (dist > LOAD_RADIUS * LOAD_RADIUS) continue;
-        toVisit.push([dist, pcx + dx, pcz + dz]);
-      }
-    }
-    toVisit.sort((a, b) => a[0] - b[0]);
-
-    for (const [, cx, cz] of toVisit) {
+    for (let i = 0; i < VISIT.length; i++) {
+      const cx = pcx + VISIT[i][1], cz = pcz + VISIT[i][2];
       const chunk = this.getChunk(cx, cz);
       if (!chunk || !chunk.generated || chunk.dirty) {
         this.ensureChunk(cx, cz);
@@ -286,6 +300,7 @@ export class World {
           chunk.mesh = null;
         }
         this.chunks.delete(k);
+        if (this._last === chunk) this._last = null;
         this.cache.delete(k); // refresh recency
         this.cache.set(k, chunk);
       }

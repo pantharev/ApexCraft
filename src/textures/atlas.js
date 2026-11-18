@@ -838,11 +838,18 @@ for (const def of blockData) {
 
 export const BLOCK_MATERIALS = materials; // index = material index used in geometry groups
 
-// --- Terrain variants: breaking up the tiling --------------------------------
-// A world of identical 16px tiles reads as a quilt from any distance. The
-// chunk meshes therefore use patched copies of the natural tiles whose
-// fragment shader works out which block a fragment belongs to (from its world
-// position) and, from a hash of that block:
+/// --- Terrain: one texture array, two materials -------------------------------
+// The chunk meshes do not use the per-tile materials above. Every tile is
+// also packed into ONE array texture (a layer per tile), and all solid
+// terrain in a chunk is drawn in a single call with one material; cut-out
+// tiles (leaves, glass, plants…) take a second. Each vertex carries a `tile`
+// attribute — (layer, variation, glow) — telling the shader what to sample.
+// With a material per tile this was a dozen-plus draws per chunk and ~1,800
+// per frame; now it is two or three per chunk.
+//
+// The same shader breaks up the tiling. A world of identical 16px tiles reads
+// as a quilt from any distance, so the shader works out which block a
+// fragment belongs to (from its world position) and, from a hash of it:
 //   • ROTATE tiles: turns/flips the tile one of eight ways, so no two
 //     neighbours line up (only tiles with no "up" — soil, rock, foliage);
 //   • all DRIFT tiles: nudges brightness per block, plus a soft large-scale
@@ -855,8 +862,48 @@ const ROTATE = new Set(['grass_top', 'dirt', 'stone', 'sand', 'snow', 'andesite'
   ...Object.keys(ORE_COLORS)]);
 const DRIFT = new Set([...ROTATE, 'grass_side', 'gravel', 'cobblestone', 'mossy_cobblestone',
   'sandstone', 'bedrock']);
+// Self-lit tiles: the tile's own colours, added at this strength.
+const GLOW = { lava: 0.85, glow_mushroom: 0.85 };
 
-const TILE_PARS = /* glsl */`
+// Per-tile tables the mesher reads when it writes the `tile` attribute.
+export const TILE_VARIATION = tileNames.map((n) => (ROTATE.has(n) ? 2 : DRIFT.has(n) ? 1 : 0));
+export const TILE_GLOW = tileNames.map((n) => GLOW[n] || 0);
+// Which buffer a tile's faces go in: 0 solid, 1 leaves (cut-out, and they
+// cast dappled shadows), 2 other cut-outs (glass, plants, ladders — which
+// cast none, so skylights still let the sun in).
+export const TILE_KIND = tileNames.map((n) => (!CUTOUT.has(n) ? 0 : n === 'leaves' ? 1 : 2));
+
+// Rows are flipped on the way in: canvas textures are uploaded flipped (v=1
+// is the top row), raw data textures are not.
+const tileArrayData = new Uint8Array(TILE * TILE * 4 * tileNames.length);
+textures.forEach((tex, i) => {
+  const px = tex.image.getContext('2d').getImageData(0, 0, TILE, TILE).data;
+  for (let y = 0; y < TILE; y++) {
+    const from = y * TILE * 4;
+    const to = (i * TILE + (TILE - 1 - y)) * TILE * 4;
+    tileArrayData.set(px.subarray(from, from + TILE * 4), to);
+  }
+});
+const tileArray = new THREE.DataArrayTexture(tileArrayData, TILE, TILE, tileNames.length);
+tileArray.colorSpace = THREE.SRGBColorSpace;
+tileArray.magFilter = THREE.NearestFilter;
+// Mipmapped so distant terrain settles instead of shimmering; the cut-out
+// material always samples the top level (averaged alpha would thin leaves
+// and grass out to nothing).
+tileArray.minFilter = THREE.NearestMipmapLinearFilter;
+tileArray.generateMipmaps = true;
+tileArray.wrapS = tileArray.wrapT = THREE.RepeatWrapping;
+tileArray.needsUpdate = true;
+
+const TILE_VERTEX_PARS = /* glsl */`
+attribute vec3 tile;
+varying vec3 vTile;
+varying vec3 vTilePos;
+varying vec3 vTileN;`;
+
+const TILE_FRAGMENT_PARS = /* glsl */`
+uniform highp sampler2DArray tileTex;
+varying vec3 vTile;
 varying vec3 vTilePos;
 varying vec3 vTileN;
 float tileHash(vec3 p) {
@@ -876,51 +923,60 @@ float tileNoise(vec2 p) {
 // continuous UV — the turned UV jumps at every block edge, which would
 // otherwise drag a seam of the lowest mip along each one.
 const TILE_MAP = /* glsl */`
-#ifdef USE_MAP
+{
   vec3 tileCell = floor(vTilePos - vTileN * 0.5); // half a block in from the face
   float tileRnd = tileHash(tileCell);
-  #ifdef TILE_ROTATE
-    vec2 tileUv = fract(vMapUv);
+  vec2 tileUv = fract(vMapUv);
+  if (vTile.y > 1.5) {
     float tileTurn = floor(tileRnd * 8.0);
     if (mod(tileTurn, 2.0) >= 1.0) tileUv = vec2(tileUv.y, 1.0 - tileUv.x);
     if (mod(tileTurn, 4.0) >= 2.0) tileUv = 1.0 - tileUv;
     if (tileTurn >= 4.0) tileUv.x = 1.0 - tileUv.x;
-    vec4 sampledDiffuseColor = textureGrad(map, tileUv, dFdx(vMapUv), dFdy(vMapUv));
+  }
+  vec3 tileCoord = vec3(tileUv, floor(vTile.x + 0.5));
+  #ifdef TILE_CUTOUT
+    vec4 sampledDiffuseColor = textureGrad(tileTex, tileCoord, vec2(0.0), vec2(0.0));
   #else
-    vec4 sampledDiffuseColor = texture2D(map, vMapUv);
+    vec4 sampledDiffuseColor = textureGrad(tileTex, tileCoord, dFdx(vMapUv), dFdy(vMapUv));
   #endif
-  float tileMacro = tileNoise(vTilePos.xz * 0.05 + vTilePos.y * 0.035);
-  sampledDiffuseColor.rgb *= 0.95 + 0.07 * fract(tileRnd * 13.7) + 0.12 * (tileMacro - 0.5);
+  if (vTile.y > 0.5) {
+    float tileMacro = tileNoise(vTilePos.xz * 0.05 + vTilePos.y * 0.035);
+    sampledDiffuseColor.rgb *= 0.95 + 0.07 * fract(tileRnd * 13.7) + 0.12 * (tileMacro - 0.5);
+  }
+  totalEmissiveRadiance += sampledDiffuseColor.rgb * vTile.z;
   diffuseColor *= sampledDiffuseColor;
-#endif`;
+}`;
 
-function variedMaterial(material, rotate) {
-  const m = material.clone();
+// A 1x1 stand-in `map`: it is never sampled, but having one makes three
+// define USE_MAP and pass the UVs through to the fragment shader.
+const uvCarrier = new THREE.DataTexture(new Uint8Array([255, 255, 255, 255]), 1, 1);
+uvCarrier.needsUpdate = true;
+
+function terrainMaterial(cutout) {
+  const m = new THREE.MeshLambertMaterial({
+    map: uvCarrier, vertexColors: true,
+    ...(cutout ? { alphaTest: 0.5, side: THREE.DoubleSide } : {}),
+  });
   m.onBeforeCompile = (shader) => {
+    shader.uniforms.tileTex = { value: tileArray };
     shader.vertexShader = shader.vertexShader
-      .replace('#include <common>', '#include <common>\nvarying vec3 vTilePos;\nvarying vec3 vTileN;')
+      .replace('#include <common>', `#include <common>\n${TILE_VERTEX_PARS}`)
       .replace('#include <begin_vertex>',
-        '#include <begin_vertex>\nvTilePos = (modelMatrix * vec4(transformed, 1.0)).xyz;\nvTileN = normal;');
+        '#include <begin_vertex>\nvTile = tile;\nvTilePos = (modelMatrix * vec4(transformed, 1.0)).xyz;\nvTileN = normal;');
     shader.fragmentShader = shader.fragmentShader
-      .replace('#include <common>', `#include <common>\n${rotate ? '#define TILE_ROTATE\n' : ''}${TILE_PARS}`)
+      .replace('#include <common>', `#include <common>\n${cutout ? '#define TILE_CUTOUT\n' : ''}${TILE_FRAGMENT_PARS}`)
       .replace('#include <map_fragment>', TILE_MAP);
   };
-  m.customProgramCacheKey = () => (rotate ? 'terrain-rotate' : 'terrain-drift');
+  m.customProgramCacheKey = () => (cutout ? 'terrain-cutout' : 'terrain-solid');
   return m;
 }
 
-// What the chunk meshes are drawn with (same indices as BLOCK_MATERIALS).
-export const TERRAIN_MATERIALS = materials.map((m, i) => {
-  const name = tileNames[i];
-  return ROTATE.has(name) ? variedMaterial(m, true) : DRIFT.has(name) ? variedMaterial(m, false) : m;
-});
+// What the chunk meshes are drawn with.
+export const TERRAIN_SOLID = terrainMaterial(false);
+export const TERRAIN_CUTOUT = terrainMaterial(true);
 
 export const WATER_MATERIAL_INDEX = tileIndex.water;
-// Material indices of the see-through tiles, for the chunk shadow casters:
-// leaves throw dappled shadows through their own alpha; the rest (glass,
-// plants, ladders…) cast none — so skylights still let the sun in.
 export const LEAVES_MATERIAL_INDEX = tileIndex.leaves;
-export const CUTOUT_MATERIAL_INDICES = new Set([...CUTOUT].map((n) => tileIndex[n]));
 export const LAVA_MATERIAL_INDEX = tileIndex.lava; // exported for optional texture animation later
 
 export function faceMaterialIndex(blockId, face) {

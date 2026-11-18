@@ -7,6 +7,11 @@ import React from 'react';
 const CHANGELOG = [
   {
     date: 'November 18, 2026',
+    title: 'Faster, smoother worlds',
+    body: 'After all the new shadows, skies and creatures, the engine got a tune-up so it all runs lighter than before. The world is now drawn in about a seventh as many steps, which makes each frame several times cheaper to render — expect a smoother game, especially in forests and on laptops. Moving, mining and fighting do less work behind the scenes, the on-screen readouts no longer redraw themselves sixty times a second, and a rare bug that could drop animals and items through thin floors after a stutter is fixed. Nothing looks different; it just runs better.',
+  },
+  {
+    date: 'November 18, 2026',
     title: 'Meet yourself',
     body: 'Players finally have real bodies. Everyone gets a painted character — skin tone, hair, shirt and trousers all come from your name, so your friends always see the same you — and it moves like a person: arms swing as you walk, the head looks where you look, and whatever you are holding is right there in your hand, swinging when you mine or fight. You will notice it even playing alone: look down and you now cast your own shadow, pickaxe and all. Press C to step back into a third-person camera and see your character from behind (C again to return). Aiming works the same in both views.',
   },

@@ -9,6 +9,58 @@ updated with every merged PR** (and mirror a short player-facing entry in the
 
 ---
 
+## 2026-11-18 — Performance pass (one texture array, 7x fewer draw calls)
+
+Stacked on the player-character branch. Looks identical; costs far less.
+
+Measured in the same forest view (render call timed directly, 40-frame
+average, in the dev build):
+
+| | draw calls | render, no shadows | render, shadows |
+|---|---|---|---|
+| before | 1,801 | 7.1 ms | 11.6 ms |
+| after | 258 | 1.6 ms | 3.4 ms |
+
+- **Texture array terrain** (`atlas.js`): every tile is also a layer of one
+  `DataArrayTexture` (rows flipped on the way in — canvas textures upload
+  flipped, raw data does not). Chunk meshes draw with two materials,
+  `TERRAIN_SOLID` and `TERRAIN_CUTOUT` (alpha-tested, double-sided, always
+  sampling mip 0), instead of a material per tile. The per-tile
+  `BLOCK_MATERIALS` remain for everything off the grid (drops, held block,
+  disguises, the leaf shadow caster).
+  - Each vertex carries `tile` = (layer, variation, glow). Variation 1/2 =
+    the texture pass's DRIFT/ROTATE treatment; glow replaces the per-material
+    emissive (lava, glow mushroom) by adding the texel's own colour.
+  - The material has a 1×1 dummy `map` purely so three defines `USE_MAP` and
+    passes UVs through; `<map_fragment>` is replaced with the array sample.
+  - Exported tables `TILE_KIND` / `TILE_VARIATION` / `TILE_GLOW` (indexed
+    like `tileIndex`) are what the mesher reads.
+- **Mesher** (`ChunkMesher.js`): three buffers — solid, leaves, other
+  cut-outs — instead of a Map of per-material buffers. `bufFor(tile)` returns
+  the right one *and primes it* (`buf.tile`); every push ends in
+  `stampTile(buf)`. Returns `{ solid, cutout, water }`; leaves come first in
+  `cutout` (`userData.leafCount`). `assemble()` sizes typed arrays up front
+  and copies — the old spread-push (`push(...bigArray)`) and its RangeError
+  risk are gone.
+- **Shadows**: solid terrain is now one mesh/material, so it simply has
+  `castShadow` — the solid caster proxy is gone. Leaves still use a proxy on
+  `SHADOW_CASTER_LAYER` (they share the cut-out mesh with glass and plants,
+  which must not cast).
+- **`World`**: chunk map keys are numbers, not `"cx,cz"` strings (no string
+  built per voxel lookup); `getChunk` remembers the last chunk hit, since
+  lookups come in runs. The `edits` map keeps string keys — that is the save
+  and network format. The nearest-first visit order is computed once
+  (`VISIT`) rather than rebuilt and sorted every frame.
+- **`Game._loop`**: `dt` is clamped to `MAX_STEP` (0.05 s), which fixes mobs
+  and drops tunnelling through floors after a hitch (found in the mob pass);
+  `onStats` goes to React every `STATS_INTERVAL` (0.1 s) instead of every
+  frame. GOTCHA: HUD values can now be up to 100 ms stale — fine for bars
+  and clocks, but do not read gameplay state back out of `stats`.
+- Still open: chunk generation + meshing on the main thread (a worker is the
+  next big win for hitches while exploring), mob models as separate meshes
+  per limb, the 16-point-light pool evaluated per fragment, full-world
+  autosave serialisation every 15 s.
+
 ## 2026-11-18 — Player character pass (painted avatars, own shadow, third person)
 
 Fourth graphics pass, stacked on the mob branch.
@@ -643,9 +695,12 @@ From the 2026-07-02 code audit (see PR #37–#39 review + session notes):
 
 - **Host migration silently disables saving** — `onBecomeHost` never sets
   `_canPersist`; edits after the origin host leaves are lost. High priority.
-- `onStats` pushes to React at 60 Hz (whole HUD re-renders every frame; also
+- ~~`onStats` pushes to React at 60 Hz~~ — throttled to 10 Hz in the
+  performance pass (2026-11-18). Was: (whole HUD re-renders every frame; also
   the main aggravator of the mobile drag-and-drop bug). Throttle to ~8 Hz.
-- `World.getBlock` allocates a `"cx,cz"` string per voxel query (hot in every
+- ~~`World.getBlock` string keys, mesher spread-push~~ — fixed in the
+  performance pass (2026-11-18); gen/meshing is still main-thread. Was:
+  `World.getBlock` allocates a `"cx,cz"` string per voxel query (hot in every
   collision test); mesher has heavy per-quad allocation churn + a spread-push
   `RangeError` risk in `assembleGrouped`; all gen/meshing is main-thread.
 - Autosave re-serializes the whole world every 15 s even when nothing changed.

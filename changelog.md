@@ -9,6 +9,39 @@ updated with every merged PR** (and mirror a short player-facing entry in the
 
 ---
 
+## 2026-11-18 — #58 Chunk workers: generation and meshing off the main thread
+
+Chunks are generated and meshed in a pool of workers (`src/core/ChunkPool.js`
+→ `chunkWorker.js`; cores − 2, between 1 and 4). `World.update(x, z)` walks
+the load disc nearest-first, hands out jobs while the pool has a free slot —
+there is no queue, so what runs next always follows the player — and draws
+results as they return. The page keeps every chunk: a mesh job gets a padded
+copy of the chunk plus a one-block ring of its eight neighbours
+(`ChunkMesher.buildVolume`, buffers recycled), and `meshVolume` returns typed
+arrays that `World` wraps in geometry. The main thread still builds chunks in
+`World.preload` (spawn / teleport: 25 chunks now, not 80), for a missing chunk
+right around the player, for edits within two chunks of the player
+(same-frame remesh), and for everything if workers fail (`?workers=0` on
+localhost forces it). The mesher was rewritten around the snapshot — flat
+lookup tables, index strides, no sweep of empty sky — with byte-identical
+output: 14.9 → 2.5 ms per chunk on the same 177 chunks. On a 16-core desktop,
+frames that spent over 8 ms on chunks fell from 42 in 1,200 to 2 while walking
+(109 in 600 to 1 flying at 30 m/s), and entering a world from 1.4 s to 0.5 s.
+
+Gotchas: everything `chunkWorker.js` imports must run without the DOM or
+three.js (`BlockRegistry` dropped its three import; `World` builds the tile
+tables and sends them over), and each worker has its own module state, told
+the seed, gen mode and arena map once when the `World` is constructed.
+`src/core/chunkTest.js` runs that code under Node and is now in CI.
+`chunk.dirty` is derived from `rev` / `meshRev`, so a worker mesh that
+returns after a later edit leaves the chunk dirty and an older mesh never
+replaces a newer one. A mesh waits for all eight neighbours and a corner edit
+dirties the diagonal chunk, so a mesh no longer depends on the order chunks
+arrived in. `Game.setGraphics` no longer remeshes (`World.setCastShadows`
+switches casters in place). The few ~10 ms frames left while streaming are
+garbage collection, not chunk work. In dev, Vite's watcher can miss a
+rewritten file — `curl` the module if the page behaves like the old code.
+
 ## 2026-11-18 — #57 Performance pass: texture-array terrain
 
 Every block tile is now also a layer of one `DataArrayTexture` (`atlas.js`),
@@ -572,10 +605,9 @@ From the 2026-07-02 code audit (see PR #37–#39 review + session notes):
 
 Pre-alpha. Four game modes on `main` — survival, creative, Prop Hunt (town /
 castle / playroom), and Zombies (bastion) — plus pets, flowing liquids, a
-procedural soundtrack, and the five graphics/performance passes above (#53 to
-#57). Tycoon mode (#52, `feature/tycoon`) is parked and unmerged: it needs its
+procedural soundtrack, and the six graphics/performance passes above (#53 to
+#58). Tycoon mode (#52, `feature/tycoon`) is parked and unmerged: it needs its
 changelog entries and its `worker` mob merged by hand, and it claims block ids
 69–72, so new blocks on `main` start at 73. Deploys: Vercel builds previews
-per PR; CI = `npm run build` + `server/test.js` + `chess/engineTest.js`. Next
-up: chunk generation and meshing in a web worker, then water (still a flat
-scrolling sheet).
+per PR; CI = `npm run build` + `server/test.js` + `chess/engineTest.js` +
+`core/chunkTest.js`. Next up: water (still a flat scrolling sheet).

@@ -131,6 +131,11 @@ optionally, a `fuels` entry:
 
 - **Terrain/biomes:** `src/world/generators/TerrainGen.js`,
   `src/world/biomes/BiomeMap.js`, noise fields in `src/world/noise.js`.
+  World generation runs in web workers (`src/core/chunkWorker.js`), so this
+  code — and anything it imports, structures and arena maps included — must
+  not touch the DOM, three.js or the running game. A chunk may depend only on
+  the seed, the generation mode and the active arena map. `src/core/chunkTest.js`
+  runs it under plain Node and fails if that rule is broken.
 - **Structures** (like trees): `src/world/structures/` — called from
   `TerrainGen`.
 - **Projectiles** (arrows; reusable for guns/spells):

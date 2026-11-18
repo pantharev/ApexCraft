@@ -6,6 +6,10 @@ dist/
 dist-ssr/
 *.local
 
+# Bundled test harnesses (see src/core/chunkTest.js, src/world/arenas/arenaTest.js)
+.chunk-test.mjs
+.arena-test.mjs
+
 # Environment / secrets
 .env
 .env.*

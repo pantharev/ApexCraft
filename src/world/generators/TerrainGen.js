@@ -25,8 +25,16 @@ const GRASS = getBlockId('grass');
 // Generation mode, set once before a Game's chunks generate (see Game ctor).
 // 'arena' swaps the procedural terrain for a flat arena base + the active
 // arena map (Prop Hunt and Zombies worlds).
+//
+// Generation runs in the chunk workers as well as on the page (core/
+// chunkWorker.js), and each has its own copy of this module: whatever is set
+// here — and the seed (noise.js) and the active arena map — has to reach the
+// workers too. World does that when it starts its pool, so set all three
+// before constructing a World. Nothing below may depend on anything else the
+// page knows.
 let GEN_MODE = null;
 export function setGenMode(m) { GEN_MODE = m || null; }
+export function getGenMode() { return GEN_MODE; }
 
 // The heightfield itself lives in Height.js so structures (villages) can
 // query terrain shape without importing the whole generator.

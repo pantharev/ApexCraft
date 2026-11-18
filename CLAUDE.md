@@ -16,17 +16,25 @@ npm run preview  # preview the production build
 npm run server   # multiplayer server on :3001 (Express + Socket.IO) — optional
 ```
 
-There is no lint step and no test runner/framework. The two test suites are plain Node scripts (this is exactly what CI runs, see `.github/workflows/ci.yml`):
+There is no lint step and no test runner/framework. The test suites are plain Node scripts:
 
 ```bash
 node server/test.js             # multiplayer protocol integration test (spins up the server on :3199)
 node src/chess/engineTest.js    # chess move-gen perft + bot legality/mate/speed
-node src/world/arenas/arenaTest.js # arena map structural checks (not in CI — run it when touching src/world/arenas)
+```
+
+Two more have to be bundled first, because plain Node can't import the JSON registries (esbuild comes with Vite):
+
+```bash
+# chunk pipeline — terrain generation, the mesh snapshot, the mesher: what the chunk workers run
+npx esbuild src/core/chunkTest.js --bundle --format=esm --outfile=.chunk-test.mjs && node .chunk-test.mjs
+# arena map structural checks (not in CI — run it when touching src/world/arenas)
+npx esbuild src/world/arenas/arenaTest.js --bundle --format=esm --outfile=.arena-test.mjs && node .arena-test.mjs
 ```
 
 They print `ok -` / `FAIL -` lines. There is no way to run a single case — edit the script to narrow it.
 
-CI = `npm run build` + the two scripts above. There is no automated test for the voxel engine itself; verify gameplay changes by running `npm run dev`. **Do not auto-start the dev server** — the user controls it (ask first).
+CI = `npm run build` + the first three scripts (see `.github/workflows/ci.yml`). Nothing automated covers rendering or gameplay; verify those changes by running `npm run dev`. **Do not auto-start the dev server** — the user controls it (ask first).
 
 ## Architecture
 
@@ -46,9 +54,10 @@ A world's `mode` is fixed at creation: `survival` (default), `creative`, `hidese
 
 ### Chunked voxel world
 - `src/config.js` — all world tuning constants (`CHUNK_SIZE=16`, `WORLD_HEIGHT=128`, `SEA_LEVEL=62`, load/unload radii, LRU cache size).
-- `src/core/World.js` — chunk manager. Per-frame `update(playerX, playerZ, budget)` generates/meshes chunks nearest-first within `LOAD_RADIUS` (budgeted to avoid frame hitches) and unloads beyond `UNLOAD_RADIUS` into an LRU `cache` (preserves edits, skips regen on revisit). `getBlock`/`setBlock` work in global voxel coordinates across chunk boundaries.
+- `src/core/World.js` — chunk manager. Per-frame `update(playerX, playerZ)` keeps the chunks within `LOAD_RADIUS` generated and meshed, nearest-first, and unloads beyond `UNLOAD_RADIUS` into an LRU `cache` (preserves edits, skips regen on revisit). `getBlock`/`setBlock` work in global voxel coordinates across chunk boundaries.
+- **Chunk workers** — generating and meshing chunks runs in a small worker pool (`src/core/ChunkPool.js` → `chunkWorker.js`), not on the main thread. `World.update` hands out jobs while the pool has a free slot and draws the results as they come back. The page owns every chunk; a mesh job is sent a padded copy of the voxels it needs (`ChunkMesher.buildVolume`: the chunk plus a one-block ring of its eight neighbours, all of which must be generated first). The main thread still builds chunks itself in `World.preload` (spawn / teleport), for a missing chunk right around the player, for edits within two chunks of the player (remeshed in the same frame, so a broken block vanishes at once and both sides of a chunk border change together), and for everything if workers can't start (`?workers=0` on localhost forces that). Two rules come with it. **Whatever `chunkWorker.js` imports — generators, structures, arena maps, `BlockRegistry`, `ChunkMesher`, `noise` — must run with no DOM and no three.js** (`chunkTest.js` runs it under Node and fails otherwise). And each worker has its own copy of those modules, told the seed, gen mode, arena map and tile tables once, when the `World` is constructed: set all of them before `new World`, and make generation depend on nothing else. A chunk needs remeshing when `Chunk.rev` ≠ `meshRev` — write `chunk.dirty = true` to invalidate one, and never assume the new mesh exists by the next line.
 - **Edits map is the source of truth for player changes.** `World.edits` (`"cx,cz"` → `Map(localIndex → blockId)`) is what gets saved, synced over the network, and replayed onto freshly generated terrain. Terrain itself is never saved — it is deterministic from the seed, so saves only store edits + player/inventory/vitals/time. This same chunk-keyed edit form is shared by the save system (`World.serializeEdits`) and the netcode (`Net.encodeEdit`).
-- `src/core/ChunkMesher.js` — greedy mesher. Merges coplanar faces into large quads; the per-face ambient-occlusion pattern is packed into the merge mask key so AO stays exact across merged quads. Non-cube blocks (plants, doors, beds, fences, ladders, panes, slabs, stairs) are in the `SPECIAL` set and drawn by a separate pass, not greedy-meshed. It emits one solid and one cut-out geometry per chunk (plus water), with every vertex tagged by a `tile` attribute — texture-array layer, variation, glow — so a chunk draws in two or three calls.
+- `src/core/ChunkMesher.js` — greedy mesher (`meshVolume`). It reads a chunk from its padded snapshot and returns plain typed arrays, which `World` wraps in geometry. Merges coplanar faces into large quads; the per-face ambient-occlusion pattern is packed into the merge mask key so AO stays exact across merged quads. Non-cube blocks (plants, doors, beds, fences, ladders, panes, slabs, stairs) are in the `SPECIAL` set and drawn by a separate pass, not greedy-meshed. It emits one solid and one cut-out geometry per chunk (plus water), with every vertex tagged by a `tile` attribute — texture-array layer, variation, glow — so a chunk draws in two or three calls.
 - `src/world/` — generation. `noise.js` holds ~18 independently-seeded simplex fields (terrain, climate, caves, rivers, mountains, rifts…); call `reseed(seed)` before constructing a `Game` (App.jsx does this). `generators/TerrainGen.js` is the entry point and calls into `biomes/`, `generators/` (caves, ores), and `structures/` (trees, villages).
 - `src/systems/Liquids.js` — tick-based water/lava flow. Flow levels are their own block ids; the sim is edge-triggered (only edits/neighbor changes queue ticks) and host-authoritative — flow results propagate as ordinary block edits.
 - `src/systems/TorchLights.js` — dynamic light manager. Three.js point lights are a **hard-capped pool** (10 warm torch + 6 cool glow = 16), assigned to the nearest sources within a scan radius each frame; beyond that, torches/glow flora render but cast no light. Don't add per-source `PointLight`s elsewhere — route new emitters through this pool.

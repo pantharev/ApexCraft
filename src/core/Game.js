@@ -223,7 +223,10 @@ export class Game {
     this._heldMats = []; // the held view-model's private material copies
     this._heldDim = -1;
 
-    this.world = new World(this.scene);
+    // Chunks generate and mesh in workers. On localhost `?workers=0` keeps it
+    // all on the main thread, to tell a worker problem from a terrain one.
+    const noWorkers = this.dev && new URLSearchParams(location.search).get('workers') === '0';
+    this.world = new World(this.scene, { workers: !noWorkers });
     this._applyGraphics();
     // Replay saved block edits before any terrain is generated.
     if (this._save) this.world.loadEdits(this._save.edits);
@@ -706,23 +709,21 @@ export class Game {
     if (this.hideseek) { this._bindHideSeek(); this._bindTauntWheel(); }
     if (this.zombies) this._bindZombies();
 
-    // Pre-generate spawn area so the player doesn't fall through ungenerated
-    // chunks, then place the player. For a loaded game, generate around the
-    // saved position so the player doesn't briefly fall through ungenerated land.
+    // Place the player, then build the chunks around them before the first
+    // frame, so there is ground under their feet and a world to look at (the
+    // workers stream in the rest). spawnAtSurface generates whatever it scans.
     if (this._save?.player) {
       this._restorePlayer(this._save.player);
-      this.world.update(this.player.pos.x, this.player.pos.z, 80);
     } else if (this.hideseek || this.zombies) {
       // Arena maps define their lobby spawn explicitly — spawnAtSurface scans
       // top-down and would drop the player onto a roof (or a future ceiling).
-      this.world.update(0, 0, 80);
       const s = activeMap().lobbySpawn();
       this.player.pos.set(s.x, s.y, s.z);
       this.player._peakY = s.y;
     } else {
-      this.world.update(0, 0, 80);
       this.player.spawnAtSurface();
     }
+    this.world.preload(this.player.pos.x, this.player.pos.z);
 
     // Restore tamed pets — after pregen so their chunks exist, host/SP only
     // (guests mirror the host's mobs). A guest's pet loads orphaned + sitting
@@ -853,7 +854,7 @@ export class Game {
       }
     }
     // Pre-generate around the destination so the village is there on arrival.
-    this.world.update(target.x, target.z, 80);
+    this.world.preload(target.x, target.z);
     const y = this.world.surfaceHeight(target.x, target.z);
     this.player.pos.set(target.x + 0.5, y + 2, target.z + 0.5);
     this.player.vel.set(0, 0, 0);
@@ -1600,15 +1601,12 @@ export class Game {
     this.graphics = quality === 'low' ? 'low' : 'high';
     try { localStorage.setItem(GFX_KEY, this.graphics); } catch (_) { /* private mode */ }
     this._applyGraphics();
-    // Remesh so the chunks' shadow casters appear / go away (budgeted per
-    // frame by World.update, nearest first).
-    for (const c of this.world.chunks.values()) c.dirty = true;
   }
 
   _applyGraphics() {
     const shadows = this.graphics === 'high';
     this.sun.castShadow = shadows;
-    this.world.castShadows = shadows;
+    this.world.setCastShadows(shadows);
   }
 
   // Sample the camera's surroundings for the atmosphere: is it under water,
@@ -1846,7 +1844,7 @@ export class Game {
     this._waterT += dt;
     const waterMap = this.world.waterMaterial.map;
     waterMap.offset.set((this._waterT * 0.02) % 1, (this._waterT * 0.012) % 1);
-    this.world.update(this.player.pos.x, this.player.pos.z, 3);
+    this.world.update(this.player.pos.x, this.player.pos.z);
     this._animateHeld(dt);
     this.renderer.render(this.scene, this.camera);
 
@@ -1941,6 +1939,7 @@ export class Game {
     this.sun.dispose(); // frees the shadow map
     for (const m of this._heldMats) m.dispose();
     this.selfAvatar.dispose();
+    this.world.dispose(); // stops the chunk workers
     this.renderer.dispose();
     if (this.renderer.domElement.parentNode) {
       this.renderer.domElement.parentNode.removeChild(this.renderer.domElement);

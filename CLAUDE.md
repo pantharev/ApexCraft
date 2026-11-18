@@ -60,7 +60,7 @@ Blocks, items, recipes, smelting, and mobs are defined in JSON / small JS tables
 - `src/blocks/blocks.json` + `BlockRegistry.js` — indexed by numeric `id` (used hot in the mesher). `Blocks.<NAME>` and `getBlockId(name)` resolve names.
 - `src/items/items.json` + `ItemRegistry.js` — items referenced by string name everywhere (drops, recipes, inventory). An item with `placeBlock` is placeable; `food`/`toolType` make it edible/a tool.
 - `src/crafting/` — `recipes.json` (shaped/shapeless; grid size decides inventory-2×2 vs table-3×3) and `smelting.json`, run by `CraftingEngine.js` / `Smelting.js`.
-- `src/entities/mobTypes.js` — mob stats + box-part models; spawning is automatic via `systems/MobManager.js`.
+- `src/entities/mobTypes.js` — mob stats + box-part models; spawning is automatic via `systems/MobManager.js`. `MobModels.js` unwraps the parts onto a per-type skin sheet (16 px per block) that the type's painter in `mobSkins.js` details, addressing parts by `id`; glow-flagged pixels (eyes) shine in the dark. All of a mob's meshes share one material — go through `flashMob` for the hurt tint.
 - `src/textures/atlas.js` + `icons.js` + `cracks.js` — procedural canvas textures; a new block needs a `DRAW.*` routine and a `FACE_TILES` entry. Chunk meshes draw with `TERRAIN_MATERIALS` (shader-patched copies that turn and shade each block by a hash of its world position — tile names opt in through the `ROTATE`/`DRIFT` sets); anything drawn off the block grid (drops, held block, disguises) must keep the plain `BLOCK_MATERIALS`.
 - Audio is procedural too: `src/systems/Sound.js` (effects, Web Audio) and `Music.js` + `tracks.js` (Tone.js soundtrack composed in code, rotated by day/night/cave context).
 

@@ -9,6 +9,58 @@ updated with every merged PR** (and mirror a short player-facing entry in the
 
 ---
 
+## 2026-11-18 — Mob pass (painted skins, glowing eyes, tails/wings/spider legs)
+
+Third graphics pass, stacked on the texture branch. No AI, stat, loot, or
+netcode changes — collision boxes (`hw`/`h`) are untouched.
+
+- **`src/entities/MobModels.js` rewritten.** Every mob type gets one
+  generated *skin sheet* (cached per type): each box part is unwrapped onto
+  it at 16 px per block — the block tiles' pixel scale — base-coated in the
+  part colour, then detailed by the type's painter. A model is now a handful
+  of meshes sharing **one material per mob instance**: merged rigid body,
+  merged head, and one mesh per limb/tail/wing. (Before: one mesh + one
+  material per part, textured with 8×8 random noise.)
+- **`src/entities/mobSkins.js` (new)**: one painter per type (`SKINS`), built
+  on a small `Face` API (`px`, `rect`, `speckle`, `blotches`, `fromFront`)
+  with the origin at a face's top-left as seen from outside. Parts are
+  addressed by the new `id` field in `mobTypes.js`. Unknown ids are a no-op,
+  and a type with no painter just gets the base coat — so the Tycoon
+  `worker` (other branch) keeps working unpainted.
+- **Glow map**: a second sheet = the skin × `FILL` (0.16, replacing the old
+  flat 0.32 emissive that washed mobs out in sunlight) plus any pixels a
+  painter flagged as glowing at full strength. That is the eyes-in-the-dark
+  effect (zombie family, spiders, golems, cats, bats). Material = Lambert
+  with `emissive: white, emissiveMap: glow`.
+- **Hurt flash** is now `flashMob(parts, on)` (exported; `Mob._flashRed/
+  _clearFlash` and `GhostMobs` call it): it swaps the emissive map for a 1×1
+  white texture and tints red. Swapping rather than nulling keeps the same
+  shader program — no recompile hitch mid-fight. The death fade is unchanged
+  (it sets opacity on `part.material`, which is now the one shared material).
+- **`mobTypes.js`**: parts gained `id`s and new flags — `tail: 'back'|'hang'`,
+  `wing: true`, and `pivot`/`rest`/`axis`/`phase`/`amp` overrides (all read in
+  `buildMobModel`; the file header documents them). New parts: pig ears +
+  tail, cow horns/udder/tail, sheep wool cap, chicken comb/wattle/wings/tail
+  fan, cat/wolf tails, a four-legged creeper, an eight-legged spider. Painted
+  features replaced the old stuck-on eye/mouth boxes.
+- **Animation** (`animateMob`): legs swing on a per-part axis around a rest
+  pose (spider legs are splayed out/down and sweep around y; same phase on
+  both sides gives opposite motion because the hinges mirror); tails sway,
+  and wag fast on a tamed pet; wings flutter on the run and flap in the air
+  (bats always). Skeleton arms rest raised as if drawing a bow (`arm` with a
+  `rest`, no `gait`, so nothing re-poses them).
+- GOTCHAS: arm order still matters — index 0 must be the −x arm (`animateMob`
+  splays by index). Pets' sitting pose in `Mob.js`/`GhostMobs.js` assumes
+  legs 0–1 are the front pair (`legs4` keeps that). Face image axes are
+  documented on `FACES` in `MobModels.js`; side faces are mirrored, hence
+  `fromFront`.
+- Found while testing, not fixed: the game loop does not clamp `dt`, so at
+  very low frame rates (a throttled background tab) mobs tunnel through
+  one-block-thick floors.
+- Merge note for `feature/tycoon`: it adds a `worker` entry to `mobTypes.js`
+  right where this pass rewrote the file — keep both; the worker needs no
+  other change.
+
 ## 2026-11-18 — Texture pass (redrawn tiles, no more tiling quilt)
 
 Second graphics pass, stacked on the lighting branch. All in

@@ -91,14 +91,38 @@ optionally, a `fuels` entry:
      category: 'passive',           // or 'hostile'
      health: 6, speed: 1.5, hw: 0.35, h: 0.6,
      drops: [{ item: 'string', count: [0, 1] }],
-     parts: [ /* box parts: { size:[w,h,d], pos:[x,y,z], color, leg? } */ ],
+     parts: [
+       { id: 'body', size: [0.5, 0.3, 0.6], pos: [0, 0.3, 0], color: '#4f9a3a' },
+       { id: 'head', size: [0.4, 0.25, 0.3], pos: [0, 0.4, 0.4], color: '#5aa844', head: true },
+       // …legs with `leg: true`
+     ],
    }
    ```
    Hostile options: `attack`, `detect`, `burns` (daylight), `climbs` (walls),
-   `ranged` (shoots — see skeleton). Models are boxes (`parts`); legs (`leg:
-   true`) swing while walking.
+   `ranged` (shoots — see skeleton).
 
-2. Spawning is automatic: passive mobs spawn on grass by day, hostile at
+   Models are boxes (`parts`): `size` and `pos` (the box centre, measured
+   from the feet) in blocks, with the mob facing +z. Flags make a part move:
+   `head: true` (turns to look), `leg: true` (swings while walking),
+   `arm: true` (posed by the mob's `gait`), `tail: 'back' | 'hang'` (wags),
+   `wing: true` (flaps). The comment at the top of the file lists them all.
+   The skin is painted at 16 pixels per block, so sizes on a 1/16 grid
+   (0.0625) give the cleanest result.
+
+2. (Optional) **`src/entities/mobSkins.js`** — paint the details. Without a
+   painter the mob still gets a mottled coat in its part colours; a painter
+   adds the face and markings, addressing parts by their `id`:
+   ```js
+   frog(p) {
+     const face = p.face('head', 'front');
+     eyes(face, 1, 1, '#141414', { white: '#ffffff' });
+     p.face('body', 'top').blotches(3, 2, '#3a7a2c');   // darker spots
+   },
+   ```
+   Pass `true` as the last argument of `px`/`rect` (or `{ glow: true }` to
+   `eyes`) to make those pixels shine in the dark.
+
+3. Spawning is automatic: passive mobs spawn on grass by day, hostile at
    night (see `src/systems/MobManager.js` for caps / distances).
 
 ---

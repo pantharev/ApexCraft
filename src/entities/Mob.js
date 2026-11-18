@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { isSolid, getBlock } from '../blocks/BlockRegistry.js';
 import { WORLD_HEIGHT } from '../config.js';
 import { MOBS } from './mobTypes.js';
-import { buildMobModel, animateMob } from './MobModels.js';
+import { buildMobModel, animateMob, flashMob } from './MobModels.js';
 import { Sound } from '../systems/Sound.js';
 import { nameTag } from '../net/RemotePlayers.js';
 
@@ -96,24 +96,9 @@ export class Mob {
     this.tag = null;
   }
 
-  _flashRed() {
-    for (const p of this.parts) {
-      if (p.material && p.material.emissive) {
-        p.material.emissive.setHex(0xff3030);
-        p.material.emissiveIntensity = 1;
-      }
-    }
-  }
+  _flashRed() { flashMob(this.parts, true); }
 
-  _clearFlash() {
-    for (const p of this.parts) {
-      const m = p.material;
-      if (m && m.emissive) {
-        m.emissive.setHex(m.userData.baseEmissive ?? 0x000000);
-        m.emissiveIntensity = 0.32;
-      }
-    }
-  }
+  _clearFlash() { flashMob(this.parts, false); }
 
   _collides(p) {
     const minX = Math.floor(p.x - this.hw), maxX = Math.floor(p.x + this.hw);

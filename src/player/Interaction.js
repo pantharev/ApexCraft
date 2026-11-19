@@ -250,11 +250,18 @@ export class Interaction {
     Sound.dig(soundCategory(getBlockId(block.name)), 1); // break sound
     if (this.onBlockBroken) this.onBlockBroken(block.name, b);
 
-    // A plant sitting on this block loses its support and pops too.
+    // A plant sitting on this block loses its support and pops too...
     const above = getBlock(this.world.getBlock(b.x, b.y + 1, b.z));
-    if (above.plant) {
+    if (above.plant && !above.hangs) {
       this.world.setBlock(b.x, b.y + 1, b.z, 0);
       this._spawnDrops(above, { x: b.x, y: b.y + 1, z: b.z }, true);
+    }
+    // ...and whatever hangs from it (a cave vine) comes down, to its tip.
+    for (let y = b.y - 1; y > 0; y--) {
+      const under = getBlock(this.world.getBlock(b.x, y, b.z));
+      if (!under.hangs) break;
+      this.world.setBlock(b.x, y, b.z, 0);
+      this._spawnDrops(under, { x: b.x, y, z: b.z }, true);
     }
 
     this._spawnDrops(block, b, false);

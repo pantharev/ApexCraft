@@ -6,6 +6,11 @@ import React from 'react';
 
 const CHANGELOG = [
   {
+    date: 'November 19, 2026',
+    title: 'A new underground',
+    body: 'Worlds you create from now on have caves worth getting lost in. Tunnels squeeze down to a crawl and open out into galleries; great caverns hold pillars of rock from floor to roof. Some caves are lush — moss underfoot, glowing mushrooms, vines hung with shining berries — and some are dripstone, bristling with stalagmites and stalactites. There are still, dark lakes down there, and far below, where the stone turns to deepslate, lakes of lava that light the walls around them. Fewer random holes in the ground, too: the ways in are places you find. Your existing worlds are unchanged, block for block.',
+  },
+  {
     date: 'November 18, 2026',
     title: 'Choose your character',
     body: 'You can now pick who you play as. The world list has six characters to choose from — Man, Woman, Santa, Ms. Santa, Nurse and Engineer — and the one you pick is who you are in every world, and who your friends see when you play together. To admire the result, press C (or the new Cam button on phones): once puts the camera behind you, again turns it round to face you, and a third time takes you back to first person.',

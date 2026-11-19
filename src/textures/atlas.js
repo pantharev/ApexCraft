@@ -733,6 +733,71 @@ for (const [name, [col, dark, lite]] of Object.entries(ORE_COLORS)) {
   };
 }
 
+// Cave blocks (generator version 3). Added after every other tile: a tile's
+// drawing is seeded by its place in DRAW, so anything new goes at the end or
+// every tile after it changes its look.
+DRAW.deepslate = (c, r) => {
+  // Dark bedded rock: wavering strata, a few seams, pale flecks.
+  const vn = valueNoise(r, 4), fine = valueNoise(r, 8);
+  paint(c, '#4d4d55', (x, y) => Math.sin((y + vn(x, y) * 4) * 1.25) * 7 + (fine(x, y) - 0.5) * 12, 4, r);
+  for (let i = 0; i < 3; i++) {
+    const y = pick(r);
+    for (let x = 0; x < TILE; x++) if (r() < 0.8) setPx(c, x, wrap(y + (vn(x, y) > 0.55 ? 1 : 0)), '#35353c', 0.6);
+  }
+  for (let i = 0; i < 7; i++) setPx(c, pick(r), pick(r), '#6b6b76', 0.9, 6, r);
+};
+DRAW.moss = (c, r) => {
+  // A deep cushion: soft lumps, dark gaps with a lit tuft beside each.
+  const vn = valueNoise(r, 4), fine = valueNoise(r, 8);
+  paint(c, '#5c8f34', (x, y) => (vn(x, y) - 0.5) * 34 + (fine(x, y) - 0.5) * 20, 7, r);
+  for (let i = 0; i < 20; i++) {
+    const x = pick(r), y = pick(r);
+    setPx(c, x, y, '#3f6a22', 1, 10, r);
+    setPx(c, wrap(x + 1), wrap(y - 1), '#86bd4c', 0.9, 10, r);
+  }
+  for (let i = 0; i < 6; i++) setPx(c, pick(r), pick(r), '#a4d468', 1, 8, r);
+};
+DRAW.dripstone = (c, r) => {
+  // Pale flowstone: mottled sandy grey with faint runs down the face and a
+  // few mineral beads — kept soft and low in contrast, so it reads as rock
+  // (strong vertical streaks in brown read as bark).
+  const vn = valueNoise(r, 3), fine = valueNoise(r, 7);
+  const col = [];
+  for (let x = 0; x < TILE; x++) col.push((r() - 0.5) * 9);
+  paint(c, '#a39382', (x, y) => col[x] + (vn(x, y) - 0.5) * 22 + (fine(x, y) - 0.5) * 12, 5, r);
+  for (let i = 0; i < 3; i++) {
+    const x = pick(r), y = pick(r), len = 2 + ((r() * 3) | 0);
+    for (let k = 0; k < len; k++) setPx(c, x, wrap(y + k), '#84766a', 0.45);
+    setPx(c, x, wrap(y + len), '#cbbdab', 0.8);
+  }
+  for (let i = 0; i < 5; i++) setPx(c, pick(r), pick(r), '#bfb09d', 1, 6, r);
+  for (let i = 0; i < 4; i++) setPx(c, pick(r), pick(r), '#8a7c6f', 0.8, 6, r);
+};
+// Vines hang from the top of the tile. The full tile runs top to bottom so a
+// stack of them joins up; the tip tile is the lowest block of a vine.
+function drawVine(c, r, tip) {
+  c.clearRect(0, 0, TILE, TILE);
+  for (const x0 of [3, 8, 12]) {
+    const len = tip ? 6 + ((r() * 9) | 0) : TILE;
+    let x = x0;
+    for (let y = 0; y < len; y++) {
+      setPx(c, x, y, '#3f7d2c', 1, 10, r);
+      if (y % 3 === 1) setPx(c, x + (y % 2 ? 1 : -1), y, '#62b040', 1, 12, r); // a leaf
+      if (y % 5 === 4 && r() < 0.6) x = Math.max(x0 - 1, Math.min(x0 + 1, x + (r() < 0.5 ? -1 : 1)));
+    }
+    // A glowing berry: at the end of a tip, here and there along a vine.
+    if (tip || r() < 0.5) {
+      const by = tip ? Math.min(len, TILE - 2) : 3 + ((r() * 10) | 0);
+      const bx = Math.min(TILE - 2, x);
+      setPx(c, bx, by, '#ffb43c'); setPx(c, bx + 1, by, '#f09a28');
+      setPx(c, bx, by + 1, '#f09a28'); setPx(c, bx + 1, by + 1, '#d87e18');
+      setPx(c, bx, by, '#ffe08a', 0.8);
+    }
+  }
+}
+DRAW.cave_vine = (c, r) => drawVine(c, r, false);
+DRAW.cave_vine_tip = (c, r) => drawVine(c, r, true);
+
 // Block name -> per-face tile names.
 const t = (name) => ({ top: name, side: name, bottom: name });
 const FACE_TILES = {
@@ -772,6 +837,10 @@ const FACE_TILES = {
   chess_table: { top: 'chess_top', side: 'crafting_side', bottom: 'planks' },
   // Cave flora: rendered as crossed quads (PLANTS set in ChunkMesher).
   glow_mushroom: t('glow_mushroom'),
+  // Deep rock and what grows in the caves. A vine's 'top' is its tip tile
+  // (the lowest block of a vine — the mesher picks it).
+  deepslate: t('deepslate'), moss: t('moss'), dripstone: t('dripstone'),
+  cave_vine: { top: 'cave_vine_tip', side: 'cave_vine', bottom: 'cave_vine' },
   jukebox: { top: 'jukebox_top', side: 'jukebox_side', bottom: 'planks' },
   // Flowing liquids reuse their source tiles (drawn shorter by the mesher).
   water_flow_7: t('water'), water_flow_6: t('water'), water_flow_5: t('water'),
@@ -781,7 +850,8 @@ const FACE_TILES = {
 };
 for (const name of Object.keys(ORE_COLORS)) FACE_TILES[name] = t(name);
 
-const CUTOUT = new Set(['leaves', 'glass', 'tall_grass', 'poppy', 'dandelion', 'door_top', 'ladder', 'glow_mushroom']);
+const CUTOUT = new Set(['leaves', 'glass', 'tall_grass', 'poppy', 'dandelion', 'door_top', 'ladder', 'glow_mushroom',
+  'cave_vine', 'cave_vine_tip']);
 const TRANSPARENT = new Set(['water']);
 
 // --- Build textures + materials once ---
@@ -859,12 +929,12 @@ export const BLOCK_MATERIALS = materials; // index = material index used in geom
 // its chunk is re-meshed. Everything that draws a block *off* the grid (item
 // drops, the held block, Prop Hunt disguises) keeps the plain BLOCK_MATERIALS
 // — there the hash would swim as the cube moves.
-const ROTATE = new Set(['grass_top', 'dirt', 'stone', 'sand', 'snow', 'andesite', 'clay', 'leaves',
+const ROTATE = new Set(['grass_top', 'dirt', 'stone', 'sand', 'snow', 'andesite', 'clay', 'leaves', 'moss',
   ...Object.keys(ORE_COLORS)]);
 const DRIFT = new Set([...ROTATE, 'grass_side', 'gravel', 'cobblestone', 'mossy_cobblestone',
-  'sandstone', 'bedrock']);
+  'sandstone', 'bedrock', 'deepslate', 'dripstone']);
 // Self-lit tiles: the tile's own colours, added at this strength.
-const GLOW = { lava: 0.85, glow_mushroom: 0.85 };
+const GLOW = { lava: 0.85, glow_mushroom: 0.85, cave_vine: 0.55, cave_vine_tip: 0.55 };
 
 // Per-tile tables the mesher reads when it writes the `tile` attribute.
 export const TILE_VARIATION = tileNames.map((n) => (ROTATE.has(n) ? 2 : DRIFT.has(n) ? 1 : 0));

@@ -21,13 +21,13 @@ export function soundCategory(id) {
   const b = getBlock(id);
   const n = b && b.name;
   if (!n) return 'default';
-  if (n.endsWith('_ore') || ['stone', 'cobblestone', 'andesite', 'bedrock', 'furnace'].includes(n)) return 'stone';
+  if (n.endsWith('_ore') || ['stone', 'cobblestone', 'andesite', 'bedrock', 'furnace', 'deepslate', 'dripstone'].includes(n)) return 'stone';
   if (['oak_log', 'oak_planks', 'crafting_table', 'chest', 'cactus', 'torch'].includes(n)) return 'wood';
   if (['dirt', 'grass', 'clay'].includes(n)) return 'dirt';
   if (n === 'sand') return 'sand';
   if (n === 'gravel') return 'gravel';
   if (n === 'glass') return 'glass';
-  if (n === 'oak_leaves') return 'grass';
+  if (['oak_leaves', 'moss', 'cave_vine'].includes(n)) return 'grass';
   if (n === 'snow') return 'snow';
   return 'default';
 }

@@ -72,8 +72,8 @@ function checkGeometry(g, cx, cz, label) {
 }
 
 // One world of each generator version (see noise.js): the first two seeds
-// predate versions and are version 1, the third is version 2.
-for (const seed of [1337, 987654321, 1289044641]) {
+// predate versions and are version 1, the third is version 2, the fourth 3.
+for (const seed of [1337, 987654321, 1289044641, 1400000007]) {
   reseed(seed);
   setGenMode(null);
   const tag = `seed ${seed}`;
@@ -238,6 +238,8 @@ ok(getGen() === 2, 'reseeding sets the generator version from the seed');
     [1, 583847868, 1589761591],
     [2, 1289044641, 3787435600],
     [2, 1100000007, 3542795061],
+    [3, 1400000007, 919345021],
+    [3, 1500000123, 2697843826],
   ];
   for (const [version, seed, want] of FROZEN) {
     const got = fingerprint(seed);
@@ -266,6 +268,54 @@ ok(getGen() === 2, 'reseeding sets the generator version from the seed');
   ok(sound, 'version 2: bedrock under every column');
   ok(tallest > 62 && tallest <= H - 3, `version 2: land rises above the sea and stays under the ceiling (highest block ${tallest})`);
   ok(wet < 40, 'version 2: no water standing above sea level');
+}
+
+// Version 3 caves. Generated liquids do not flow until something disturbs
+// them, so a lake or a lava pool with open air beside or under it would hang
+// there as a wall: across a block of neighbouring chunks (borders included)
+// there must be none, and water must never sit against lava.
+{
+  reseed(1400000007);
+  ok(getGen() === 3, 'the version-3 test seed is generator version 3');
+  const N = 8, W = N * S, O = -4; // chunks -4..3 each way
+  const LAVA = getBlockId('lava'), DEEPSLATE = getBlockId('deepslate'), BEDROCK = getBlockId('bedrock');
+  const MOSS = getBlockId('moss'), VINE = getBlockId('cave_vine'), DRIPSTONE = getBlockId('dripstone');
+  const grid = [];
+  for (let cz = 0; cz < N; cz++) for (let cx = 0; cx < N; cx++) grid.push(gen(cx + O, cz + O));
+  const at = (x, y, z) => grid[(z >> 4) * N + (x >> 4)].get(x & 15, y, z & 15);
+  const open = (id) => id !== WATER && id !== LAVA && !isSolidish(id);
+  const isSolidish = (id) => id !== 0 && isOpaque(id);
+  let water = 0, lava = 0, hanging = 0, mixed = 0, highLava = 0, deepHigh = 0, deep = 0, floorless = 0;
+  let moss = 0, drip = 0, vines = 0, looseVines = 0, lavaLights = 0;
+  for (let z = 1; z < W - 1; z++) for (let x = 1; x < W - 1; x++) {
+    if (at(x, 0, z) !== BEDROCK) floorless++;
+    for (let y = 1; y < 62; y++) {
+      const id = at(x, y, z);
+      if (id === DEEPSLATE) { deep++; if (y > 22) deepHigh++; }
+      else if (id === MOSS) moss++;
+      else if (id === DRIPSTONE) drip++;
+      else if (id === VINE) { vines++; const up = at(x, y + 1, z); if (up !== VINE && !isSolidish(up)) looseVines++; }
+      if (y > 30 || (id !== WATER && id !== LAVA)) continue;
+      if (id === WATER) water++; else { lava++; if (y > 10) highLava++; }
+      if (open(at(x + 1, y, z)) || open(at(x - 1, y, z)) || open(at(x, y, z + 1)) || open(at(x, y, z - 1)) || open(at(x, y - 1, z))) hanging++;
+      const other = id === WATER ? LAVA : WATER;
+      if (at(x + 1, y, z) === other || at(x, y, z + 1) === other || at(x, y + 1, z) === other) mixed++;
+    }
+  }
+  for (const c of grid) for (const l of c.lights || []) {
+    if (l[3] !== 1) continue;
+    lavaLights++;
+    if (c.get(l[0] & 15, l[1] - 1, l[2] & 15) !== LAVA) hanging++; // a lava light with no lava under it
+  }
+  ok(floorless === 0, 'version 3: bedrock under every column');
+  ok(water > 500 && lava > 500, `version 3: the test area has underground lakes and lava (${water} water, ${lava} lava cells)`);
+  ok(hanging === 0, `version 3: no cave liquid has open air beside or under it (${hanging})`);
+  ok(mixed === 0, `version 3: water never sits against lava (${mixed})`);
+  ok(highLava === 0, 'version 3: lava only at or below the lava level');
+  ok(deep > 10000 && deepHigh === 0, `version 3: deepslate at the bottom of the world only (${deep} blocks)`);
+  ok(moss > 100 && drip > 100 && vines > 20, `version 3: lush and dripstone caves both occur (${moss} moss, ${drip} dripstone, ${vines} vines)`);
+  ok(looseVines === 0, `version 3: every vine hangs from rock or from another vine (${looseVines})`);
+  ok(lavaLights > 0, `version 3: lava lakes carry light sources (${lavaLights})`);
 }
 
 // --- arena mode (Prop Hunt / Zombies maps) ---

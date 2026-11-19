@@ -24,12 +24,16 @@ export function mulberry32(seed) {
 // That way the seed alone still identifies a world — in a save, through the
 // multiplayer relay, in a chunk worker — with nothing extra to store or send.
 // Seeds made before versions existed are below 1e9, so their top bits are
-// 0..3: those are all version 1. Version 2 uses 4, version 3 will use 5, …
+// 0..3: those are all version 1. Version 2 uses 4, version 3 uses 5, …
+//
+//   1  the original heightfield and caves
+//   2  new landforms (generators/Height2.js, Terrain2.js)
+//   3  new caves on the version-2 land (generators/Caves3.js)
 //
 // To change generation: add a version, branch on getGen() where the output
 // differs, leave every older branch exactly as it is (core/chunkTest.js holds
 // fingerprints that fail if one moves), and bump GEN_LATEST.
-export const GEN_LATEST = 2;
+export const GEN_LATEST = 3;
 export function genOf(seed) {
   const top = seed >>> 28;
   return top <= 3 ? 1 : top - 2;
@@ -44,7 +48,8 @@ export function newSeed(gen = GEN_LATEST) {
 let terrainNoise, tempNoise, humidNoise, detailNoise, caveNoise, oreNoise, forestNoise,
   continentNoise, riverNoise, mountainNoise, ridgeNoise, erosionNoise, warpXNoise, warpZNoise,
   caveBNoise, cavernNoise, riftNoise, riftMaskNoise,
-  plateauNoise, jagNoise, overhangNoise; // generator version 2 and up
+  plateauNoise, jagNoise, overhangNoise, // generator version 2 and up
+  caveCNoise, caveDNoise, caveModNoise, caveBiomeNoise, caveGateNoise; // version 3 and up
 
 let currentSeed = WORLD_SEED;
 let currentGen = genOf(WORLD_SEED);
@@ -89,6 +94,11 @@ export function reseed(seed) {
   plateauNoise = createNoise2D(mulberry32(seed + 1818));   // where highlands step up into benches
   jagNoise = createNoise2D(mulberry32(seed + 1919));       // sharp detail on mountain crests
   overhangNoise = createNoise3D(mulberry32(seed + 2020));  // cliffs: ledges and overhangs
+  caveCNoise = createNoise3D(mulberry32(seed + 2121));     // noodle tunnels: two more fields
+  caveDNoise = createNoise3D(mulberry32(seed + 2222));
+  caveModNoise = createNoise3D(mulberry32(seed + 2323));   // how wide tunnels run, where rock stays whole
+  caveBiomeNoise = createNoise2D(mulberry32(seed + 2424)); // lush / dripstone cave regions
+  caveGateNoise = createNoise2D(mulberry32(seed + 2525));  // where caves may open to the surface
 }
 
 reseed(WORLD_SEED); // default world until a save selects its own seed
@@ -165,6 +175,12 @@ export const Noise = {
   plateau: (x, z) => fbm2D(plateauNoise, x + offX, z + offZ, 2, 0.0017),
   jag: (x, z) => ridged2D(jagNoise, x + offX, z + offZ, 2, 0.031),
   overhang: (x, y, z) => overhangNoise(x + offX, y, z + offZ),
+  // Version 3 caves (generators/Caves3.js).
+  caveC: (x, y, z) => caveCNoise(x + offX, y, z + offZ),
+  caveD: (x, y, z) => caveDNoise(x + offX, y, z + offZ),
+  caveMod: (x, y, z) => caveModNoise(x + offX, y, z + offZ),
+  caveBiome: (x, z) => fbm2D(caveBiomeNoise, x + offX, z + offZ, 2, 0.0045),
+  caveGate: (x, z) => fbm2D(caveGateNoise, x + offX, z + offZ, 2, 0.009),
 };
 
 export { mulberry32 as seededRandom };

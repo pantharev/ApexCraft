@@ -20,9 +20,9 @@ const POOL_DEPTH = 4;    // how many blocks of liquid stack above a floor
 // only where its value exceeds 0.78, keeping them to roughly one per 8–12
 // chunks.  They appear in the same 4-to-56 y band as the cheese caverns, biased
 // toward depth.
-const LANDMARK_FREQ_XZ = 0.004;
-const LANDMARK_FREQ_Y  = 0.006;
-const LANDMARK_THRESH  = 0.78;
+export const LANDMARK_FREQ_XZ = 0.004;
+export const LANDMARK_FREQ_Y  = 0.006;
+export const LANDMARK_THRESH  = 0.78;
 
 const smoothstep = (a, b, x) => {
   const t = Math.max(0, Math.min(1, (x - a) / (b - a)));
@@ -38,7 +38,7 @@ const smoothstep = (a, b, x) => {
 // only store edits), it may only skip chunks that provably can't pass the
 // 0.78 threshold. That's the vast majority: 45 samples replace the ~12k
 // per-voxel samples the pass would otherwise burn inside the frame budget.
-function landmarkPossible(baseX, baseZ) {
+export function landmarkPossible(baseX, baseZ) {
   let max = -Infinity;
   for (let xi = 0; xi <= 2; xi++) {
     for (let zi = 0; zi <= 2; zi++) {
@@ -58,7 +58,8 @@ function landmarkPossible(baseX, baseZ) {
   return max > LANDMARK_THRESH - 0.2;
 }
 
-// Underground carving pass, run after surface generation. Four systems:
+// Underground carving pass, run after surface generation — generator versions
+// 1 and 2 (version 3 has its own: Caves3.js). Four systems:
 //
 //   • Spaghetti tunnels — air where TWO independent 3D fields are both near
 //     zero: each field's zero-set is a surface, their intersection is a long

@@ -9,6 +9,40 @@ updated with every merged PR** (and mirror a short player-facing entry in the
 
 ---
 
+## 2026-11-19 — #64 Caves: generator version 3
+
+New worlds get a new underground; existing worlds (versions 1 and 2) keep
+`CaveGen.js` block for block — it gained only `export`s. `GEN_LATEST = 3`;
+version 3 is version 2's land with `generators/Caves3.js`, dispatched in
+`TerrainGen.generateChunk`. **Carving**: tunnels are still two 3D fields near
+zero, now a round cross-section, a slow field for width (crawl → gallery) and
+another that leaves whole regions uncut; a finer noodle network in patches;
+caverns from a low field plus a finer one, with columns left standing; the old
+landmark caverns and rifts. The steering fields are sampled on a 4-block
+lattice and interpolated (points on world multiples of 4, so chunk faces
+agree). Caves break the surface only inside "gate" regions; elsewhere a lid of
+ground is left. **Liquids** are decided as each cell is cut, from global
+coordinates: lava at or below y 10 everywhere; in lake regions water at or
+below y 24, with the band between the lake field's two thresholds left solid
+up to the lake level — the dam that keeps a static lake from hanging open
+(generated liquids do not flow until disturbed). **Decoration** per roofed run
+of air, by a slow 2D field: lush (moss, tall grass, glow mushrooms, vines) or
+dripstone (cones from a fine field, pillars where floor and ceiling meet).
+`deepen` runs after the ores and turns deep stone to deepslate. **New blocks**
+73 deepslate, 74 moss, 75 dripstone, 76 cave_vine (69–72 stay reserved for the
+parked tycoon branch); their tiles are appended to `DRAW` because a tile's
+drawing is seeded by its index. `cave_vine` is a cross-plant with `hangs`: the
+mesher gives its lowest block a tip tile, and breaking a block drops the vine
+below it (`Interaction.js`). **Light**: lava lakes push `[x, y, z, 1]` into
+`chunk.lights`; `TorchLights` hands them the warm lights torches are not
+using — no new lights in the scene. `chunkTest.js`: a version-3 seed in the
+main loop, two frozen fingerprints, and a block of 64 chunks checked for any
+liquid with air beside or under it, water against lava, stray deepslate and
+unsupported vines. Measured in Node: tunnels ~3% of the underground, caverns
+~9%, generation 4–6 ms a chunk against 3.8 for version 2 (it runs in the
+workers). Not done: no new mobs or loot underground, and cave light is still
+only torches, mushrooms, vines and lava.
+
 ## 2026-11-18 — #63 Player skins and a three-way camera
 
 Six characters to choose from — man, woman, Santa, Ms. Santa, nurse,

@@ -5,6 +5,7 @@ import { getBlockId } from '../../blocks/BlockRegistry.js';
 import { columnHeight } from './Height.js';
 import { generateTerrain2 } from './Terrain2.js';
 import { carveCaves } from './CaveGen.js';
+import { carveCaves3, deepen } from './Caves3.js';
 import { generateOres } from './OreGen.js';
 import { generateTrees } from '../structures/Tree.js';
 import { generateVillages } from '../structures/Villages.js';
@@ -46,9 +47,12 @@ export function generateChunk(chunk) {
   if (getGen() >= 2) generateTerrain2(chunk);
   else generateTerrain1(chunk);
   // ...then what is cut into it and what grows on it.
-  carveCaves(chunk);
+  const gen = getGen();
+  if (gen >= 3) carveCaves3(chunk);
+  else carveCaves(chunk);
   chunk.shore = undefined; // a note from Terrain2 to the cave pass, not chunk data
   generateOres(chunk);
+  if (gen >= 3) deepen(chunk); // after the ores, which are placed in stone
   generateVillages(chunk); // before trees so trees skip village ground
   generateTrees(chunk);
   generateDecorations(chunk);

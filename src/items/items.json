@@ -846,5 +846,33 @@
     "color": "#1a1a22",
     "maxStack": 64,
     "spawnMob": "bat"
+  },
+  {
+    "name": "deepslate",
+    "display": "Deepslate",
+    "color": "#4b4b52",
+    "maxStack": 64,
+    "placeBlock": "deepslate"
+  },
+  {
+    "name": "moss",
+    "display": "Moss",
+    "color": "#5b8a32",
+    "maxStack": 64,
+    "placeBlock": "moss"
+  },
+  {
+    "name": "dripstone",
+    "display": "Dripstone",
+    "color": "#a39382",
+    "maxStack": 64,
+    "placeBlock": "dripstone"
+  },
+  {
+    "name": "cave_vine",
+    "display": "Glow Vine",
+    "color": "#f0a83c",
+    "maxStack": 64,
+    "placeBlock": "cave_vine"
   }
 ]

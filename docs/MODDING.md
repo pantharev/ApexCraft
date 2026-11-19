@@ -164,6 +164,10 @@ and multiplayer all follow from the list — nothing else to edit.
 
 ## Bigger systems
 
+- **Caves:** `src/world/generators/Caves3.js` (generator version 3; older
+  worlds keep `CaveGen.js`). The comment at its top explains the carving, the
+  lava and lake levels and the rock walls that hold lakes in, and the lush /
+  dripstone decoration. It is generation, so the rule just below applies.
 - **Terrain/biomes:** `src/world/generators/TerrainGen.js`,
   `src/world/biomes/BiomeMap.js`, noise fields in `src/world/noise.js`.
   **Existing worlds must not change.** Terrain is regenerated from the seed

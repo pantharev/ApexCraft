@@ -76,7 +76,8 @@ const LEAVES = getBlockId('oak_leaves');
 const TALL_GRASS = getBlockId('tall_grass');
 // Cross-plants render as two diagonal quads, not cubes.
 // GLOW_MUSHROOM (id 52) is added here so it renders as crossed quads underground.
-const PLANTS = new Set([TALL_GRASS, getBlockId('poppy'), getBlockId('dandelion'), getBlockId('glow_mushroom')]);
+const CAVE_VINE = getBlockId('cave_vine'); // hangs: its lowest block draws the tip tile
+const PLANTS = new Set([TALL_GRASS, getBlockId('poppy'), getBlockId('dandelion'), getBlockId('glow_mushroom'), CAVE_VINE]);
 // Non-cube blocks drawn by the special pass below (skipped by greedy meshing).
 const DOOR = getBlockId('door');
 const DOOR_OPEN = getBlockId('door_open');
@@ -595,7 +596,8 @@ export function meshVolume(vol, cx, cz) {
           }, cellSl);
         } else if (PLANTS.has(id)) {
           const tint = id === TALL_GRASS ? climateTint(wx, wz) : [1, 1, 1];
-          pushCross(bufFor(faceMaterialIndex(id, 'side')), wx, y, wz, tint, cellSl);
+          const face = id === CAVE_VINE && at(lx, y - 1, lz) !== CAVE_VINE ? 'top' : 'side';
+          pushCross(bufFor(faceMaterialIndex(id, face)), wx, y, wz, tint, cellSl);
         } else if (id === DOOR || id === DOOR_OPEN) {
           // Hinge orientation from the wall: solid x-neighbours = doorway runs
           // along x (panel spans x); otherwise it spans z. The open panel

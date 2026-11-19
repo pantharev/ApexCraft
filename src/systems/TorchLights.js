@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { CHUNK_SIZE } from '../config.js';
+import { liquidKind } from '../blocks/BlockRegistry.js';
 
 // We split the light pool into two halves so torches (warm) and glow mushrooms
 // (cool/cyan) never compete for slots and the player always has reliable warm
@@ -11,6 +12,9 @@ const RANGE       = 48;  // scan radius: only lights within this get a slot
 const LIGHT_DIST  = 22;  // Three.js point-light reach (distance falloff)
 const TORCH_INT   = 3.2; // intensity for torch lights
 const GLOW_INT    = 1.8; // intensity for glow mushroom lights (dimmer — ambient)
+const LAVA_INT    = 4.5; // lava lakes: borrow whatever torch lights are free
+const TORCH_COLOR = 0xffc070;
+const LAVA_COLOR  = 0xff6a22;
 
 // Shared geometry/materials for the thin torch stick + flame.
 const stickGeo = new THREE.BoxGeometry(0.12, 0.55, 0.12);
@@ -32,7 +36,10 @@ function buildTorchMesh() {
 // a split pool of point lights:
 //   • TORCH_POOL warm lights follow the nearest placed torches.
 //   • GLOW_POOL cool lights follow the nearest generated glow mushrooms (read
-//     from chunk.lights populated by CaveGen.placeGlowMushrooms).
+//     from chunk.lights, filled in by the cave generators).
+//   • Lava lakes (chunk.lights entries flagged with a fourth element, from
+//     Caves3) take the torch lights the player's torches are not using, so
+//     the deep caves glow without a single extra light in the scene.
 // Reuses existing THREE.PointLight instances — no per-frame allocation.
 export class TorchLights {
   constructor(scene, world) {
@@ -44,7 +51,7 @@ export class TorchLights {
     // Warm torch lights (orange).
     this.torchLights = [];
     for (let i = 0; i < TORCH_POOL; i++) {
-      const light = new THREE.PointLight(0xffc070, 0, LIGHT_DIST, 1.0);
+      const light = new THREE.PointLight(TORCH_COLOR, 0, LIGHT_DIST, 1.0);
       light.visible = false;
       scene.add(light);
       this.torchLights.push(light);
@@ -87,8 +94,10 @@ export class TorchLights {
   // Scan loaded chunks for glow mushroom light positions within RANGE.
   // chunk.lights is set by CaveGen.placeGlowMushrooms on generation; it
   // persists in the Chunk object (LRU-cached) so we don't rescan each frame.
-  _nearGlowSources(playerPos, buf) {
+  // `lava` picks the lava-lake entries instead; `max` is how many to keep.
+  _nearGlowSources(playerPos, buf, lava = false, max = GLOW_POOL) {
     buf.length = 0;
+    if (max <= 0) return;
     const rangeSq = RANGE * RANGE;
     // Chunk-level rejection: a chunk whose centre is farther than RANGE plus
     // the chunk's half-diagonal can't contain an in-range light. This runs
@@ -102,7 +111,9 @@ export class TorchLights {
       const cdx = chunk.cx * CHUNK_SIZE + half - playerPos.x;
       const cdz = chunk.cz * CHUNK_SIZE + half - playerPos.z;
       if (cdx * cdx + cdz * cdz > padSq) continue;
-      for (const [wx, wy, wz] of chunk.lights) {
+      for (const e of chunk.lights) {
+        if ((e[3] === 1) !== lava) continue;
+        const wx = e[0], wy = e[1], wz = e[2];
         const dx = wx + 0.5 - playerPos.x;
         const dy = wy + 0.7 - playerPos.y;
         const dz = wz + 0.5 - playerPos.z;
@@ -110,8 +121,8 @@ export class TorchLights {
         if (d2 >= rangeSq) continue;
         let ins = buf.length;
         while (ins > 0 && buf[ins - 1][0] > d2) ins--;
-        if (buf.length < GLOW_POOL) buf.splice(ins, 0, [d2, wx + 0.5, wy + 0.7, wz + 0.5]);
-        else if (ins < GLOW_POOL) { buf.splice(ins, 0, [d2, wx + 0.5, wy + 0.7, wz + 0.5]); buf.length = GLOW_POOL; }
+        if (buf.length < max) buf.splice(ins, 0, [d2, wx + 0.5, wy + 0.7, wz + 0.5]);
+        else if (ins < max) { buf.splice(ins, 0, [d2, wx + 0.5, wy + 0.7, wz + 0.5]); buf.length = max; }
       }
     }
   }
@@ -134,8 +145,24 @@ export class TorchLights {
     // position (not its pool slot) so a flame keeps its own rhythm as slots
     // are reshuffled by distance.
     const now = performance.now() / 1000;
+    // Lava lakes get the slots the torches leave over.
+    if (!this._lavaBuf) this._lavaBuf = [];
+    const nearLava = this._lavaBuf;
+    this._nearGlowSources(playerPos, nearLava, true, TORCH_POOL - Math.min(TORCH_POOL, nearTorches.length));
     for (let i = 0; i < TORCH_POOL; i++) {
       const light = this.torchLights[i];
+      const lava = nearLava[i - nearTorches.length];
+      if (lava) {
+        // Still lava under it? (The player may have bucketed the lake away.)
+        const [, lx, ly, lz] = lava;
+        const lit = liquidKind(this.world.getBlock(Math.floor(lx), Math.floor(ly) - 1, Math.floor(lz))) === 'lava';
+        light.position.set(lx, ly + 0.8, lz);
+        light.color.setHex(LAVA_COLOR);
+        light.intensity = lit ? LAVA_INT * (1 + 0.1 * Math.sin(now * 1.7 + lx * 0.9 + lz * 1.3)) : 0;
+        light.visible = lit;
+        continue;
+      }
+      light.color.setHex(TORCH_COLOR);
       if (i < nearTorches.length) {
         const [, tx, ty, tz] = nearTorches[i];
         const phase = tx * 12.9898 + tz * 78.233 + ty * 37.719;

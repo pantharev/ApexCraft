@@ -340,6 +340,7 @@ export class MobManager {
         ownerPos,
         threat,
         isNight: ctx.isNight,
+        sunUp: ctx.sunUp,
         // fromPos (the mob) -> knockback direction for whoever got hit.
         // power (optional) overrides the default shove strength (charger slam).
         attackPlayer: (dmg, fromPos, power = 0) => {

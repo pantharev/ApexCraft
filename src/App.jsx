@@ -12,6 +12,9 @@ import { HideSeekHUD, TauntWheel, HideSeekTouch } from './ui/HideSeekUI.jsx';
 import { ZombiesHUD, ZombiesShop, ZombiesTouch } from './ui/ZombiesUI.jsx';
 import { TouchControls } from './ui/TouchControls.jsx';
 
+// What the HUD calls each part of the day (systems/DayClock.js).
+const PHASE_NAME = { day: 'Day', dusk: 'Sunset', night: 'Night', dawn: 'Sunrise' };
+
 const DEV = typeof window !== 'undefined' && ['localhost', '127.0.0.1'].includes(window.location.hostname);
 const IS_TOUCH = typeof window !== 'undefined' &&
   (window.matchMedia ? window.matchMedia('(pointer: coarse)').matches : 'ontouchstart' in window);
@@ -337,7 +340,7 @@ export default function App() {
             <div style={{ position: 'absolute', top: 8, left: 8, color: '#fff', font: '13px monospace', textShadow: '1px 1px 2px #000', pointerEvents: 'none', lineHeight: 1.5 }}>
               <div>{current?.name}</div>
               <div>XYZ: {stats.x} / {stats.y} / {stats.z}</div>
-              <div>Time: {stats.clock} ({stats.night ? 'Night' : 'Day'}) &nbsp; Mobs: {stats.mobs}</div>
+              <div>Time: {stats.clock} ({PHASE_NAME[stats.phase] || 'Day'}) &nbsp; Mobs: {stats.mobs}</div>
               <div>Holding: {stats.held}</div>
               {stats.room && (
                 <div style={{ color: '#8fd0ff' }}>

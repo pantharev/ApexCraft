@@ -9,6 +9,7 @@ import { Furnaces } from '../player/Furnaces.js';
 import { ChestStorage } from '../player/ChestStorage.js';
 import { Vitals } from '../player/Vitals.js';
 import { DayNight } from '../systems/DayNight.js';
+import { NEW_WORLD_T, WAKE_T } from '../systems/DayClock.js';
 import { SunRig } from '../systems/SunRig.js';
 import { tickWater } from '../textures/water.js';
 import { MobManager } from '../systems/MobManager.js';
@@ -291,8 +292,10 @@ export class Game {
     if (this._save?.vitals) this.vitals.load(this._save.vitals);
 
     // Day/night cycle + mobs.
+    // A new world opens just after sunrise, with the whole day ahead (arena
+    // matches start mid-morning: a low sun in a walled map is mostly shadow).
     this.dayNight = new DayNight(this.scene, this.sun, this.hemi, this.camera,
-      this.map ? { fogNear: 90, fogFar: 200 } : undefined);
+      this.map ? { fogNear: 90, fogFar: 200 } : { startT: NEW_WORLD_T });
     if (this._save?.time != null) { this.dayNight.t = this._save.time; this.dayNight.update(0); }
     // Zombies arenas are locked to night on every client (a mode constant, not
     // synced state): zombies have burns:true and would cook in daylight.
@@ -1222,7 +1225,7 @@ export class Game {
       if (this.onToast) this.onToast('Only the host can skip the night');
       return;
     }
-    if (!this.dayNight.isNight) {
+    if (!this.dayNight.canSleep) {
       if (this.onToast) this.onToast('You can only sleep at night');
       return;
     }
@@ -1230,7 +1233,7 @@ export class Game {
     this.player.enabled = false;
     if (this.onSleep) this.onSleep(true);
     setTimeout(() => {
-      this.dayNight.t = 0.02; // just after sunrise
+      this.dayNight.t = WAKE_T; // sunrise
       this.dayNight.frozen = this._devTime !== 0 ? this.dayNight.frozen : false;
       this.dayNight.update(0);
       if (this.net && this.net.isHost) this.net.sendTime(this.dayNight.t);
@@ -1721,7 +1724,8 @@ export class Game {
         // _selfPid() (socket id online) — the wolf-assist matcher bridges the
         // two with this.
         selfPid: this._selfPid(),
-        isNight: this.dayNight.isNight,
+        isNight: this.dayNight.isNight, // night proper: hostile spawns, villagers indoors
+        sunUp: this.dayNight.sunUp,     // the sun above the horizon: the undead burn
         attackPlayer: (dmg, id = 'self', kdir = null, power = 0) => {
           if (id === 'self' || !this.net) {
             this.vitals.damage(dmg);
@@ -1861,6 +1865,7 @@ export class Game {
         submerged: this.vitals.submerged,
         clock: this.dayNight.clock(),
         night: this.dayNight.isNight,
+        phase: this.dayNight.phase, // 'day' | 'dusk' | 'night' | 'dawn'
         mobs: this._mobApi().mobs.length,
         creative: this.creative,
         hideseek: this.hideseek,

@@ -1,10 +1,19 @@
 import * as THREE from 'three';
 import { mulberry32 } from '../world/noise.js';
 import { SkyDome, Clouds, SKY_RADIUS } from './Sky.js';
+import { DAY_SECONDS, TWILIGHT, phaseOf, isNightAt, sunUpAt, canSleepAt, clockOf } from './DayClock.js';
 
 // Time of day and everything it lights: the directional sun/moon light, the
 // hemisphere ambient, the sky dome, clouds, stars, and the fog.
-// t in [0,1): 0 = dawn, 0.25 = noon, 0.5 = dusk, 0.75 = midnight.
+// t in [0,1): 0 = sunrise, 0.25 = noon, 0.5 = sunset, 0.75 = midnight. How long
+// a day is and how it divides into day, dusk, night and dawn is DayClock.js;
+// this file is what each moment looks like.
+//
+// The sun moves at an even pace, so it is up for exactly half the day. Dusk
+// is the 50 seconds after it sets and dawn the 50 before it rises: the sky's
+// colours are timed against TWILIGHT (how far under the horizon the sun is at
+// the end of dusk), so dark is complete just as night begins, and the first
+// grey shows just as it ends.
 
 const col = (hex) => new THREE.Color(hex);
 
@@ -42,6 +51,20 @@ const WATER_NEAR = 0.5, WATER_FAR = 26;
 
 const STAR_COUNT = 420;
 
+// The sun's height (as a sine) at which the light is fully day, where the warm
+// light of the golden hour begins, and how far under the horizon its glow
+// lingers before the moon's takes over.
+const FULL_DAY = 0.2;
+const GOLDEN = 0.34;
+const AFTERGLOW = 0.2;
+// The sun and moon sink into the haze: from just under eye level down to this
+// far below it their discs fade into the horizon's colour, then they are gone.
+// (From a mountain top there is no ground out there to hide them, and a sun
+// hanging in the sky after sunset would give the lie to the dusk.)
+const SINK = 0.09;
+const SUN_DISC = col('#fff3b0');
+const MOON_DISC = col('#dfe6f0');
+
 const smooth01 = (x) => { const t = Math.max(0, Math.min(1, x)); return t * t * (3 - 2 * t); };
 const mix = (a, b, t) => a + (b - a) * t;
 
@@ -66,7 +89,7 @@ function glowSprite(inner, outer, size) {
 
 export class DayNight {
   constructor(scene, sun, hemi, camera, {
-    cycleSeconds = 360, startT = 0.2, fogNear = FOG_NEAR, fogFar = FOG_FAR,
+    cycleSeconds = DAY_SECONDS, startT = 0.2, fogNear = FOG_NEAR, fogFar = FOG_FAR,
   } = {}) {
     this.scene = scene;
     this.sun = sun;
@@ -141,18 +164,17 @@ export class DayNight {
     this.update(0);
   }
 
-  get isNight() {
-    // Night while the sun is below the horizon.
-    return Math.sin(this.t * Math.PI * 2) < -0.05;
-  }
+  // 'day' | 'dusk' | 'night' | 'dawn' (see DayClock.js for when each runs).
+  get phase() { return phaseOf(this.t); }
+  // Night proper — not dusk, not dawn: monsters spawn, villagers go home.
+  get isNight() { return isNightAt(this.t); }
+  // The sun is above the horizon: the undead burn.
+  get sunUp() { return sunUpAt(this.t); }
+  // Late enough (and not yet too late) to go to bed.
+  get canSleep() { return canSleepAt(this.t); }
 
   // 24h clock string for the HUD.
-  clock() {
-    const hours = (this.t * 24 + 6) % 24; // t=0 -> 06:00
-    const h = Math.floor(hours);
-    const m = Math.floor((hours - h) * 60);
-    return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
-  }
+  clock() { return clockOf(this.t); }
 
   // `env` (optional) = { underwater, cave }, each 0..1: how submerged the
   // camera is and how deep under a rock roof. Remembered between calls, so the
@@ -162,9 +184,13 @@ export class DayNight {
     if (!this.frozen) this.t = (this.t + dt / this.cycle) % 1;
     const angle = this.t * Math.PI * 2;
     const sunFrac = Math.sin(angle); // -1..1, 1 at noon
-    const dayAmt = this.dayAmt = smooth01((sunFrac + 0.08) / 0.4);
-    // Dawn/dusk band: strongest as the sun crosses the horizon.
-    const dusk = smooth01(1 - Math.abs(sunFrac) / 0.32);
+    // Day gives way to night from a little before sunset to the end of dusk
+    // (and back the same way at dawn): the sky is still more than half lit as
+    // the sun touches the horizon, and fully dark only when night begins.
+    const dayAmt = this.dayAmt = smooth01((sunFrac + TWILIGHT) / (FULL_DAY + TWILIGHT));
+    // The warm band: it builds through the golden hour, peaks as the sun
+    // crosses the horizon, and has drained from the sky by the end of dusk.
+    const dusk = sunFrac >= 0 ? smooth01(1 - sunFrac / GOLDEN) : smooth01(1 + sunFrac / TWILIGHT);
     const { underwater, cave } = this._env;
 
     // The sun rises in the east (+X), peaks overhead (tilted a little south so
@@ -193,14 +219,15 @@ export class DayNight {
     const sky = this.sky.uniforms;
     sky.uZenith.value.copy(PAL.zenithNight).lerp(PAL.zenithDay, dayAmt).lerp(PAL.zenithDusk, dusk * 0.55);
     sky.uHorizon.value.copy(PAL.horizonNight).lerp(PAL.horizonDay, dayAmt).lerp(PAL.horizonDusk, dusk * 0.7);
-    if (sunFrac > -0.12) {
+    if (sunFrac > -AFTERGLOW) {
+      // The sun's glow, lingering on the horizon after it has gone under.
       sky.uGlowDir.value.copy(this.sunDir);
       sky.uGlow.value.copy(PAL.glowDay).lerp(PAL.glowDusk, dusk);
-      sky.uGlowAmt.value = (0.25 + dusk * 0.75) * smooth01((sunFrac + 0.12) / 0.12);
+      sky.uGlowAmt.value = (0.25 + dusk * 0.75) * smooth01((sunFrac + AFTERGLOW) / AFTERGLOW);
     } else {
       sky.uGlowDir.value.copy(this.sunDir).negate();
       sky.uGlow.value.copy(PAL.moon);
-      sky.uGlowAmt.value = 0.16 * smooth01((-sunFrac - 0.12) / 0.12);
+      sky.uGlowAmt.value = 0.16 * smooth01((-sunFrac - AFTERGLOW) / (TWILIGHT - AFTERGLOW));
     }
 
     // Fog: the horizon colour in the open, near-black down in the caves, and
@@ -232,20 +259,24 @@ export class DayNight {
       const dry = underwater < 0.5;
       this.sunMesh.position.set(cam.x + d.x * SKY_RADIUS, cam.y + d.y * SKY_RADIUS, cam.z + d.z * SKY_RADIUS);
       this.moonMesh.position.set(cam.x - d.x * SKY_RADIUS, cam.y - d.y * SKY_RADIUS, cam.z - d.z * SKY_RADIUS);
-      // Hide whichever body is below the horizon.
-      this.sunMesh.visible = dry && d.y > -0.15;
-      this.moonMesh.visible = dry && -d.y > -0.15;
+      // Each body fades into the horizon as it goes under, and is hidden below.
+      const sunSink = smooth01(-d.y / SINK), moonSink = smooth01(d.y / SINK);
+      this.sunMesh.visible = dry && sunSink < 1;
+      this.moonMesh.visible = dry && moonSink < 1;
+      this.sunMesh.material.color.copy(SUN_DISC).lerp(sky.uHorizon.value, sunSink);
+      this.moonMesh.material.color.copy(MOON_DISC).lerp(sky.uHorizon.value, moonSink);
 
       this.sunGlow.position.copy(this.sunMesh.position);
       this.sunGlow.visible = this.sunMesh.visible;
-      this.sunGlow.material.opacity = 0.35 + dusk * 0.45; // glow swells at the horizon
+      this.sunGlow.material.opacity = (0.35 + dusk * 0.45) * (1 - sunSink); // glow swells at the horizon
       this.moonGlow.position.copy(this.moonMesh.position);
       this.moonGlow.visible = this.moonMesh.visible;
+      this.moonGlow.material.opacity = 1 - moonSink;
 
       // Star dome follows the camera and wheels with the time of day.
       this.stars.position.set(cam.x, cam.y, cam.z);
       this.stars.rotation.z = -angle * 0.5;
-      const night = smooth01((-sunFrac - 0.02) / 0.35);
+      const night = smooth01((-sunFrac - 0.03) / (TWILIGHT - 0.03)); // the stars are all out when dusk ends
       this.starMat.opacity = night * 0.95;
       this.stars.visible = dry && night > 0;
 

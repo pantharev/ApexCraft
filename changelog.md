@@ -9,6 +9,34 @@ updated with every merged PR** (and mirror a short player-facing entry in the
 
 ---
 
+## 2026-11-19 — #65 A 20-minute day with real dusk and dawn
+
+The day was 6 minutes, half light and half dark, with "night" defined by the
+sun's height. It is now 20 minutes, divided as Minecraft divides its 24,000
+ticks: day 10 min, dusk 50 s, night 8 min 20 s, dawn 50 s. The rules are a new
+pure module, `src/systems/DayClock.js` (`phaseOf`, `isNightAt`, `sunUpAt`,
+`canSleepAt`, `clockOf`, `TWILIGHT`), with its own test
+(`dayClockTest.js`, added to CI). `DayNight` exposes them as `phase`,
+`isNight`, `sunUp`, `canSleep`. What changed in behaviour: hostile spawning
+and villagers going home wait for night proper (not dusk); the undead burn on
+`sunUp`, so not during dusk nor in the grey before sunrise (`Mob.js`,
+`MobManager.js` pass it through); beds work from mid-dusk to mid-dawn and
+wake you at sunrise (`WAKE_T`); new procedural worlds start just after
+sunrise (`NEW_WORLD_T`; arena matches still start mid-morning); the HUD shows
+Day / Sunset / Night / Sunrise. The sun still moves at an even pace, so the
+sky was retimed rather than redrawn: `dayAmt`, the warm band, the afterglow
+and the stars are now set against `TWILIGHT` (the sun's depth at the end of
+dusk, 15°), so the sky is still over half lit at the moment of sunset and
+fully dark exactly as night begins. The sun and moon discs fade into the
+horizon colour as they go under (`SINK`) — from a mountain top nothing hid
+them, and they used to hang below the horizon. Unchanged on purpose: `t` in
+saves and on the wire (old saves just run slower), the relay, the Zombies lock
+at 0.78, the menu backdrop (it drives `t` itself). Gotcha found on the way:
+`((t % 1) + 1) % 1` loses the last bits and put a moment exactly on a phase
+boundary on the wrong side; `t - Math.floor(t)` does not. Consequence to keep
+in mind: nights are now nearly three times as long, so more mobs accumulate
+up to their caps.
+
 ## 2026-11-19 — #64 Caves: generator version 3
 
 New worlds get a new underground; existing worlds (versions 1 and 2) keep

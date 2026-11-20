@@ -7,6 +7,11 @@ import React from 'react';
 const CHANGELOG = [
   {
     date: 'November 19, 2026',
+    title: 'Longer days, proper nights',
+    body: 'A day now lasts 20 minutes instead of 6: ten minutes of daylight, a 50-second sunset, a night of a little over eight minutes, and a 50-second dawn. Dusk is a real thing now — the sun goes down into the haze, the sky burns orange and fades, and the stars are all out just as the monsters start to appear. They wait for full dark, and zombies and skeletons only catch fire once the sun is actually up. You can get into bed from the middle of dusk and you wake at sunrise; new worlds start at sunrise too, with a whole day ahead of you. The clock in the corner tells you whether it is Day, Sunset, Night or Sunrise. Nights are long now — build a bed.',
+  },
+  {
+    date: 'November 19, 2026',
     title: 'A new underground',
     body: 'Worlds you create from now on have caves worth getting lost in. Tunnels squeeze down to a crawl and open out into galleries; great caverns hold pillars of rock from floor to roof. Some caves are lush — moss underfoot, glowing mushrooms, vines hung with shining berries — and some are dripstone, bristling with stalagmites and stalactites. There are still, dark lakes down there, and far below, where the stone turns to deepslate, lakes of lava that light the walls around them. Fewer random holes in the ground, too: the ways in are places you find. Your existing worlds are unchanged, block for block.',
   },

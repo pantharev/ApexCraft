@@ -49,6 +49,7 @@ See [LICENSE](LICENSE) and [CLA.md](CLA.md) for full details.
 - **Surface flora**: tall-grass meadows that thicken with humidity, rare **flower fields** of poppies and dandelions (pick + replant them), and **cacti** columns in the deserts.
 - **Villages** (about one per ~800 blocks of travel): a walled cobblestone **well** at the centre, 4–7 plank-and-log **houses** with real openable doors facing the well, glass windows, beds inside, gravel **paths**, and the odd crafting table or chest — all generated deterministically across chunk borders. **Villagers** in brown robes wander between the houses, watch you walk by — and **run home at nightfall**.
 - **Trees** scattered only on grass, clumped by a *forest* noise field so you get dense woods and open plains both.
+- **A 20-minute day**: ten minutes of daylight, a 50-second sunset, a night of 8 minutes 20 seconds, and a 50-second dawn. Monsters wait for full dark and the undead burn only once the sun is actually up; a bed skips the night from mid-dusk on. The HUD clock names the part of the day you are in.
 - **Day/night cycle** with a moving sun and moon (sunrise in the east, set in the west), a **wheeling star dome** at night, glowing halos around the sun/moon, and **orange dawn/dusk skies** with warm horizon light.
 
 ### Game modes

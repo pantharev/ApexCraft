@@ -18,6 +18,7 @@ jobs:
       - run: npm run build
       - run: node server/test.js
       - run: node src/chess/engineTest.js
+      - run: node src/systems/dayClockTest.js
       # Chunk pipeline (what the chunk workers run): bundled first because
       # plain Node can't import the JSON registries.
       - run: npx esbuild src/core/chunkTest.js --bundle --format=esm --outfile=.chunk-test.mjs

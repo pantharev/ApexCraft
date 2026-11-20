@@ -457,7 +457,9 @@ export class Mob {
     // zombies/skeletons live under a rock roof and must not cook off
     // underground in the middle of the day (half the cave pool would die in
     // ~20 s and churn the spawn cap).
-    if (def.burns && !ctx.isNight) {
+    // "Daylight" is the sun above the horizon — not dusk, and not the grey
+    // before sunrise, when a mob bursting into flame in the dark looks wrong.
+    if (def.burns && ctx.sunUp) {
       this.burnTimer += dt;
       if (this.burnTimer >= 1) {
         this.burnTimer = 0;
